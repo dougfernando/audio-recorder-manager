@@ -1,0 +1,35 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Storage directories - recordings and status
+/storage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Python (for inspiration folder - if needed)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/

@@ -1,0 +1,6 @@
+[build]
+# Use the GNU toolchain instead of MSVC to avoid linker issues
+target = "x86_64-pc-windows-gnu"
+
+[target.x86_64-pc-windows-gnu]
+linker = "gcc"

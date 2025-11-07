@@ -1,0 +1,453 @@
+use anyhow::Result;
+use cpal::traits::{DeviceTrait, StreamTrait};
+use cpal::{Device, SampleFormat, SampleRate, Stream, StreamConfig};
+use hound::{WavSpec, WavWriter};
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+const PROFESSIONAL_SAMPLE_RATE: u32 = 48000;
+const PROFESSIONAL_CHANNELS: u16 = 2;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingQuality {
+    pub name: String,
+    pub description: String,
+    pub size_per_min: String,
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
+impl RecordingQuality {
+    pub fn professional() -> Self {
+        Self {
+            name: "Professional (48kHz Stereo)".to_string(),
+            description: "Professional quality for meetings".to_string(),
+            size_per_min: "11 MB/min".to_string(),
+            sample_rate: PROFESSIONAL_SAMPLE_RATE,
+            channels: PROFESSIONAL_CHANNELS,
+        }
+    }
+
+    pub fn quick() -> Self {
+        Self {
+            name: "Quick (16kHz Mono)".to_string(),
+            description: "Smaller files, good for voice notes".to_string(),
+            size_per_min: "2 MB/min".to_string(),
+            sample_rate: 16000,
+            channels: 1,
+        }
+    }
+
+    pub fn standard() -> Self {
+        Self {
+            name: "Standard (44.1kHz Stereo)".to_string(),
+            description: "CD quality, balanced file size".to_string(),
+            size_per_min: "10 MB/min".to_string(),
+            sample_rate: 44100,
+            channels: 2,
+        }
+    }
+
+    pub fn high() -> Self {
+        Self {
+            name: "High (96kHz Stereo)".to_string(),
+            description: "Maximum quality, larger files".to_string(),
+            size_per_min: "22 MB/min".to_string(),
+            sample_rate: 96000,
+            channels: 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingStatus {
+    pub status: String,
+    pub session_id: String,
+    pub filename: String,
+    pub duration: u64,
+    pub elapsed: u64,
+    pub progress: u8,
+    pub quality: String,
+    pub quality_info: RecordingQuality,
+    pub device: String,
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub frames_captured: u64,
+    pub has_audio: bool,
+}
+
+pub struct AudioRecorder {
+    device: Device,
+    device_name: String,
+    sample_rate: u32,
+    channels: u16,
+    output_dir: PathBuf,
+}
+
+impl AudioRecorder {
+    pub fn new(device: Device, device_name: String, output_dir: PathBuf) -> Result<Self> {
+        Ok(Self {
+            device,
+            device_name,
+            sample_rate: PROFESSIONAL_SAMPLE_RATE,
+            channels: PROFESSIONAL_CHANNELS,
+            output_dir,
+        })
+    }
+
+    pub fn with_quality(mut self, quality: &RecordingQuality) -> Self {
+        self.sample_rate = quality.sample_rate;
+        self.channels = quality.channels;
+        self
+    }
+
+    pub fn get_device_name(&self) -> &str {
+        &self.device_name
+    }
+
+    pub fn get_sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    pub fn get_channels(&self) -> u16 {
+        self.channels
+    }
+
+    pub async fn start_recording(
+        &self,
+        filename: &str,
+        duration: Option<u64>,
+        session_id: String,
+        status_dir: PathBuf,
+    ) -> Result<RecordingHandle> {
+        std::fs::create_dir_all(&self.output_dir)?;
+        std::fs::create_dir_all(&status_dir)?;
+
+        let filepath = self.output_dir.join(filename);
+        let status_file = status_dir.join(format!("{}.json", session_id));
+
+        // Get supported config from device
+        let supported_config = self.device.default_input_config()?;
+
+        // Use device's default configuration to ensure compatibility
+        let config = supported_config.config();
+
+        // Update our internal config to match what the device supports
+        let actual_sample_rate = config.sample_rate.0;
+        let actual_channels = config.channels;
+
+        let spec = WavSpec {
+            channels: actual_channels,
+            sample_rate: actual_sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+
+        let writer = WavWriter::create(&filepath, spec)?;
+        let writer = Arc::new(Mutex::new(Some(writer)));
+
+        let writer_clone = Arc::clone(&writer);
+        let is_recording = Arc::new(AtomicBool::new(true));
+        let is_recording_clone = Arc::clone(&is_recording);
+        let frames_captured = Arc::new(AtomicU64::new(0));
+        let frames_captured_clone = Arc::clone(&frames_captured);
+        let has_audio = Arc::new(AtomicBool::new(false));
+        let has_audio_clone = Arc::clone(&has_audio);
+
+        let err_fn = |err| log::error!("Stream error: {}", err);
+
+        // Build the stream based on the supported sample format
+        let stream = match supported_config.sample_format() {
+            SampleFormat::I16 => self.device.build_input_stream(
+                &config,
+                move |data: &[i16], _: &_| {
+                    if !is_recording_clone.load(Ordering::Relaxed) {
+                        return;
+                    }
+
+                    frames_captured_clone.fetch_add(1, Ordering::Relaxed);
+
+                    // Detect audio
+                    if !has_audio_clone.load(Ordering::Relaxed) {
+                        let rms = calculate_rms_i16(data);
+                        if rms > 100.0 {
+                            has_audio_clone.store(true, Ordering::Relaxed);
+                            log::info!("Audio detected! Level: {:.2}", rms);
+                        }
+                    }
+
+                    let mut writer_guard = writer_clone.lock().unwrap();
+                    if let Some(writer) = writer_guard.as_mut() {
+                        for &sample in data {
+                            let _ = writer.write_sample(sample);
+                        }
+                    }
+                },
+                err_fn,
+                None,
+            )?,
+            SampleFormat::F32 => self.device.build_input_stream(
+                &config,
+                move |data: &[f32], _: &_| {
+                    if !is_recording_clone.load(Ordering::Relaxed) {
+                        return;
+                    }
+
+                    frames_captured_clone.fetch_add(1, Ordering::Relaxed);
+
+                    // Detect audio
+                    if !has_audio_clone.load(Ordering::Relaxed) {
+                        let rms = calculate_rms_f32(data);
+                        if rms > 0.01 {
+                            has_audio_clone.store(true, Ordering::Relaxed);
+                            log::info!("Audio detected! Level: {:.4}", rms);
+                        }
+                    }
+
+                    let mut writer_guard = writer_clone.lock().unwrap();
+                    if let Some(writer) = writer_guard.as_mut() {
+                        for &sample in data {
+                            let sample_i16 = (sample * i16::MAX as f32) as i16;
+                            let _ = writer.write_sample(sample_i16);
+                        }
+                    }
+                },
+                err_fn,
+                None,
+            )?,
+            _ => anyhow::bail!("Unsupported sample format"),
+        };
+
+        stream.play()?;
+
+        let handle = RecordingHandle {
+            stream,
+            writer,
+            is_recording,
+            frames_captured,
+            has_audio,
+            filepath,
+            status_file,
+            session_id,
+            duration,
+            start_time: Instant::now(),
+            device_name: self.device_name.clone(),
+            sample_rate: self.sample_rate,
+            channels: self.channels,
+        };
+
+        Ok(handle)
+    }
+}
+
+pub struct RecordingHandle {
+    stream: Stream,
+    writer: Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>,
+    is_recording: Arc<AtomicBool>,
+    frames_captured: Arc<AtomicU64>,
+    has_audio: Arc<AtomicBool>,
+    filepath: PathBuf,
+    status_file: PathBuf,
+    session_id: String,
+    duration: Option<u64>,
+    start_time: Instant,
+    device_name: String,
+    sample_rate: u32,
+    channels: u16,
+}
+
+// Stream is not Send on Windows but we need it for tokio::spawn
+// This is safe because we only access it in the async context
+unsafe impl Send for RecordingHandle {}
+
+impl RecordingHandle {
+    pub fn get_elapsed(&self) -> u64 {
+        self.start_time.elapsed().as_secs()
+    }
+
+    pub fn get_frames_captured(&self) -> u64 {
+        self.frames_captured.load(Ordering::Relaxed)
+    }
+
+    pub fn has_audio_detected(&self) -> bool {
+        self.has_audio.load(Ordering::Relaxed)
+    }
+
+    pub fn get_status(&self) -> RecordingStatus {
+        let elapsed = self.get_elapsed();
+        let duration_secs = self.duration.unwrap_or(0);
+        let progress = if duration_secs > 0 {
+            ((elapsed as f64 / duration_secs as f64) * 100.0).min(100.0) as u8
+        } else {
+            0
+        };
+
+        RecordingStatus {
+            status: "recording".to_string(),
+            session_id: self.session_id.clone(),
+            filename: self.filepath.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string(),
+            duration: duration_secs,
+            elapsed,
+            progress,
+            quality: "professional".to_string(),
+            quality_info: RecordingQuality::professional(),
+            device: self.device_name.clone(),
+            sample_rate: self.sample_rate,
+            channels: self.channels,
+            frames_captured: self.get_frames_captured(),
+            has_audio: self.has_audio_detected(),
+        }
+    }
+
+    pub fn write_status(&self) -> Result<()> {
+        let status = self.get_status();
+        let json = serde_json::to_string_pretty(&status)?;
+        std::fs::write(&self.status_file, json)?;
+        Ok(())
+    }
+
+    pub fn should_stop(&self) -> bool {
+        if let Some(duration) = self.duration {
+            if self.get_elapsed() >= duration {
+                return true;
+            }
+        }
+
+        // Check for stop signal
+        let signals_dir = self.status_file.parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("signals"));
+
+        if let Some(signals_dir) = signals_dir {
+            let stop_signal = signals_dir.join(format!("{}.stop", self.session_id));
+            if stop_signal.exists() {
+                log::info!("Stop signal received for session {}", self.session_id);
+                let _ = std::fs::remove_file(stop_signal);
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub async fn stop(self) -> Result<PathBuf> {
+        log::info!("Stopping recording...");
+        self.is_recording.store(false, Ordering::Relaxed);
+
+        // Get values before dropping stream
+        let frames_captured = self.get_frames_captured();
+        let has_audio = self.has_audio_detected();
+        let filepath = self.filepath.clone();
+        let status_file = self.status_file.clone();
+        let session_id = self.session_id.clone();
+        let duration = self.duration;
+        let device_name = self.device_name.clone();
+        let sample_rate = self.sample_rate;
+        let channels = self.channels;
+
+        // Drop the stream to stop recording
+        drop(self.stream);
+
+        // Finalize the WAV file
+        {
+            let mut writer_guard = self.writer.lock().unwrap();
+            if let Some(writer) = writer_guard.take() {
+                writer.finalize()?;
+            }
+        }
+
+        // Wait a moment for file to be fully written
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Get file size
+        let file_size_mb = if filepath.exists() {
+            let size = std::fs::metadata(&filepath)?.len();
+            (size as f64) / (1024.0 * 1024.0)
+        } else {
+            0.0
+        };
+
+        // Write completion status
+        let status = serde_json::json!({
+            "status": "completed",
+            "session_id": session_id,
+            "filename": filepath.file_name().and_then(|n| n.to_str()).unwrap_or("unknown"),
+            "duration": duration.unwrap_or(0),
+            "file_size_mb": format!("{:.2}", file_size_mb),
+            "quality": "professional",
+            "quality_info": RecordingQuality::professional(),
+            "device": device_name,
+            "sample_rate": sample_rate,
+            "channels": channels,
+            "frames_captured": frames_captured,
+            "has_audio": has_audio,
+        });
+
+        std::fs::write(&status_file, serde_json::to_string_pretty(&status)?)?;
+        log::info!("Recording completed: {:?}", filepath);
+
+        Ok(filepath)
+    }
+}
+
+fn calculate_rms_i16(samples: &[i16]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
+    (sum / samples.len() as f64).sqrt() as f32
+}
+
+fn calculate_rms_f32(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
+    (sum / samples.len() as f64).sqrt() as f32
+}
+
+/// Convert WAV file to M4A using FFmpeg
+pub async fn convert_wav_to_m4a(wav_path: &PathBuf, m4a_path: &PathBuf) -> Result<()> {
+    use tokio::process::Command;
+
+    log::info!("Converting WAV to M4A: {:?} -> {:?}", wav_path, m4a_path);
+
+    // Check if FFmpeg is available
+    let ffmpeg_check = Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .await;
+
+    if ffmpeg_check.is_err() {
+        anyhow::bail!("FFmpeg is not installed or not in PATH. Please install FFmpeg to use M4A encoding.");
+    }
+
+    // Convert using FFmpeg with AAC codec
+    let output = Command::new("ffmpeg")
+        .arg("-i")
+        .arg(wav_path)
+        .arg("-c:a")
+        .arg("aac")
+        .arg("-b:a")
+        .arg("256k")
+        .arg("-y") // Overwrite output file
+        .arg(m4a_path)
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("FFmpeg conversion failed: {}", stderr);
+    }
+
+    log::info!("Successfully converted to M4A");
+    Ok(())
+}
