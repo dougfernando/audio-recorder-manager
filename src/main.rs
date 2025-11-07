@@ -24,20 +24,56 @@ async fn main() -> Result<()> {
 
         match command.as_str() {
             "record" => {
-                // Parse: record <duration> [format]
+                // Parse: record <duration> [format] [quality]
+                // Validate duration parameter
                 let duration: i64 = if args.len() > 2 {
-                    args[2].parse().unwrap_or(30)
+                    match args[2].parse::<i64>() {
+                        Ok(d) if d == -1 || d > 0 => d,
+                        Ok(d) => {
+                            eprintln!("Error: Duration must be -1 (manual mode) or a positive number, got: {}", d);
+                            std::process::exit(1);
+                        }
+                        Err(_) => {
+                            eprintln!("Error: Invalid duration '{}'. Must be a number.", args[2]);
+                            std::process::exit(1);
+                        }
+                    }
                 } else {
                     30
                 };
 
+                // Validate format parameter
                 let audio_format = if args.len() > 3 {
-                    args[3].clone()
+                    let fmt = args[3].to_lowercase();
+                    match fmt.as_str() {
+                        "wav" | "m4a" => fmt,
+                        _ => {
+                            eprintln!("Error: Unsupported audio format '{}'. Supported formats: wav, m4a", args[3]);
+                            std::process::exit(1);
+                        }
+                    }
                 } else {
                     "wav".to_string()
                 };
 
-                quick_record(duration, audio_format).await?;
+                // Parse quality parameter (optional)
+                let quality = if args.len() > 4 {
+                    let q = args[4].to_lowercase();
+                    match q.as_str() {
+                        "quick" => RecordingQuality::quick(),
+                        "standard" => RecordingQuality::standard(),
+                        "professional" => RecordingQuality::professional(),
+                        "high" => RecordingQuality::high(),
+                        _ => {
+                            eprintln!("Error: Invalid quality '{}'. Options: quick, standard, professional, high", args[4]);
+                            std::process::exit(1);
+                        }
+                    }
+                } else {
+                    RecordingQuality::professional() // Default quality
+                };
+
+                quick_record(duration, audio_format, quality).await?;
                 return Ok(());
             }
             "status" => {
@@ -58,7 +94,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn quick_record(duration: i64, audio_format: String) -> Result<serde_json::Value> {
+async fn quick_record(duration: i64, audio_format: String, quality: RecordingQuality) -> Result<serde_json::Value> {
     env_logger::init();
 
     let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
@@ -82,6 +118,7 @@ async fn quick_record(duration: i64, audio_format: String) -> Result<serde_json:
             "file_path": recordings_dir.join(&final_filename).to_string_lossy(),
             "filename": final_filename,
             "duration": duration,
+            "quality": quality.name,
             "message": "Recording started successfully"
         }
     });
@@ -90,7 +127,7 @@ async fn quick_record(duration: i64, audio_format: String) -> Result<serde_json:
     println!("{}", serde_json::to_string(&result)?);
 
     // Now do the actual recording (this blocks, keeping process alive)
-    record_worker(duration, temp_filename, session_id, recordings_dir, status_dir, audio_format).await?;
+    record_worker(duration, temp_filename, session_id, recordings_dir, status_dir, audio_format, quality).await?;
 
     Ok(result)
 }
@@ -102,6 +139,7 @@ async fn record_worker(
     recordings_dir: PathBuf,
     status_dir: PathBuf,
     audio_format: String,
+    quality: RecordingQuality,
 ) -> Result<()> {
     let filepath = recordings_dir.join(&filename);
     let status_file = status_dir.join(format!("{}.json", session_id));
@@ -133,6 +171,7 @@ async fn record_worker(
             recorder.get_channels(),
             recorder.get_frames_captured(),
             recorder.has_audio_detected(),
+            &quality,
             "recording"
         )?;
 
@@ -171,6 +210,7 @@ async fn record_worker(
                 recorder.get_channels(),
                 recorder.get_frames_captured(),
                 recorder.has_audio_detected(),
+                &quality,
                 "recording"
             )?;
         }
@@ -283,6 +323,7 @@ fn write_wasapi_status(
     channels: u16,
     frames_captured: u64,
     has_audio: bool,
+    quality: &RecordingQuality,
     status: &str,
 ) -> Result<()> {
     let progress = if duration > 0 {
@@ -298,8 +339,8 @@ fn write_wasapi_status(
         "duration": duration,
         "elapsed": elapsed,
         "progress": progress,
-        "quality": "professional",
-        "quality_info": RecordingQuality::professional(),
+        "quality": quality.name,
+        "quality_info": quality,
         "device": "Default Output (WASAPI Loopback)",
         "sample_rate": sample_rate,
         "channels": channels,
