@@ -1,10 +1,16 @@
+mod config;
 mod devices;
+mod domain;
+mod error;
 mod recorder;
 mod wasapi_loopback;
 
-use anyhow::{Context, Result};
+use anyhow::Context;
 use chrono::Local;
+use config::RecorderConfig;
 use devices::DeviceManager;
+use domain::{AudioFormat, RecordingDuration, RecordingSession};
+use error::Result;
 #[cfg(not(windows))]
 use recorder::AudioRecorder;
 use recorder::{convert_wav_to_m4a, RecordingQuality};
@@ -12,6 +18,7 @@ use wasapi_loopback::windows_loopback::WasapiLoopbackRecorder;
 use serde_json::json;
 use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
 
 #[tokio::main]
@@ -24,9 +31,12 @@ async fn main() -> Result<()> {
 
         match command.as_str() {
             "record" => {
+                // Initialize config
+                let config = RecorderConfig::new();
+
                 // Parse: record <duration> [format] [quality]
                 // Validate duration parameter
-                let duration: i64 = if args.len() > 2 {
+                let duration_secs: i64 = if args.len() > 2 {
                     match args[2].parse::<i64>() {
                         Ok(d) if d == -1 || d > 0 => d,
                         Ok(d) => {
@@ -42,18 +52,25 @@ async fn main() -> Result<()> {
                     30
                 };
 
+                let duration = match RecordingDuration::from_secs(duration_secs, config.max_manual_duration_secs) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+
                 // Validate format parameter
                 let audio_format = if args.len() > 3 {
-                    let fmt = args[3].to_lowercase();
-                    match fmt.as_str() {
-                        "wav" | "m4a" => fmt,
-                        _ => {
-                            eprintln!("Error: Unsupported audio format '{}'. Supported formats: wav, m4a", args[3]);
+                    match AudioFormat::from_str(&args[3]) {
+                        Ok(fmt) => fmt,
+                        Err(e) => {
+                            eprintln!("Error: {}", e);
                             std::process::exit(1);
                         }
                     }
                 } else {
-                    "wav".to_string()
+                    AudioFormat::Wav
                 };
 
                 // Parse quality parameter (optional)
@@ -73,7 +90,7 @@ async fn main() -> Result<()> {
                     RecordingQuality::professional() // Default quality
                 };
 
-                quick_record(duration, audio_format, quality).await?;
+                quick_record(duration, audio_format, quality, config).await?;
                 return Ok(());
             }
             "status" => {
@@ -94,30 +111,28 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn quick_record(duration: i64, audio_format: String, quality: RecordingQuality) -> Result<serde_json::Value> {
+async fn quick_record(
+    duration: RecordingDuration,
+    audio_format: AudioFormat,
+    quality: RecordingQuality,
+    config: RecorderConfig,
+) -> Result<serde_json::Value> {
     env_logger::init();
 
-    let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let session_id = format!("rec-{}", timestamp);
+    // Create recording session
+    let session = RecordingSession::new(audio_format, quality.clone(), duration);
 
-    // Always record as WAV first, convert to M4A later if needed
-    let temp_filename = format!("recording_{}.wav", timestamp);
-    let final_filename = format!("recording_{}.{}", timestamp, audio_format);
-
-    let recordings_dir = PathBuf::from("storage/recordings");
-    let status_dir = PathBuf::from("storage/status");
-
-    std::fs::create_dir_all(&recordings_dir)?;
-    std::fs::create_dir_all(&status_dir)?;
+    // Ensure directories exist
+    config.ensure_directories()?;
 
     // Return success result with final filename
     let result = json!({
         "status": "success",
         "data": {
-            "session_id": session_id,
-            "file_path": recordings_dir.join(&final_filename).to_string_lossy(),
-            "filename": final_filename,
-            "duration": duration,
+            "session_id": session.id.as_str(),
+            "file_path": config.recordings_dir.join(session.filename()).to_string_lossy(),
+            "filename": session.filename(),
+            "duration": duration.to_api_value(),
             "quality": quality.name,
             "message": "Recording started successfully"
         }
@@ -127,34 +142,24 @@ async fn quick_record(duration: i64, audio_format: String, quality: RecordingQua
     println!("{}", serde_json::to_string(&result)?);
 
     // Now do the actual recording (this blocks, keeping process alive)
-    record_worker(duration, temp_filename, session_id, recordings_dir, status_dir, audio_format, quality).await?;
+    record_worker(session, config).await?;
 
     Ok(result)
 }
 
 async fn record_worker(
-    duration: i64,
-    filename: String,
-    session_id: String,
-    recordings_dir: PathBuf,
-    status_dir: PathBuf,
-    audio_format: String,
-    quality: RecordingQuality,
+    session: RecordingSession,
+    config: RecorderConfig,
 ) -> Result<()> {
-    let filepath = recordings_dir.join(&filename);
-    let status_file = status_dir.join(format!("{}.json", session_id));
+    let filepath = config.recordings_dir.join(session.temp_filename());
+    let status_file = config.status_dir.join(format!("{}.json", session.id.as_str()));
 
-    // Handle manual mode (duration = -1)
-    let effective_duration = if duration == -1 {
-        7200 // 2 hours max for manual mode
-    } else {
-        duration as u64
-    };
+    let effective_duration = session.duration.effective_duration();
 
     // Use WASAPI loopback on Windows
     #[cfg(windows)]
     {
-        log::info!("Starting WASAPI loopback recording: {} ({} seconds)", filename, effective_duration);
+        log::info!("Starting WASAPI loopback recording: {} ({} seconds)", session.temp_filename(), effective_duration);
 
         // Create recorder
         let recorder = WasapiLoopbackRecorder::new(filepath.clone())?;
@@ -163,20 +168,20 @@ async fn record_worker(
         // Write initial status
         write_wasapi_status(
             &status_file,
-            &session_id,
-            &filename,
+            session.id.as_str(),
+            &session.temp_filename(),
             effective_duration,
             0,
             recorder.get_sample_rate(),
             recorder.get_channels(),
             recorder.get_frames_captured(),
             recorder.has_audio_detected(),
-            &quality,
+            &session.quality,
             "recording"
         )?;
 
         // Update status every second
-        let update_interval = Duration::from_secs(1);
+        let update_interval = config.status_update_interval;
         loop {
             tokio::time::sleep(update_interval).await;
 
@@ -188,15 +193,11 @@ async fn record_worker(
             }
 
             // Check for stop signal
-            let signals_dir = status_dir.parent()
-                .map(|p| p.join("signals"));
-            if let Some(signals_dir) = signals_dir {
-                let stop_signal = signals_dir.join(format!("{}.stop", session_id));
-                if stop_signal.exists() {
-                    log::info!("Stop signal received for session {}", session_id);
-                    let _ = std::fs::remove_file(stop_signal);
-                    break;
-                }
+            let stop_signal = config.signals_dir.join(format!("{}.stop", session.id.as_str()));
+            if stop_signal.exists() {
+                log::info!("Stop signal received for session {}", session.id);
+                let _ = std::fs::remove_file(stop_signal);
+                break;
             }
 
             // Calculate progress
@@ -219,15 +220,15 @@ async fn record_worker(
             // Update status file
             write_wasapi_status(
                 &status_file,
-                &session_id,
-                &filename,
+                session.id.as_str(),
+                &session.temp_filename(),
                 effective_duration,
                 elapsed,
                 recorder.get_sample_rate(),
                 recorder.get_channels(),
                 recorder.get_frames_captured(),
                 recorder.has_audio_detected(),
-                &quality,
+                &session.quality,
                 "recording"
             )?;
         }
@@ -238,7 +239,7 @@ async fn record_worker(
         eprintln!("[Recording] Completed successfully!");
 
         // Wait a moment for file to be fully written
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(config.file_write_delay_ms)).await;
     }
 
     #[cfg(not(windows))]
@@ -257,17 +258,22 @@ async fn record_worker(
         let recorder = AudioRecorder::new(
             device_raw,
             device.name.clone(),
-            recordings_dir.clone(),
+            config.recordings_dir.clone(),
         )?;
 
         let handle = recorder
-            .start_recording(&filename, Some(effective_duration), session_id.clone(), status_dir.clone())
+            .start_recording(
+                &session.temp_filename(),
+                Some(effective_duration),
+                session.id.as_str().to_string(),
+                config.status_dir.clone()
+            )
             .await?;
 
-        log::info!("Recording started: {} ({} seconds)", filename, effective_duration);
+        log::info!("Recording started: {} ({} seconds)", session.temp_filename(), effective_duration);
         handle.write_status()?;
 
-        let update_interval = Duration::from_secs(1);
+        let update_interval = config.status_update_interval;
         loop {
             tokio::time::sleep(update_interval).await;
 
@@ -284,7 +290,7 @@ async fn record_worker(
 
     // Convert to M4A if requested
     let mut final_filepath = filepath.clone();
-    if audio_format == "m4a" {
+    if matches!(session.format, AudioFormat::M4a) {
         log::info!("Converting WAV to M4A...");
         eprintln!("[Converting] WAV to M4A format...");
         let m4a_path = filepath.with_extension("m4a");
@@ -316,16 +322,15 @@ async fn record_worker(
 
     let status = serde_json::json!({
         "status": "completed",
-        "session_id": session_id,
+        "session_id": session.id.as_str(),
         "filename": final_filepath.file_name().and_then(|n| n.to_str()).unwrap_or("unknown"),
-        "duration": duration,
+        "duration": session.duration.to_api_value(),
         "file_size_mb": format!("{:.2}", file_size_mb),
-        "format": if audio_format == "m4a" { "m4a" } else { "wav" },
-        "codec": if audio_format == "m4a" { "aac" } else { "pcm" },
-        "message": if audio_format == "m4a" {
-            "Recording converted to M4A successfully"
-        } else {
-            "Recording completed successfully"
+        "format": session.format.to_string(),
+        "codec": session.format.codec(),
+        "message": match session.format {
+            AudioFormat::M4a => "Recording converted to M4A successfully",
+            AudioFormat::Wav => "Recording completed successfully",
         }
     });
 
