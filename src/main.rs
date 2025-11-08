@@ -199,6 +199,23 @@ async fn record_worker(
                 }
             }
 
+            // Calculate progress
+            let progress = if effective_duration > 0 {
+                ((elapsed as f64 / effective_duration as f64) * 100.0).min(100.0) as u8
+            } else {
+                0
+            };
+
+            // Print progress to terminal
+            eprintln!(
+                "[Recording] Progress: {}% | Elapsed: {}s / {}s | Frames: {} | Audio: {}",
+                progress,
+                elapsed,
+                effective_duration,
+                recorder.get_frames_captured(),
+                if recorder.has_audio_detected() { "Yes" } else { "No" }
+            );
+
             // Update status file
             write_wasapi_status(
                 &status_file,
@@ -218,6 +235,7 @@ async fn record_worker(
         // Stop recording
         recorder.stop()?;
         log::info!("Recording completed: {:?}", filepath);
+        eprintln!("[Recording] Completed successfully!");
 
         // Wait a moment for file to be fully written
         tokio::time::sleep(Duration::from_millis(500)).await;
@@ -268,11 +286,13 @@ async fn record_worker(
     let mut final_filepath = filepath.clone();
     if audio_format == "m4a" {
         log::info!("Converting WAV to M4A...");
+        eprintln!("[Converting] WAV to M4A format...");
         let m4a_path = filepath.with_extension("m4a");
 
         match convert_wav_to_m4a(&filepath, &m4a_path).await {
             Ok(_) => {
                 log::info!("Successfully converted to M4A: {:?}", m4a_path);
+                eprintln!("[Converting] Successfully converted to M4A format!");
                 // Delete temporary WAV file
                 if let Err(e) = std::fs::remove_file(&filepath) {
                     log::warn!("Failed to delete temporary WAV file: {}", e);
@@ -281,6 +301,7 @@ async fn record_worker(
             }
             Err(e) => {
                 log::error!("Failed to convert to M4A: {}. Keeping WAV file.", e);
+                eprintln!("[Converting] Failed to convert to M4A. Keeping WAV file.");
             }
         }
     }
