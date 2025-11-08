@@ -3,6 +3,7 @@ mod devices;
 mod domain;
 mod error;
 mod recorder;
+mod status;
 mod wasapi_loopback;
 
 use anyhow::Context;
@@ -14,6 +15,7 @@ use error::Result;
 #[cfg(not(windows))]
 use recorder::AudioRecorder;
 use recorder::{convert_wav_to_m4a, RecordingQuality};
+use status::{JsonFileObserver, RecordingResult, RecordingStatus, StatusObserver};
 use wasapi_loopback::windows_loopback::WasapiLoopbackRecorder;
 use serde_json::json;
 use std::env;
@@ -152,7 +154,7 @@ async fn record_worker(
     config: RecorderConfig,
 ) -> Result<()> {
     let filepath = config.recordings_dir.join(session.temp_filename());
-    let status_file = config.status_dir.join(format!("{}.json", session.id.as_str()));
+    let observer = JsonFileObserver::new(config.status_dir.clone());
 
     let effective_duration = session.duration.effective_duration();
 
@@ -166,19 +168,20 @@ async fn record_worker(
         let start_time = std::time::Instant::now();
 
         // Write initial status
-        write_wasapi_status(
-            &status_file,
-            session.id.as_str(),
-            &session.temp_filename(),
-            effective_duration,
-            0,
-            recorder.get_sample_rate(),
-            recorder.get_channels(),
-            recorder.get_frames_captured(),
-            recorder.has_audio_detected(),
-            &session.quality,
-            "recording"
-        )?;
+        observer.on_progress(RecordingStatus {
+            session_id: session.id.as_str().to_string(),
+            filename: session.temp_filename(),
+            duration: effective_duration,
+            elapsed: 0,
+            progress: 0,
+            quality: session.quality.name.clone(),
+            device: "Default Output (WASAPI Loopback)".to_string(),
+            sample_rate: recorder.get_sample_rate(),
+            channels: recorder.get_channels(),
+            frames_captured: recorder.get_frames_captured(),
+            has_audio: recorder.has_audio_detected(),
+            status: "recording".to_string(),
+        })?;
 
         // Update status every second
         let update_interval = config.status_update_interval;
@@ -218,19 +221,20 @@ async fn record_worker(
             );
 
             // Update status file
-            write_wasapi_status(
-                &status_file,
-                session.id.as_str(),
-                &session.temp_filename(),
-                effective_duration,
+            observer.on_progress(RecordingStatus {
+                session_id: session.id.as_str().to_string(),
+                filename: session.temp_filename(),
+                duration: effective_duration,
                 elapsed,
-                recorder.get_sample_rate(),
-                recorder.get_channels(),
-                recorder.get_frames_captured(),
-                recorder.has_audio_detected(),
-                &session.quality,
-                "recording"
-            )?;
+                progress,
+                quality: session.quality.name.clone(),
+                device: "Default Output (WASAPI Loopback)".to_string(),
+                sample_rate: recorder.get_sample_rate(),
+                channels: recorder.get_channels(),
+                frames_captured: recorder.get_frames_captured(),
+                has_audio: recorder.has_audio_detected(),
+                status: "recording".to_string(),
+            })?;
         }
 
         // Stop recording
@@ -320,61 +324,20 @@ async fn record_worker(
         0.0
     };
 
-    let status = serde_json::json!({
-        "status": "completed",
-        "session_id": session.id.as_str(),
-        "filename": final_filepath.file_name().and_then(|n| n.to_str()).unwrap_or("unknown"),
-        "duration": session.duration.to_api_value(),
-        "file_size_mb": format!("{:.2}", file_size_mb),
-        "format": session.format.to_string(),
-        "codec": session.format.codec(),
-        "message": match session.format {
-            AudioFormat::M4a => "Recording converted to M4A successfully",
-            AudioFormat::Wav => "Recording completed successfully",
-        }
-    });
+    observer.on_complete(RecordingResult {
+        status: "completed".to_string(),
+        session_id: session.id.as_str().to_string(),
+        filename: final_filepath.file_name().and_then(|n| n.to_str()).unwrap_or("unknown").to_string(),
+        duration: session.duration.to_api_value(),
+        file_size_mb: format!("{:.2}", file_size_mb),
+        format: session.format.to_string(),
+        codec: session.format.codec().to_string(),
+        message: match session.format {
+            AudioFormat::M4a => "Recording converted to M4A successfully".to_string(),
+            AudioFormat::Wav => "Recording completed successfully".to_string(),
+        },
+    })?;
 
-    std::fs::write(&status_file, serde_json::to_string_pretty(&status)?)?;
-
-    Ok(())
-}
-
-fn write_wasapi_status(
-    status_file: &PathBuf,
-    session_id: &str,
-    filename: &str,
-    duration: u64,
-    elapsed: u64,
-    sample_rate: u32,
-    channels: u16,
-    frames_captured: u64,
-    has_audio: bool,
-    quality: &RecordingQuality,
-    status: &str,
-) -> Result<()> {
-    let progress = if duration > 0 {
-        ((elapsed as f64 / duration as f64) * 100.0).min(100.0) as u8
-    } else {
-        0
-    };
-
-    let status_json = serde_json::json!({
-        "status": status,
-        "session_id": session_id,
-        "filename": filename,
-        "duration": duration,
-        "elapsed": elapsed,
-        "progress": progress,
-        "quality": quality.name,
-        "quality_info": quality,
-        "device": "Default Output (WASAPI Loopback)",
-        "sample_rate": sample_rate,
-        "channels": channels,
-        "frames_captured": frames_captured,
-        "has_audio": has_audio,
-    });
-
-    std::fs::write(status_file, serde_json::to_string_pretty(&status_json)?)?;
     Ok(())
 }
 
