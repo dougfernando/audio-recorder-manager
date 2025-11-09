@@ -15,6 +15,22 @@ This project was inspired by and based on the Python implementation from [Meetin
 - Professional quality audio (48kHz, 16-bit, stereo)
 - Compatible with existing Python CLI interface
 
+## Quick Start
+
+### Download Pre-built Binary
+
+**Windows users** can download the pre-built executable from the [latest release](https://github.com/dougfernando/audio-recorder-manager/releases/latest):
+
+1. Download `audio-recorder-manager.exe`
+2. Run it directly - no installation required!
+
+```bash
+# Start recording
+audio-recorder-manager.exe record 30 wav
+```
+
+### Build from Source
+
 ## Requirements
 
 ### Windows
