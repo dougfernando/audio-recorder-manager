@@ -4,7 +4,7 @@ A high-performance command-line audio recorder manager built with Rust, converte
 
 ## Acknowledgments
 
-This project was inspired by and based on the Python implementation from [MeetingScribe](https://github.com/arthurhrk/meetingscribe) by Arthur Henrique Della Fraga. The original Python code served as the foundation for this Rust implementation, which maintains full CLI compatibility while providing significant performance improvements.
+This project was inspired by and based on the Python implementation from [MeetingScribe](https://github.com/arthurhrk/meetingscribe) by Arthur Andrade. The original Python code served as the foundation for this Rust implementation, which maintains full CLI compatibility while providing significant performance improvements.
 
 ## Features
 
