@@ -1,26 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cargo build:*)",
-      "Bash(cargo check:*)",
-      "Bash(rustup target add:*)",
-      "Bash(where:*)",
-      "Bash(cmd /c build.bat:*)",
-      "Bash(powershell:*)",
-      "Bash(rustup show:*)",
-      "Bash(rustup toolchain install:*)",
-      "Bash(./target/release/audio-recorder-manager.exe record:*)",
-      "Bash(./target/x86_64-pc-windows-gnu/release/audio-recorder-manager.exe:*)",
-      "Bash(cargo +stable-x86_64-pc-windows-gnu build:*)",
-      "Bash(cat:*)",
-      "Bash(ffmpeg:*)",
-      "Bash(findstr:*)",
-      "Bash(set RUST_LOG=info:*)",
-      "Bash($env:RUST_LOG=\"info\")",
-      "Bash(git init:*)",
-      "Bash(git add:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: Audio Recorder Manager in Rust\n\nThis is a high-performance audio recorder built with Rust, converted from \nthe original Python implementation. The recorder captures system audio using \nWASAPI loopback on Windows and supports both WAV and M4A output formats.\n\nFeatures:\n- WASAPI loopback recording for capturing system audio on Windows\n- Real-time status updates with JSON output\n- Support for WAV (16-bit PCM) and M4A (AAC) formats\n- Proper handling of 32-bit float audio from Windows\n- Manual recording mode with stop signals\n- Professional quality audio (48kHz, stereo)\n\nTechnical improvements:\n- Fixed silent audio issue by properly detecting WAVEFORMATEXTENSIBLE format\n- Correct 32-bit float to 16-bit PCM conversion\n- Proper handling of AUDCLNT_BUFFERFLAGS_SILENT flag\n- Lock-free atomic operations for frame counting\n- Native threading with async/await support\n\nBuild system:\n- GNU toolchain configuration for Windows\n- PowerShell and batch build scripts\n- Cross-platform support (Windows primary, Linux/macOS fallback)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(git commit -m \"$(cat <<''EOF''\nPhase 2: Implement Status Observer Pattern\n\nCreated a flexible observer pattern for status reporting that separates \nconcerns and makes it easy to add new status reporters.\n\nNew modules:\n- src/status/mod.rs: Status module exports\n- src/status/observer.rs: StatusObserver trait and data models\n- src/status/json_observer.rs: JsonFileObserver implementation\n\nChanges:\n- Refactored status writing to use observer pattern\n- Removed write_wasapi_status() function\n- Created RecordingStatus and RecordingResult types\n- Implemented JsonFileObserver for file-based status reporting\n- Updated main.rs to use observer.on_progress() and observer.on_complete()\n\nBenefits:\n- Separation of concerns: Status reporting logic isolated from recording\n- Extensibility: Easy to add new observers (websockets, databases, etc.)\n- Testability: Each observer can be tested independently\n- Clean interfaces: Trait-based design with clear contracts\n\nTested:\n- WAV recording with observer pattern works correctly\n- Status files are written properly\n- All existing functionality preserved\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
