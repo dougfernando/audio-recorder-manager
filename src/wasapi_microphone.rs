@@ -20,7 +20,7 @@ pub mod windows_microphone {
     }
 
     impl WasapiMicrophoneRecorder {
-        pub fn new(filepath: PathBuf) -> Result<Self> {
+        pub fn new(filepath: PathBuf, target_sample_rate: u32) -> Result<Self> {
             let is_recording = Arc::new(AtomicBool::new(true));
             let frames_captured = Arc::new(AtomicU64::new(0));
             let has_audio = Arc::new(AtomicBool::new(false));
@@ -29,8 +29,8 @@ pub mod windows_microphone {
             let frames_captured_clone = Arc::clone(&frames_captured);
             let has_audio_clone = Arc::clone(&has_audio);
 
-            // Get sample rate and channels before spawning thread
-            let (sample_rate, channels) = unsafe {
+            // Get channels from microphone (but we'll use target_sample_rate)
+            let channels = unsafe {
                 CoInitializeEx(None, COINIT_MULTITHREADED)
                     .ok()
                     .context("Failed to initialize COM")?;
@@ -48,35 +48,39 @@ pub mod windows_microphone {
                 let mix_format = audio_client.GetMixFormat()?;
                 let wf = &*mix_format;
 
-                let sr = wf.nSamplesPerSec;
                 let ch = wf.nChannels;
 
                 CoTaskMemFree(Some(mix_format as *const _ as *const _));
 
-                (sr, ch)
+                ch
             };
 
             // Spawn recording thread that initializes its own COM
             std::thread::spawn(move || {
-                let _ = Self::recording_thread(
+                if let Err(e) = Self::recording_thread(
                     filepath,
+                    target_sample_rate,
                     is_recording_clone,
                     frames_captured_clone,
                     has_audio_clone,
-                );
+                ) {
+                    log::error!("Microphone recording thread error: {}", e);
+                    log::error!("Error chain: {:?}", e);
+                }
             });
 
             Ok(Self {
                 is_recording,
                 frames_captured,
                 has_audio,
-                sample_rate,
+                sample_rate: target_sample_rate,
                 channels,
             })
         }
 
         fn recording_thread(
             filepath: PathBuf,
+            target_sample_rate: u32,
             is_recording: Arc<AtomicBool>,
             frames_captured: Arc<AtomicU64>,
             has_audio: Arc<AtomicBool>,
@@ -100,51 +104,60 @@ pub mod windows_microphone {
                 // Activate audio client
                 let audio_client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
 
-                // Get mix format
-                let mix_format = audio_client.GetMixFormat()?;
-                let wf = &*mix_format;
+                // Get microphone's native format
+                let native_format = audio_client.GetMixFormat()?;
+                let native_wf = &*native_format;
 
                 // Copy packed struct fields to avoid alignment issues
-                let sample_rate = wf.nSamplesPerSec;
-                let channels = wf.nChannels;
-                let bits_per_sample = wf.wBitsPerSample;
-                let format_tag = wf.wFormatTag;
-
-                // WASAPI usually returns WAVEFORMATEXTENSIBLE (0xFFFE) for modern formats
-                // We need to check the SubFormat GUID to determine actual format
-                let is_float = if format_tag == 0xFFFE {  // WAVE_FORMAT_EXTENSIBLE
-                    // For WAVEFORMATEXTENSIBLE, check SubFormat GUID
-                    // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT ends with 00 00 10 00 ...
-                    // KSDATAFORMAT_SUBTYPE_PCM ends with 01 00 10 00 ...
-                    // The format is typically 32-bit float for capture
-                    bits_per_sample == 32  // Assume 32-bit is float in capture
-                } else {
-                    format_tag == 3  // WAVE_FORMAT_IEEE_FLOAT
-                };
+                let channels = native_wf.nChannels;
+                let native_sample_rate = native_wf.nSamplesPerSec;
+                let bits_per_sample = native_wf.wBitsPerSample;
+                let format_tag = native_wf.wFormatTag;
 
                 log::info!(
-                    "WASAPI Microphone format: {} Hz, {} channels, {} bits, format tag: 0x{:X}, float: {}",
-                    sample_rate,
+                    "WASAPI Microphone native format: {} Hz, {} channels, {} bits, tag: {}",
+                    native_sample_rate,
                     channels,
                     bits_per_sample,
-                    format_tag,
-                    is_float
+                    format_tag
                 );
 
-                // Initialize audio client in capture mode (no loopback flag)
+                // IMPORTANT: Use native format to avoid AUDCLNT_E_UNSUPPORTED_FORMAT errors.
+                // FFmpeg will handle resampling during the merge to match system audio.
+                log::info!(
+                    "Using native microphone format - FFmpeg will resample to {} Hz during merge",
+                    target_sample_rate
+                );
+
+                // Initialize audio client with native format
+                log::info!("Initializing audio client with native format...");
                 audio_client.Initialize(
                     AUDCLNT_SHAREMODE_SHARED,
                     0, // No loopback flag for microphone capture
                     REFTIMES_PER_SEC, // 1 second buffer
                     0,
-                    mix_format,
+                    native_format,
                     None,
                 )?;
+                log::info!("Audio client initialized successfully");
+
+                // Free native format (we're done with it after Initialize)
+                CoTaskMemFree(Some(native_format as *const _ as *const _));
+
+                // Record at native sample rate - FFmpeg will resample during merge
+                let sample_rate = native_sample_rate;
+
+                // Detect if using float format
+                // Format tag 3 = WAVE_FORMAT_IEEE_FLOAT, 0xFFFE = WAVE_FORMAT_EXTENSIBLE (check subformat)
+                let is_float = format_tag == 3 || (format_tag == 0xFFFE && bits_per_sample == 32);
 
                 // Get capture client
+                log::info!("Getting capture client service...");
                 let capture_client: IAudioCaptureClient = audio_client.GetService()?;
+                log::info!("Capture client obtained successfully");
 
                 // Create WAV writer - always use 16-bit PCM for compatibility
+                log::info!("Creating WAV writer for microphone...");
                 let spec = WavSpec {
                     channels,
                     sample_rate,
@@ -154,21 +167,45 @@ pub mod windows_microphone {
 
                 let writer = WavWriter::create(&filepath, spec)?;
                 let mut writer = Some(writer);
+                log::info!("WAV writer created successfully");
 
                 // Start audio client
+                log::info!("Starting microphone audio client...");
                 audio_client.Start()?;
+                log::info!("Audio client started successfully");
 
-                let is_32bit = bits_per_sample == 32;
-                log::info!("Recording microphone with: {} bit, {}", bits_per_sample, if is_float { "float" } else { "int" });
+                log::info!(
+                    "Recording microphone: {} Hz, {} channels, {} bits, {} format",
+                    sample_rate,
+                    channels,
+                    bits_per_sample,
+                    if is_float { "float" } else { "int" }
+                );
+                log::info!("Microphone audio client started, entering recording loop...");
 
                 // Recording loop
+                let mut loop_count = 0u64;
+                let mut total_packets_received = 0u64;
                 while is_recording.load(Ordering::Relaxed) {
                     // Wait a bit for buffer to fill
                     std::thread::sleep(Duration::from_millis(10));
 
                     let packet_length = capture_client.GetNextPacketSize()?;
 
+                    // Log every 100 iterations (~1 second) to track packet availability
+                    if loop_count % 100 == 0 {
+                        log::debug!(
+                            "Mic loop #{}: packet_length={}, total_packets={}",
+                            loop_count,
+                            packet_length,
+                            total_packets_received
+                        );
+                    }
+                    loop_count += 1;
+
                     if packet_length > 0 {
+                        total_packets_received += 1;
+                        log::debug!("Mic packet available: {} frames", packet_length);
                         let mut buffer: *mut u8 = std::ptr::null_mut();
                         let mut num_frames = 0u32;
                         let mut flags = 0u32;
@@ -195,9 +232,9 @@ pub mod windows_microphone {
                                     }
                                 }
                             } else {
-                                // Process based on actual format
-                                if is_float && is_32bit {
-                                    // 32-bit float samples
+                                // Process audio based on native format
+                                if is_float {
+                                    // Process 32-bit float samples
                                     let samples = std::slice::from_raw_parts(
                                         buffer as *const f32,
                                         (num_frames * channels as u32) as usize,
@@ -219,35 +256,8 @@ pub mod windows_microphone {
                                             let _ = writer.write_sample(sample_i16);
                                         }
                                     }
-                                } else if !is_float && is_32bit {
-                                    // 32-bit int samples
-                                    let samples = std::slice::from_raw_parts(
-                                        buffer as *const i32,
-                                        (num_frames * channels as u32) as usize,
-                                    );
-
-                                    // Detect audio
-                                    if !has_audio.load(Ordering::Relaxed) {
-                                        let rms = calculate_rms_i32(samples);
-                                        if rms > 100000.0 {  // Adjusted threshold for 32-bit
-                                            has_audio.store(true, Ordering::Relaxed);
-                                            log::info!("Microphone audio detected! Level: {:.2}", rms);
-                                        }
-                                    }
-
-                                    // Convert and write to 16-bit
-                                    // Scale from 32-bit range to 16-bit range
-                                    // i32 range: -2147483648 to 2147483647
-                                    // i16 range: -32768 to 32767
-                                    // Shift right by 16 bits (equivalent to dividing by 65536)
-                                    if let Some(writer) = writer.as_mut() {
-                                        for &sample in samples {
-                                            let sample_i16 = (sample >> 16) as i16;
-                                            let _ = writer.write_sample(sample_i16);
-                                        }
-                                    }
-                                } else if !is_float && bits_per_sample == 16 {
-                                    // 16-bit int samples (legacy)
+                                } else if bits_per_sample == 16 {
+                                    // Process 16-bit int samples
                                     let samples = std::slice::from_raw_parts(
                                         buffer as *const i16,
                                         (num_frames * channels as u32) as usize,
@@ -256,9 +266,9 @@ pub mod windows_microphone {
                                     // Detect audio
                                     if !has_audio.load(Ordering::Relaxed) {
                                         let rms = calculate_rms_i16(samples);
-                                        if rms > 100.0 {
+                                        if rms > 327.0 { // 0.01 * 32767
                                             has_audio.store(true, Ordering::Relaxed);
-                                            log::info!("Microphone audio detected! Level: {:.2}", rms);
+                                            log::info!("Microphone audio detected! Level: {:.4}", rms / 32767.0);
                                         }
                                     }
 
@@ -269,7 +279,13 @@ pub mod windows_microphone {
                                         }
                                     }
                                 } else {
-                                    log::warn!("Unsupported microphone audio format: {} bits, float={}", bits_per_sample, is_float);
+                                    // Unsupported format - write silence
+                                    log::warn!("Unsupported audio format: {} bits, writing silence", bits_per_sample);
+                                    if let Some(writer) = writer.as_mut() {
+                                        for _ in 0..(num_frames * channels as u32) {
+                                            let _ = writer.write_sample(0i16);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -279,13 +295,21 @@ pub mod windows_microphone {
                 }
 
                 // Stop and cleanup
+                log::info!(
+                    "Microphone recording loop finished: {} iterations, {} packets received, {} frames captured",
+                    loop_count,
+                    total_packets_received,
+                    frames_captured.load(Ordering::Relaxed)
+                );
+
                 audio_client.Stop()?;
 
                 if let Some(writer) = writer.take() {
                     writer.finalize()?;
                 }
 
-                CoTaskMemFree(Some(mix_format as *const _ as *const _));
+                // Native format was already freed after Initialize()
+
                 CoUninitialize();
 
                 Ok(())
@@ -351,7 +375,7 @@ pub mod windows_microphone {
     pub struct WasapiMicrophoneRecorder;
 
     impl WasapiMicrophoneRecorder {
-        pub fn new(_filepath: PathBuf) -> Result<Self> {
+        pub fn new(_filepath: PathBuf, _target_sample_rate: u32) -> Result<Self> {
             anyhow::bail!("WASAPI microphone is only available on Windows")
         }
 

@@ -486,12 +486,13 @@ pub async fn merge_audio_streams_smart(
     // Determine merge strategy based on audio detection flags
     let output = if loopback_has_audio && mic_has_audio {
         // Scenario A: Both have audio - Create dual-mono stereo (L=loopback, R=mic)
+        // Convert mic mono to stereo first, then merge with amerge
         log::info!("Merging both channels (dual-mono stereo)");
         Command::new("ffmpeg")
             .arg("-i").arg(loopback_wav)
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
-            .arg("[0:a][1:a]amerge=inputs=2,pan=stereo|c0=c0|c1=c1[aout]")
+            .arg("[0:a]aformat=channel_layouts=stereo[left];[1:a]aformat=channel_layouts=mono,asplit=2[ml][mr];[left][ml][mr]amerge=inputs=3,pan=stereo|c0<c0+c2|c1<c1+c2[aout]")
             .arg("-map").arg("[aout]")
             .arg("-ar").arg(&target_sample_rate)
             .arg("-y")
@@ -512,12 +513,12 @@ pub async fn merge_audio_streams_smart(
             .output()
             .await?
     } else if !loopback_has_audio && mic_has_audio {
-        // Scenario C: Mic only - Convert to stereo (duplicate to both channels)
+        // Scenario C: Mic only - Convert mono to stereo (duplicate to both channels)
         log::info!("Using microphone only (system audio was silent)");
         Command::new("ffmpeg")
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
-            .arg("[0:a]aformat=channel_layouts=stereo[aout]")
+            .arg("[0:a]aformat=channel_layouts=mono,asplit=2[l][r];[l][r]amerge=inputs=2,pan=stereo|c0=c0|c1=c1[aout]")
             .arg("-map").arg("[aout]")
             .arg("-ar").arg(&target_sample_rate)
             .arg("-y")
@@ -542,6 +543,16 @@ pub async fn merge_audio_streams_smart(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("FFmpeg merge failed: {}", stderr);
+    }
+
+    // Log FFmpeg output for debugging
+    let ffmpeg_stdout = String::from_utf8_lossy(&output.stdout);
+    let ffmpeg_stderr = String::from_utf8_lossy(&output.stderr);
+    if !ffmpeg_stdout.is_empty() {
+        log::debug!("FFmpeg stdout: {}", ffmpeg_stdout);
+    }
+    if !ffmpeg_stderr.is_empty() {
+        log::debug!("FFmpeg stderr: {}", ffmpeg_stderr);
     }
 
     log::info!("Successfully merged audio streams");

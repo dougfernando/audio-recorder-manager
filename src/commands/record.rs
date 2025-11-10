@@ -79,10 +79,14 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
         // Initialize loopback recorder (system audio) - REQUIRED
         let loopback_recorder = WasapiLoopbackRecorder::new(loopback_temp.clone())?;
 
-        // Initialize microphone recorder with fallback
-        let mic_recorder = match WasapiMicrophoneRecorder::new(mic_temp.clone()) {
+        // Get loopback sample rate to match microphone
+        let target_sample_rate = loopback_recorder.get_sample_rate();
+        log::info!("System audio sample rate: {} Hz - will match microphone to this", target_sample_rate);
+
+        // Initialize microphone recorder with matched sample rate
+        let mic_recorder = match WasapiMicrophoneRecorder::new(mic_temp.clone(), target_sample_rate) {
             Ok(recorder) => {
-                log::info!("Microphone recorder initialized successfully");
+                log::info!("Microphone recorder initialized successfully with matched sample rate");
                 Some(recorder)
             }
             Err(e) => {
