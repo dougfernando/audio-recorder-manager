@@ -451,3 +451,99 @@ pub async fn convert_wav_to_m4a(wav_path: &PathBuf, m4a_path: &PathBuf) -> Resul
     log::info!("Successfully converted to M4A");
     Ok(())
 }
+
+/// Merge two audio streams (loopback and microphone) into a single stereo WAV file
+/// Uses FFmpeg to handle sample rate mismatches and audio synchronization
+/// Output format: Dual-mono stereo (Left=system audio, Right=microphone)
+pub async fn merge_audio_streams_smart(
+    loopback_wav: &PathBuf,
+    mic_wav: &PathBuf,
+    output_wav: &PathBuf,
+    loopback_has_audio: bool,
+    mic_has_audio: bool,
+    quality: &RecordingQuality,
+) -> Result<()> {
+    use tokio::process::Command;
+
+    log::info!(
+        "Merging audio streams - Loopback: {}, Mic: {}",
+        loopback_has_audio,
+        mic_has_audio
+    );
+
+    // Check if FFmpeg is available
+    let ffmpeg_check = Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .await;
+
+    if ffmpeg_check.is_err() {
+        anyhow::bail!("FFmpeg is not installed or not in PATH. Please install FFmpeg for dual-channel recording.");
+    }
+
+    let target_sample_rate = quality.sample_rate.to_string();
+
+    // Determine merge strategy based on audio detection flags
+    let output = if loopback_has_audio && mic_has_audio {
+        // Scenario A: Both have audio - Create dual-mono stereo (L=loopback, R=mic)
+        log::info!("Merging both channels (dual-mono stereo)");
+        Command::new("ffmpeg")
+            .arg("-i").arg(loopback_wav)
+            .arg("-i").arg(mic_wav)
+            .arg("-filter_complex")
+            .arg("[0:a][1:a]amerge=inputs=2,pan=stereo|c0=c0|c1=c1[aout]")
+            .arg("-map").arg("[aout]")
+            .arg("-ar").arg(&target_sample_rate)
+            .arg("-y")
+            .arg(output_wav)
+            .output()
+            .await?
+    } else if loopback_has_audio && !mic_has_audio {
+        // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
+        log::info!("Using loopback only (microphone was silent)");
+        Command::new("ffmpeg")
+            .arg("-i").arg(loopback_wav)
+            .arg("-filter_complex")
+            .arg("[0:a]aformat=channel_layouts=stereo[aout]")
+            .arg("-map").arg("[aout]")
+            .arg("-ar").arg(&target_sample_rate)
+            .arg("-y")
+            .arg(output_wav)
+            .output()
+            .await?
+    } else if !loopback_has_audio && mic_has_audio {
+        // Scenario C: Mic only - Convert to stereo (duplicate to both channels)
+        log::info!("Using microphone only (system audio was silent)");
+        Command::new("ffmpeg")
+            .arg("-i").arg(mic_wav)
+            .arg("-filter_complex")
+            .arg("[0:a]aformat=channel_layouts=stereo[aout]")
+            .arg("-map").arg("[aout]")
+            .arg("-ar").arg(&target_sample_rate)
+            .arg("-y")
+            .arg(output_wav)
+            .output()
+            .await?
+    } else {
+        // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
+        log::info!("Both channels were silent, creating silent stereo file");
+        Command::new("ffmpeg")
+            .arg("-i").arg(loopback_wav)
+            .arg("-filter_complex")
+            .arg("[0:a]aformat=channel_layouts=stereo[aout]")
+            .arg("-map").arg("[aout]")
+            .arg("-ar").arg(&target_sample_rate)
+            .arg("-y")
+            .arg(output_wav)
+            .output()
+            .await?
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("FFmpeg merge failed: {}", stderr);
+    }
+
+    log::info!("Successfully merged audio streams");
+    Ok(())
+}

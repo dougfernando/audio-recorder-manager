@@ -7,6 +7,7 @@ mod error;
 mod recorder;
 mod status;
 mod wasapi_loopback;
+mod wasapi_microphone;
 
 use error::Result;
 use std::env;

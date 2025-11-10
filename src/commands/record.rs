@@ -9,9 +9,10 @@ use crate::domain::{AudioFormat, RecordingDuration, RecordingSession};
 use crate::error::Result;
 #[cfg(not(windows))]
 use crate::recorder::AudioRecorder;
-use crate::recorder::{convert_wav_to_m4a, RecordingQuality};
+use crate::recorder::{convert_wav_to_m4a, merge_audio_streams_smart, RecordingQuality};
 use crate::status::{JsonFileObserver, RecordingResult, RecordingStatus, StatusObserver};
 use crate::wasapi_loopback::windows_loopback::WasapiLoopbackRecorder;
+use crate::wasapi_microphone::windows_microphone::WasapiMicrophoneRecorder;
 
 /// Execute the record command
 pub async fn execute(
@@ -56,17 +57,41 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
 
     let effective_duration = session.duration.effective_duration();
 
-    // Use WASAPI loopback on Windows
+    // Use WASAPI dual-channel recording on Windows (loopback + microphone)
     #[cfg(windows)]
     {
         log::info!(
-            "Starting WASAPI loopback recording: {} ({} seconds)",
+            "Starting WASAPI dual-channel recording: {} ({} seconds)",
             session.temp_filename(),
             effective_duration
         );
 
-        // Create recorder
-        let recorder = WasapiLoopbackRecorder::new(filepath.clone())?;
+        // Create temporary filenames for separate recordings
+        let loopback_temp = config.recordings_dir.join(format!(
+            "{}_loopback.wav",
+            session.id.as_str()
+        ));
+        let mic_temp = config.recordings_dir.join(format!(
+            "{}_mic.wav",
+            session.id.as_str()
+        ));
+
+        // Initialize loopback recorder (system audio) - REQUIRED
+        let loopback_recorder = WasapiLoopbackRecorder::new(loopback_temp.clone())?;
+
+        // Initialize microphone recorder with fallback
+        let mic_recorder = match WasapiMicrophoneRecorder::new(mic_temp.clone()) {
+            Ok(recorder) => {
+                log::info!("Microphone recorder initialized successfully");
+                Some(recorder)
+            }
+            Err(e) => {
+                log::warn!("Failed to initialize microphone recorder: {}. Continuing with loopback only.", e);
+                eprintln!("[Warning] Microphone unavailable - recording system audio only");
+                None
+            }
+        };
+
         let start_time = std::time::Instant::now();
 
         // Write initial status
@@ -77,11 +102,15 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
             elapsed: 0,
             progress: 0,
             quality: session.quality.name.clone(),
-            device: "Default Output (WASAPI Loopback)".to_string(),
-            sample_rate: recorder.get_sample_rate(),
-            channels: recorder.get_channels(),
-            frames_captured: recorder.get_frames_captured(),
-            has_audio: recorder.has_audio_detected(),
+            device: if mic_recorder.is_some() {
+                "Dual-Channel (System + Microphone)".to_string()
+            } else {
+                "System Audio Only (WASAPI Loopback)".to_string()
+            },
+            sample_rate: loopback_recorder.get_sample_rate(),
+            channels: 2, // Always stereo output
+            frames_captured: loopback_recorder.get_frames_captured(),
+            has_audio: loopback_recorder.has_audio_detected(),
             status: "recording".to_string(),
         })?;
 
@@ -114,19 +143,28 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
                 0
             };
 
-            // Print progress to terminal
-            eprintln!(
-                "[Recording] Progress: {}% | Elapsed: {}s / {}s | Frames: {} | Audio: {}",
-                progress,
-                elapsed,
-                effective_duration,
-                recorder.get_frames_captured(),
-                if recorder.has_audio_detected() {
-                    "Yes"
-                } else {
-                    "No"
-                }
-            );
+            // Print progress to terminal (dual-channel format)
+            if let Some(ref mic) = mic_recorder {
+                eprintln!(
+                    "[Recording] Progress: {}% | Elapsed: {}s / {}s | Loopback: {} frames ({}) | Mic: {} frames ({})",
+                    progress,
+                    elapsed,
+                    effective_duration,
+                    loopback_recorder.get_frames_captured(),
+                    if loopback_recorder.has_audio_detected() { "Audio" } else { "Silent" },
+                    mic.get_frames_captured(),
+                    if mic.has_audio_detected() { "Audio" } else { "Silent" }
+                );
+            } else {
+                eprintln!(
+                    "[Recording] Progress: {}% | Elapsed: {}s / {}s | Loopback: {} frames ({})",
+                    progress,
+                    elapsed,
+                    effective_duration,
+                    loopback_recorder.get_frames_captured(),
+                    if loopback_recorder.has_audio_detected() { "Audio" } else { "Silent" }
+                );
+            }
 
             // Update status file
             observer.on_progress(RecordingStatus {
@@ -136,22 +174,56 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
                 elapsed,
                 progress,
                 quality: session.quality.name.clone(),
-                device: "Default Output (WASAPI Loopback)".to_string(),
-                sample_rate: recorder.get_sample_rate(),
-                channels: recorder.get_channels(),
-                frames_captured: recorder.get_frames_captured(),
-                has_audio: recorder.has_audio_detected(),
+                device: if mic_recorder.is_some() {
+                    "Dual-Channel (System + Microphone)".to_string()
+                } else {
+                    "System Audio Only (WASAPI Loopback)".to_string()
+                },
+                sample_rate: loopback_recorder.get_sample_rate(),
+                channels: 2, // Always stereo output
+                frames_captured: loopback_recorder.get_frames_captured(),
+                has_audio: loopback_recorder.has_audio_detected(),
                 status: "recording".to_string(),
             })?;
         }
 
-        // Stop recording
-        recorder.stop()?;
-        log::info!("Recording completed: {:?}", filepath);
-        eprintln!("[Recording] Completed successfully!");
+        // Stop both recorders
+        loopback_recorder.stop()?;
+        if let Some(ref mic) = mic_recorder {
+            mic.stop()?;
+        }
 
-        // Wait a moment for file to be fully written
+        log::info!("Recording completed, starting merge process");
+        eprintln!("[Recording] Completed successfully!");
+        eprintln!("[Merging] Merging audio channels...");
+
+        // Wait a moment for files to be fully written
         tokio::time::sleep(Duration::from_millis(config.file_write_delay_ms)).await;
+
+        // Get audio detection flags
+        let loopback_has_audio = loopback_recorder.has_audio_detected();
+        let mic_has_audio = mic_recorder.as_ref()
+            .map(|m| m.has_audio_detected())
+            .unwrap_or(false);
+
+        // Merge audio streams using FFmpeg
+        merge_audio_streams_smart(
+            &loopback_temp,
+            &mic_temp,
+            &filepath,
+            loopback_has_audio,
+            mic_has_audio,
+            &session.quality,
+        )
+        .await?;
+
+        log::info!("Audio merge completed: {:?}", filepath);
+        eprintln!("[Merging] Successfully merged audio channels!");
+
+        // Cleanup temporary files
+        let _ = std::fs::remove_file(&loopback_temp);
+        let _ = std::fs::remove_file(&mic_temp);
+        log::info!("Temporary files cleaned up");
     }
 
     #[cfg(not(windows))]
