@@ -1,7 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(gh:*)",
+      "Bash(git tag:*)",
+      "Bash(git push:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo check:*)",
+      "Bash(rustup show:*)",
+      "Bash(rustup default:*)",
+      "Bash(./target/x86_64-pc-windows-gnu/release/audio-recorder-manager.exe)",
+      "Bash(./target/x86_64-pc-windows-gnu/release/audio-recorder-manager.exe:*)",
+      "Bash(cat:*)",
+      "Bash(git add:*)",
+      "Bash(target/x86_64-pc-windows-gnu/release/audio-recorder-manager.exe)",
+      "Bash(ffmpeg:*)",
+      "Bash(RUST_LOG=info ./target/x86_64-pc-windows-gnu/release/audio-recorder-manager.exe record:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,13 +1,21 @@
 use anyhow::Result;
+#[cfg(not(windows))]
 use cpal::traits::{DeviceTrait, StreamTrait};
-use cpal::{Device, SampleFormat, SampleRate, Stream, StreamConfig};
+#[cfg(not(windows))]
+use cpal::{Device, SampleFormat, Stream};
+#[cfg(not(windows))]
 use hound::{WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
+#[cfg(not(windows))]
 use std::fs::File;
+#[cfg(not(windows))]
 use std::io::BufWriter;
 use std::path::PathBuf;
+#[cfg(not(windows))]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(not(windows))]
 use std::sync::{Arc, Mutex};
+#[cfg(not(windows))]
 use std::time::{Duration, Instant};
 
 const PROFESSIONAL_SAMPLE_RATE: u32 = 48000;
@@ -64,23 +72,7 @@ impl RecordingQuality {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RecordingStatus {
-    pub status: String,
-    pub session_id: String,
-    pub filename: String,
-    pub duration: u64,
-    pub elapsed: u64,
-    pub progress: u8,
-    pub quality: String,
-    pub quality_info: RecordingQuality,
-    pub device: String,
-    pub sample_rate: u32,
-    pub channels: u16,
-    pub frames_captured: u64,
-    pub has_audio: bool,
-}
-
+#[cfg(not(windows))]
 pub struct AudioRecorder {
     device: Device,
     device_name: String,
@@ -89,6 +81,7 @@ pub struct AudioRecorder {
     output_dir: PathBuf,
 }
 
+#[cfg(not(windows))]
 impl AudioRecorder {
     pub fn new(device: Device, device_name: String, output_dir: PathBuf) -> Result<Self> {
         Ok(Self {
@@ -245,6 +238,7 @@ impl AudioRecorder {
     }
 }
 
+#[cfg(not(windows))]
 pub struct RecordingHandle {
     stream: Stream,
     writer: Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>,
@@ -263,8 +257,10 @@ pub struct RecordingHandle {
 
 // Stream is not Send on Windows but we need it for tokio::spawn
 // This is safe because we only access it in the async context
+#[cfg(not(windows))]
 unsafe impl Send for RecordingHandle {}
 
+#[cfg(not(windows))]
 impl RecordingHandle {
     pub fn get_elapsed(&self) -> u64 {
         self.start_time.elapsed().as_secs()
@@ -396,22 +392,6 @@ impl RecordingHandle {
 
         Ok(filepath)
     }
-}
-
-fn calculate_rms_i16(samples: &[i16]) -> f32 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-    let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
-    (sum / samples.len() as f64).sqrt() as f32
-}
-
-fn calculate_rms_f32(samples: &[f32]) -> f32 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-    let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
-    (sum / samples.len() as f64).sqrt() as f32
 }
 
 /// Convert WAV file to M4A using FFmpeg

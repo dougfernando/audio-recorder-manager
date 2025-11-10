@@ -16,7 +16,6 @@ pub mod windows_loopback {
         frames_captured: Arc<AtomicU64>,
         has_audio: Arc<AtomicBool>,
         sample_rate: u32,
-        channels: u16,
     }
 
     impl WasapiLoopbackRecorder {
@@ -29,8 +28,8 @@ pub mod windows_loopback {
             let frames_captured_clone = Arc::clone(&frames_captured);
             let has_audio_clone = Arc::clone(&has_audio);
 
-            // Get sample rate and channels before spawning thread
-            let (sample_rate, channels) = unsafe {
+            // Get sample rate before spawning thread
+            let sample_rate = unsafe {
                 CoInitializeEx(None, COINIT_MULTITHREADED)
                     .ok()
                     .context("Failed to initialize COM")?;
@@ -49,11 +48,10 @@ pub mod windows_loopback {
                 let wf = &*mix_format;
 
                 let sr = wf.nSamplesPerSec;
-                let ch = wf.nChannels;
 
                 CoTaskMemFree(Some(mix_format as *const _ as *const _));
 
-                (sr, ch)
+                sr
             };
 
             // Spawn recording thread that initializes its own COM
@@ -71,7 +69,6 @@ pub mod windows_loopback {
                 frames_captured,
                 has_audio,
                 sample_rate,
-                channels,
             })
         }
 
@@ -302,10 +299,6 @@ pub mod windows_loopback {
 
         pub fn get_sample_rate(&self) -> u32 {
             self.sample_rate
-        }
-
-        pub fn get_channels(&self) -> u16 {
-            self.channels
         }
 
         pub fn stop(&self) -> Result<()> {

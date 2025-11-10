@@ -1,7 +1,4 @@
-use crate::domain::{AudioFormat, SessionId};
-use crate::recorder::RecordingQuality;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingStatus {

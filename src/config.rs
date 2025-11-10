@@ -8,7 +8,6 @@ pub struct RecorderConfig {
     pub signals_dir: PathBuf,
     pub max_manual_duration_secs: u64,
     pub status_update_interval: Duration,
-    pub buffer_duration_reftimes: i64,
     pub file_write_delay_ms: u64,
 }
 
@@ -20,7 +19,6 @@ impl Default for RecorderConfig {
             signals_dir: PathBuf::from("storage/signals"),
             max_manual_duration_secs: 7200, // 2 hours
             status_update_interval: Duration::from_secs(1),
-            buffer_duration_reftimes: 10_000_000, // 1 second in WASAPI reference time units
             file_write_delay_ms: 500,
         }
     }

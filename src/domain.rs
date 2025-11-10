@@ -77,10 +77,6 @@ impl RecordingDuration {
         }
     }
 
-    pub fn is_manual(&self) -> bool {
-        matches!(self, RecordingDuration::Manual { .. })
-    }
-
     pub fn to_api_value(&self) -> i64 {
         match self {
             RecordingDuration::Fixed(d) => *d as i64,

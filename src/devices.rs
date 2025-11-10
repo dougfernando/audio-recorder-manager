@@ -1,8 +1,13 @@
+#[cfg(not(windows))]
 use anyhow::{Context, Result};
+#[cfg(not(windows))]
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{Device, Host, SupportedStreamConfig};
+#[cfg(not(windows))]
+use cpal::{Device, Host};
+#[cfg(not(windows))]
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(windows))]
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AudioDevice {
     pub name: String,
@@ -12,6 +17,7 @@ pub struct AudioDevice {
     device: Option<Device>,
 }
 
+#[cfg(not(windows))]
 impl std::fmt::Debug for AudioDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AudioDevice")
@@ -22,6 +28,7 @@ impl std::fmt::Debug for AudioDevice {
     }
 }
 
+#[cfg(not(windows))]
 impl AudioDevice {
     pub fn new(device: Device, name: String, is_default_input: bool, is_default_output: bool) -> Self {
         Self {
@@ -35,20 +42,14 @@ impl AudioDevice {
     pub fn device(&self) -> Option<&Device> {
         self.device.as_ref()
     }
-
-    pub fn get_default_config(&self) -> Result<SupportedStreamConfig> {
-        let device = self.device.as_ref()
-            .context("Device not available")?;
-
-        device.default_input_config()
-            .context("Failed to get default input config")
-    }
 }
 
+#[cfg(not(windows))]
 pub struct DeviceManager {
     host: Host,
 }
 
+#[cfg(not(windows))]
 impl DeviceManager {
     pub fn new() -> Result<Self> {
         let host = cpal::default_host();
@@ -83,27 +84,12 @@ impl DeviceManager {
         Ok(devices)
     }
 
-    pub fn get_default_input_device(&self) -> Result<AudioDevice> {
+    fn get_default_input_device(&self) -> Result<AudioDevice> {
         let device = self.host.default_input_device()
             .context("No default input device available")?;
 
         let name = device.name().context("Failed to get device name")?;
         Ok(AudioDevice::new(device, name, true, false))
-    }
-
-    pub fn get_default_output_device(&self) -> Result<AudioDevice> {
-        let device = self.host.default_output_device()
-            .context("No default output device available")?;
-
-        let name = device.name().context("Failed to get device name")?;
-        Ok(AudioDevice::new(device, name, false, true))
-    }
-
-    pub fn find_device_by_name(&self, name: &str) -> Result<AudioDevice> {
-        let devices = self.list_devices()?;
-        devices.into_iter()
-            .find(|d| d.name == name)
-            .context("Device not found")
     }
 
     pub fn get_best_recording_device(&self) -> Result<AudioDevice> {
@@ -126,6 +112,7 @@ impl DeviceManager {
     }
 }
 
+#[cfg(not(windows))]
 impl Default for DeviceManager {
     fn default() -> Self {
         Self::new().expect("Failed to create DeviceManager")

@@ -15,8 +15,6 @@ pub mod windows_microphone {
         is_recording: Arc<AtomicBool>,
         frames_captured: Arc<AtomicU64>,
         has_audio: Arc<AtomicBool>,
-        sample_rate: u32,
-        channels: u16,
     }
 
     impl WasapiMicrophoneRecorder {
@@ -28,32 +26,6 @@ pub mod windows_microphone {
             let is_recording_clone = Arc::clone(&is_recording);
             let frames_captured_clone = Arc::clone(&frames_captured);
             let has_audio_clone = Arc::clone(&has_audio);
-
-            // Get channels from microphone (but we'll use target_sample_rate)
-            let channels = unsafe {
-                CoInitializeEx(None, COINIT_MULTITHREADED)
-                    .ok()
-                    .context("Failed to initialize COM")?;
-
-                let device_enumerator: IMMDeviceEnumerator = CoCreateInstance(
-                    &MMDeviceEnumerator,
-                    None,
-                    CLSCTX_ALL,
-                )?;
-
-                let device = device_enumerator
-                    .GetDefaultAudioEndpoint(eCapture, eConsole)?;
-
-                let audio_client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
-                let mix_format = audio_client.GetMixFormat()?;
-                let wf = &*mix_format;
-
-                let ch = wf.nChannels;
-
-                CoTaskMemFree(Some(mix_format as *const _ as *const _));
-
-                ch
-            };
 
             // Spawn recording thread that initializes its own COM
             std::thread::spawn(move || {
@@ -73,8 +45,6 @@ pub mod windows_microphone {
                 is_recording,
                 frames_captured,
                 has_audio,
-                sample_rate: target_sample_rate,
-                channels,
             })
         }
 
@@ -324,14 +294,6 @@ pub mod windows_microphone {
             self.has_audio.load(Ordering::Relaxed)
         }
 
-        pub fn get_sample_rate(&self) -> u32 {
-            self.sample_rate
-        }
-
-        pub fn get_channels(&self) -> u16 {
-            self.channels
-        }
-
         pub fn stop(&self) -> Result<()> {
             self.is_recording.store(false, Ordering::Relaxed);
 
@@ -343,14 +305,6 @@ pub mod windows_microphone {
     }
 
     fn calculate_rms_i16(samples: &[i16]) -> f32 {
-        if samples.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
-        (sum / samples.len() as f64).sqrt() as f32
-    }
-
-    fn calculate_rms_i32(samples: &[i32]) -> f32 {
         if samples.is_empty() {
             return 0.0;
         }
