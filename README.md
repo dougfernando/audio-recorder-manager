@@ -10,6 +10,7 @@ This project was inspired by and based on the Python implementation from [Meetin
 
 - **Dual-channel recording** on Windows (system audio + microphone simultaneously)
 - Intelligent audio merging with FFmpeg (dual-mono stereo: L=system, R=microphone)
+- **Recovery mode** for interrupted recordings - automatically completes merge and conversion
 - Automatic fallback when microphone is unavailable
 - Real-time status updates during recording showing both channels
 - JSON-based status files for frontend integration
@@ -84,6 +85,15 @@ audio-recorder-manager stop
 # Stop a specific recording session
 audio-recorder-manager stop rec-20250109_120000
 
+# Recover all incomplete recordings (from interrupted sessions)
+audio-recorder-manager recover
+
+# Recover a specific session
+audio-recorder-manager recover rec-20250109_120000
+
+# Recover and convert to M4A format
+audio-recorder-manager recover rec-20250109_120000 m4a
+
 # Check system audio devices
 audio-recorder-manager status
 ```
@@ -112,6 +122,41 @@ Terminal output example:
 [Merging] Merging audio channels...
 [Merging] Successfully merged audio channels!
 ```
+
+### Recovery Mode
+
+If a recording is interrupted (e.g., program killed, system crash), the temporary WAV files (`*_loopback.wav` and `*_mic.wav`) are preserved. Use the `recover` command to complete the merge and conversion:
+
+```bash
+# Recover all incomplete recordings
+audio-recorder-manager recover
+
+# Recover specific session and convert to M4A
+audio-recorder-manager recover rec-20250109_120000 m4a
+```
+
+Recovery output example:
+```json
+{
+  "status": "success",
+  "data": {
+    "message": "Successfully recovered 1 recording(s)",
+    "recovered": [
+      {
+        "session_id": "rec-20250109_120000",
+        "output_file": "recording_20250109_120000.wav",
+        "output_path": "storage/recordings/recording_20250109_120000.wav"
+      }
+    ]
+  }
+}
+```
+
+The recover command will:
+1. Scan for orphaned temporary files (`*_loopback.wav`, `*_mic.wav`)
+2. Merge them using FFmpeg (same as normal recording)
+3. Optionally convert to M4A format
+4. Clean up temporary files after successful recovery
 
 ### Quality Presets
 
@@ -169,6 +214,7 @@ The codebase follows a modular architecture for maintainability and scalability:
 - **commands/**: Command implementations
   - **record.rs**: Dual-channel recording orchestration and session management
   - **stop.rs**: Stop signal creation and active session detection
+  - **recover.rs**: Recovery of interrupted recordings with merge and conversion
   - **status.rs**: Audio device enumeration
 - **config.rs**: Configuration management
 - **devices.rs**: Audio device detection using `cpal`

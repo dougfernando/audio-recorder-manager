@@ -18,6 +18,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         "record" => handle_record_command(&args).await,
         "status" => commands::status::execute().await,
         "stop" => handle_stop_command(&args).await,
+        "recover" => handle_recover_command(&args).await,
         _ => {
             eprintln!("Unknown command: {}", command);
             print_usage();
@@ -105,6 +106,35 @@ async fn handle_stop_command(args: &[String]) -> Result<()> {
     commands::stop::execute(session_id, config).await
 }
 
+async fn handle_recover_command(args: &[String]) -> Result<()> {
+    let config = RecorderConfig::new();
+
+    // Parse optional session_id
+    let session_id = if args.len() > 2 && !args[2].starts_with("--") {
+        Some(args[2].clone())
+    } else {
+        None
+    };
+
+    // Parse optional format
+    let target_format = if args.len() > 3 {
+        match AudioFormat::from_str(&args[3]) {
+            Ok(fmt) => Some(fmt),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    } else if args.len() > 2 && args[2].starts_with("--") {
+        // Handle --format flag
+        None
+    } else {
+        None
+    };
+
+    commands::recover::execute(session_id, target_format, config).await
+}
+
 fn print_usage() {
     println!("============================================================");
     println!("Audio Recorder Manager - Rust Edition");
@@ -113,6 +143,7 @@ fn print_usage() {
     println!("Usage:");
     println!("  audio-recorder-manager record <duration> [format] [quality]");
     println!("  audio-recorder-manager stop [session_id]");
+    println!("  audio-recorder-manager recover [session_id] [format]");
     println!("  audio-recorder-manager status");
     println!();
     println!("Examples:");
@@ -120,6 +151,9 @@ fn print_usage() {
     println!("  audio-recorder-manager record -1 m4a standard  # Manual mode");
     println!("  audio-recorder-manager stop                    # Stop latest recording");
     println!("  audio-recorder-manager stop rec-20250109_120000 # Stop specific session");
+    println!("  audio-recorder-manager recover                 # Recover all incomplete recordings");
+    println!("  audio-recorder-manager recover rec-20250109_120000 # Recover specific session");
+    println!("  audio-recorder-manager recover rec-20250109_120000 m4a # Recover and convert to M4A");
     println!("  audio-recorder-manager status                  # Show system audio devices");
     println!();
 }
