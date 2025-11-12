@@ -1,15 +1,8 @@
-mod cli;
-mod commands;
-mod config;
-mod devices;
-mod domain;
-mod error;
-mod recorder;
-mod status;
-mod wasapi_loopback;
-mod wasapi_microphone;
+// CLI entry point for Audio Recorder Manager
 
-use error::Result;
+mod cli;
+
+use audio_recorder_manager::Result;
 use std::env;
 
 #[tokio::main]

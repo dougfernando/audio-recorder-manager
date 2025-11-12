@@ -1,10 +1,8 @@
 use std::str::FromStr;
 
-use crate::commands;
-use crate::config::RecorderConfig;
-use crate::domain::{AudioFormat, RecordingDuration};
-use crate::error::Result;
-use crate::recorder::RecordingQuality;
+use audio_recorder_manager::{
+    commands, AudioFormat, RecorderConfig, RecordingDuration, RecordingQuality, Result,
+};
 
 pub async fn run(args: Vec<String>) -> Result<()> {
     if args.len() <= 1 {

@@ -3,11 +3,26 @@ name = "audio-recorder-manager"
 version = "0.3.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
-description = "A command-line audio recorder manager"
+description = "A command-line audio recorder manager with optional GUI"
 license = "MIT"
 
+# Define multiple binaries
+[[bin]]
+name = "audio-recorder-manager"
+path = "src/main.rs"
+required-features = []
+
+[[bin]]
+name = "audio-recorder-gui"
+path = "src/gui/main.rs"
+required-features = ["gui"]
+
+[features]
+default = []
+gui = ["gpui", "gpui-component", "notify", "notify-debouncer-full"]
+
 [dependencies]
-clap = { version = "4.5", features = ["derive", "cargo"] }
+# Core dependencies (shared by CLI and GUI)
 anyhow = "1.0"
 thiserror = "1.0"
 tokio = { version = "1.41", features = ["full", "rt-multi-thread", "process"] }
@@ -18,6 +33,15 @@ hound = "3.5"
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
 env_logger = "0.11"
+
+# CLI-only dependencies
+clap = { version = "4.5", features = ["derive", "cargo"], optional = false }
+
+# GUI dependencies (optional - only when building GUI)
+gpui = { version = "0.2.2", optional = true }
+gpui-component = { version = "0.4.0-preview2", optional = true }
+notify = { version = "6.1", optional = true }
+notify-debouncer-full = { version = "0.3", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

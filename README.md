@@ -1,6 +1,6 @@
 # Audio Recorder Manager
 
-A high-performance command-line audio recorder manager built with Rust, converted from the Python version for improved performance and reliability.
+A high-performance audio recorder manager built with Rust, available as both a command-line interface (CLI) and graphical user interface (GUI). Converted from the Python version for improved performance and reliability.
 
 ## Acknowledgments
 
@@ -19,8 +19,9 @@ This project was inspired by and based on the Python implementation from [Meetin
 - Professional quality audio (48kHz, 16-bit, stereo)
 - M4A format support with automatic WAV conversion
 - Compatible with existing Python CLI interface
+- **GUI (in development)** - Modern desktop interface with visual monitoring (see [GUI Plan](docs/GUI_PLAN.md))
 
-## Quick Start
+## Quick Start (CLI)
 
 ### Download Pre-built Binary
 
@@ -205,12 +206,22 @@ Recording status is written to `storage/status/{session_id}.json` every second:
 
 ## Architecture
 
-The codebase follows a modular architecture for maintainability and scalability:
+The codebase follows a modular architecture for maintainability and scalability with support for dual binaries (CLI + GUI):
 
-### Core Modules
+### Project Structure
 
-- **main.rs**: Application entry point (18 lines)
-- **cli.rs**: Command-line argument parsing and routing
+- **lib.rs**: Library exposing core functionality for both binaries
+- **main.rs**: CLI entry point
+- **cli.rs**: Command-line interface implementation
+- **gui/**: Graphical user interface (under development)
+  - **main.rs**: GUI entry point
+  - **app.rs**: Main application component
+  - **components/**: UI components
+  - **state/**: Application state management
+  - **services/**: Service layer (file watching, recorder service, etc.)
+
+### Core Modules (Shared by CLI and GUI)
+
 - **commands/**: Command implementations
   - **record.rs**: Dual-channel recording orchestration and session management
   - **stop.rs**: Stop signal creation and active session detection
@@ -242,7 +253,7 @@ The codebase follows a modular architecture for maintainability and scalability:
 ## Development
 
 ```bash
-# Check for compilation errors
+# Check for compilation errors (CLI only)
 cargo check
 
 # Run with logging
@@ -251,9 +262,47 @@ RUST_LOG=debug cargo run -- record 5 wav
 # Run tests
 cargo test
 
-# Build optimized release
+# Build optimized release (CLI)
 cargo build --release
+
+# Build GUI (requires GPUI - under development)
+cargo build --bin audio-recorder-gui --features gui
 ```
+
+## GUI (Under Development)
+
+A graphical user interface is currently in development. The GUI will provide:
+
+- Visual recording controls with real-time status monitoring
+- Recording history browser with search and filtering
+- Recovery panel for interrupted recordings
+- Settings management with theme support
+- System tray integration and notifications
+
+**Status**: Architecture and scaffolding complete. Ready for implementation.
+
+**Documentation**:
+- **[NEXT_STEPS.md](docs/NEXT_STEPS.md)** - Start here! Choose your implementation path
+- **[GUI_ROADMAP.md](docs/GUI_ROADMAP.md)** - Phased implementation roadmap (10 phases)
+- **[GUI_PLAN.md](docs/GUI_PLAN.md)** - Complete specification (80+ pages)
+- **[GUI_DEVELOPMENT.md](docs/GUI_DEVELOPMENT.md)** - Development guide and build instructions
+- **[MINIMAL_GUI_POC.md](docs/MINIMAL_GUI_POC.md)** - Architecture validation
+
+**Quick Start Options**:
+
+*Option 1: Fast MVP with egui (Recommended)*
+```bash
+# See docs/examples/egui_minimal_example.rs
+# Working GUI in 1-2 weeks
+```
+
+*Option 2: Production Quality with GPUI*
+```bash
+# Requires Zed repository setup
+# See docs/NEXT_STEPS.md for details
+```
+
+**Current Architecture**: Dual-binary structure ready, all core business logic shared between CLI and GUI via library pattern.
 
 ## License
 

@@ -16,7 +16,12 @@
       "Bash(target/x86_64-pc-windows-gnu/release/audio-recorder-manager.exe)",
       "Bash(ffmpeg:*)",
       "Bash(RUST_LOG=info ./target/x86_64-pc-windows-gnu/release/audio-recorder-manager.exe record:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(target/x86_64-pc-windows-gnu/debug/audio-recorder-manager.exe recover:*)",
+      "Bash(cargo run:*)",
+      "Bash(./target/x86_64-pc-windows-gnu/debug/audio-recorder-gui.exe)",
+      "Bash(powershell -Command:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
