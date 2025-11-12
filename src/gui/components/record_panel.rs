@@ -1,13 +1,14 @@
 // Record panel component for starting new recordings
 
 use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_component::{button::*, input::*, *};
 use audio_recorder_manager::RecorderConfig;
 use crate::app::AudioRecorderApp;
 
 pub struct RecordPanelProps {
     pub config: RecorderConfig,
     pub duration_text: String,
+    pub duration_input: Entity<InputState>,
 }
 
 pub fn render_record_panel(
@@ -58,14 +59,17 @@ pub fn render_record_panel(
                                 .gap_2()
                                 .child(
                                     div()
-                                        .w(px(80.0))
-                                        .p_2()
-                                        .border_1()
-                                        .border_color(rgb(0xcccccc))
-                                        .rounded_md()
-                                        .child(props.duration_text.clone())
+                                        .w(px(100.0))
+                                        .child(Input::new(&props.duration_input))
                                 )
                                 .child("seconds")
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(rgb(0x666666))
+                                        .ml_2()
+                                        .child("(use -1 for manual)")
+                                )
                         )
                 )
                 .child(

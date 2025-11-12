@@ -2,7 +2,7 @@
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-use gpui_component::{button::*, *};
+use gpui_component::{button::*, input::{InputEvent, InputState}};
 use audio_recorder_manager::{RecorderConfig, AudioFormat, RecordingDuration, RecordingQuality};
 use std::sync::Arc;
 
@@ -13,8 +13,10 @@ use super::components::*;
 pub struct AudioRecorderApp {
     state: AppState,
     duration_text: String,
+    duration_input: Entity<InputState>,
     status_message: String,
     recorder_service: Arc<RecorderService>,
+    tokio_runtime: Arc<tokio::runtime::Runtime>,
     // Settings fields
     settings_default_duration: String,
     settings_default_format: AudioFormat,
@@ -29,16 +31,35 @@ pub enum QualityPreset {
 }
 
 impl AudioRecorderApp {
-    pub fn new(_cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let config = RecorderConfig::new();
         let state = AppState::new(config.clone());
-        let recorder_service = Arc::new(RecorderService::new(config));
+        let tokio_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
+        let recorder_service = Arc::new(RecorderService::new(config, tokio_runtime.clone()));
+
+        // Create input state for duration field
+        let duration_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Duration (seconds)")
+        });
+
+        // Subscribe to input changes
+        cx.subscribe_in(&duration_input, window, |this, input_state, event, _window, cx| {
+            if let InputEvent::Change = event {
+                let value = input_state.read(cx).value();
+                this.duration_text = value.to_string();
+                cx.notify();
+            }
+        })
+        .detach();
 
         Self {
             state,
             duration_text: "30".to_string(),
+            duration_input,
             status_message: String::new(),
             recorder_service,
+            tokio_runtime,
             settings_default_duration: "30".to_string(),
             settings_default_format: AudioFormat::Wav,
             settings_default_quality: QualityPreset::Professional,
@@ -50,35 +71,46 @@ impl AudioRecorderApp {
         // Parse duration from text input
         let duration_secs: i64 = self.duration_text.parse().unwrap_or(30);
         let duration = if duration_secs < 0 {
-            RecordingDuration::Manual { max: 7200 }  // 2 hours max
+            RecordingDuration::Manual { max: 7200 } // 2 hours max
         } else {
             RecordingDuration::Fixed(duration_secs as u64)
         };
 
         // Get format and quality from state (or use defaults)
-        let format = self.state.recording_state.as_ref()
+        let format = self
+            .state
+            .recording_state
+            .as_ref()
             .map(|rs| rs.format)
             .unwrap_or(AudioFormat::Wav);
-        let quality = self.state.recording_state.as_ref()
+        let quality = self
+            .state
+            .recording_state
+            .as_ref()
             .map(|rs| rs.quality.clone())
             .unwrap_or_else(|| RecordingQuality::professional());
 
         // Start recording via service
         let recorder_service = self.recorder_service.clone();
         cx.spawn(async move |this, cx| {
-            match recorder_service.start_recording(duration, format, quality).await {
+            match recorder_service
+                .start_recording(duration, format, quality)
+                .await
+            {
                 Ok(session_id) => {
                     this.update(cx, |this, cx| {
                         this.status_message = format!("Recording started: {}", session_id);
                         this.state.active_panel = ActivePanel::Monitor;
                         cx.notify();
-                    }).ok();
+                    })
+                    .ok();
                 }
                 Err(e) => {
                     this.update(cx, |this, cx| {
                         this.status_message = format!("Failed to start recording: {}", e);
                         cx.notify();
-                    }).ok();
+                    })
+                    .ok();
                 }
             }
         })
@@ -120,7 +152,7 @@ impl AudioRecorderApp {
 
     pub fn handle_save_settings(&mut self, cx: &mut Context<Self>) {
         // Parse and validate settings
-        let default_duration: u64 = self.settings_default_duration.parse().unwrap_or(30);
+        let _default_duration: u64 = self.settings_default_duration.parse().unwrap_or(30);
         let max_manual_duration: u64 = self.settings_max_manual_duration.parse().unwrap_or(7200);
 
         // Update the config (in a real app, this would persist to disk)
@@ -191,6 +223,7 @@ impl Render for AudioRecorderApp {
                                     &RecordPanelProps {
                                         config: config.clone(),
                                         duration_text: duration,
+                                        duration_input: self.duration_input.clone(),
                                     },
                                     window,
                                     cx

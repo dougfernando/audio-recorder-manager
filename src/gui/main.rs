@@ -45,7 +45,7 @@ fn main() {
                     ..Default::default()
                 },
                 |window, cx| {
-                    let view = cx.new(|cx| AudioRecorderApp::new(cx));
+                    let view = cx.new(|cx| AudioRecorderApp::new(window, cx));
                     cx.new(|cx| gpui_component::Root::new(view.into(), window, cx))
                 },
             )?;

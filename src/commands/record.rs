@@ -20,7 +20,7 @@ pub async fn execute(
     quality: RecordingQuality,
     config: RecorderConfig,
 ) -> Result<()> {
-    env_logger::init();
+    let _ = env_logger::try_init();
 
     // Create recording session
     let session = RecordingSession::new(audio_format, quality.clone(), duration);

@@ -21,13 +21,15 @@ pub struct RecordingInfo {
 pub struct RecorderService {
     config: Arc<RecorderConfig>,
     current_recording: Arc<Mutex<Option<RecordingInfo>>>,
+    tokio_runtime: Arc<tokio::runtime::Runtime>,
 }
 
 impl RecorderService {
-    pub fn new(config: RecorderConfig) -> Self {
+    pub fn new(config: RecorderConfig, tokio_runtime: Arc<tokio::runtime::Runtime>) -> Self {
         Self {
             config: Arc::new(config),
             current_recording: Arc::new(Mutex::new(None)),
+            tokio_runtime,
         }
     }
 
@@ -39,45 +41,38 @@ impl RecorderService {
         quality: RecordingQuality,
     ) -> anyhow::Result<String> {
         // Check if already recording
-        {
-            let current = self.current_recording.lock().await;
-            if current.is_some() {
-                return Err(anyhow::anyhow!("A recording is already in progress"));
-            }
+        if self.current_recording.lock().await.is_some() {
+            return Err(anyhow::anyhow!("A recording is already in progress"));
         }
 
-        // Clone config for the async task
+        // Clone necessary data for the background task
         let config = (*self.config).clone();
         let current_recording = self.current_recording.clone();
+        let session_id = format!("rec-{}", chrono::Local::now().format("%Y%m%d_%H%M%S"));
+        let session_id_clone = session_id.clone();
 
-        // Spawn recording task in background
-        tokio::spawn(async move {
+        // Spawn the recording task on the dedicated Tokio runtime
+        self.tokio_runtime.spawn(async move {
             match commands::record::execute(duration, format, quality, config).await {
                 Ok(_) => {
-                    // Clear current recording on completion
                     let mut current = current_recording.lock().await;
                     *current = None;
-                    log::info!("Recording completed successfully");
+                    log::info!("Recording completed successfully: {}", session_id_clone);
                 }
                 Err(e) => {
-                    // Clear on error too
                     let mut current = current_recording.lock().await;
                     *current = None;
-                    log::error!("Recording failed: {}", e);
+                    log::error!("Recording failed: {}: {}", session_id_clone, e);
                 }
             }
         });
 
-        // Set initial recording info
-        let session_id = format!(
-            "rec-{}",
-            chrono::Local::now().format("%Y%m%d_%H%M%S")
-        );
-        let filename = format!("recording_{}.{}",
+        // Set initial recording info immediately
+        let filename = format!(
+            "recording_{}.{}",
             chrono::Local::now().format("%Y%m%d_%H%M%S"),
             format.extension()
         );
-
         {
             let mut current = self.current_recording.lock().await;
             *current = Some(RecordingInfo {
