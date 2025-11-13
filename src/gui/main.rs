@@ -54,7 +54,7 @@ fn main() {
             move |cx| {
                 if let Some(theme) = gpui_component::ThemeRegistry::global(cx)
                     .themes()
-                    .get(&theme_name)
+                    .get(theme_name)
                     .cloned()
                 {
                     gpui_component::Theme::global_mut(cx).apply_config(&theme);

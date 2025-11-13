@@ -169,12 +169,12 @@ impl AudioRecorderApp {
                         this.state.active_panel = ActivePanel::Monitor;
 
                         // Start periodic updates (every 500ms)
-                        cx.spawn(|this: WeakEntity<AudioRecorderApp>, cx| async move {
+                        cx.spawn(|this: WeakEntity<AudioRecorderApp>, mut cx| async move {
                             loop {
                                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
                                 let should_continue = this
-                                    .update(&cx, |this, cx| {
+                                    .update(&mut cx, |this, cx| {
                                         // Only update if we're still recording
                                         if this.state.recording_state.is_some() {
                                             this.update_recording_progress(cx);
@@ -184,7 +184,6 @@ impl AudioRecorderApp {
                                         }
                                     })
                                     .ok()
-                                    .flatten()
                                     .unwrap_or(false);
 
                                 if !should_continue {
