@@ -111,7 +111,7 @@ impl AudioRecorderApp {
         }
     }
 
-    pub fn start_recording(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn start_recording(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         // Parse duration from text input
         let duration_secs: i64 = self.duration_text.parse().unwrap_or(30);
         let duration = if duration_secs < 0 {
@@ -136,7 +136,7 @@ impl AudioRecorderApp {
 
         // Start recording via service
         let recorder_service = self.recorder_service.clone();
-        cx.spawn(async move |this, mut cx| {
+        cx.spawn(async move |this, cx| {
             match recorder_service
                 .start_recording(duration, format, quality)
                 .await
@@ -165,7 +165,7 @@ impl AudioRecorderApp {
     pub fn stop_recording(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let recorder_service = self.recorder_service.clone();
 
-        cx.spawn(async move |this, mut cx| {
+        cx.spawn(async move |this, cx| {
             match recorder_service.stop_recording().await {
                 Ok(_) => {
                     this.update(cx, |this, cx| {
@@ -193,7 +193,8 @@ impl AudioRecorderApp {
 
     pub fn handle_scan_recovery(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         window.push_notification(
-            (NotificationType::Info, "Scanning for incomplete recordings...")
+            (NotificationType::Info, "Scanning for incomplete recordings..."),
+            cx
         );
         cx.notify();
     }
@@ -207,7 +208,8 @@ impl AudioRecorderApp {
         self.state.config.max_manual_duration_secs = max_manual_duration;
 
         window.push_notification(
-            (NotificationType::Success, "Settings saved successfully!")
+            (NotificationType::Success, "Settings saved successfully!"),
+            cx
         );
         cx.notify();
     }
@@ -223,7 +225,8 @@ impl AudioRecorderApp {
         // as they're bound to settings_default_duration and settings_max_manual_duration
 
         window.push_notification(
-            (NotificationType::Success, "Settings reset to defaults")
+            (NotificationType::Success, "Settings reset to defaults"),
+            cx
         );
         cx.notify();
     }
