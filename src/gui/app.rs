@@ -247,28 +247,21 @@ impl AudioRecorderApp {
 
     /// Schedule a single recording progress update (recursively called for continuous updates)
     fn schedule_recording_update(cx: &mut Context<Self>) {
-        cx.spawn(|this: WeakEntity<Self>, mut cx| async move {
+        cx.spawn(|this: WeakEntity<Self>, cx| async move {
             // Wait 500ms before checking status
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-            // Try to update the recording state from status file
-            let should_continue = this
-                .update(&mut cx, |this, cx| {
-                    // Update progress from status file
-                    this.update_recording_progress(cx);
+            // Update recording state and schedule next update if still recording
+            // Both operations must happen in a SINGLE update() call because cx is consumed
+            let _ = this.update(cx, |this, cx| {
+                // Update progress from status file
+                this.update_recording_progress(cx);
 
-                    // Continue only if we're still recording
-                    this.state.recording_state.is_some()
-                })
-                .ok()
-                .unwrap_or(false);
-
-            // Schedule next update if still recording
-            if should_continue {
-                let _ = this.update(&mut cx, |_, cx| {
+                // Schedule next update if still recording
+                if this.state.recording_state.is_some() {
                     Self::schedule_recording_update(cx);
-                });
-            }
+                }
+            });
         })
         .detach();
     }
