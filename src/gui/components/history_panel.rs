@@ -1,7 +1,7 @@
 // History panel component for viewing past recordings
 
 use gpui::*;
-use gpui_component::{button::*, ActiveTheme, Icon, IconName};
+use gpui_component::{button::*, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 use crate::state::ActivePanel;
 use crate::app::AudioRecorderApp;
 
@@ -47,9 +47,9 @@ pub fn render_history_panel(
                 .justify_center()
                 .gap(px(SPACING_MD))
                 .child(
-                    div()
-                        .text_3xl()
-                        .child("📁")
+                    Icon::new(IconName::BookOpen)
+                        .with_size(px(64.0))
+                        .text_color(cx.theme().muted_foreground.opacity(0.3))
                 )
                 .child(
                     div()
@@ -66,7 +66,7 @@ pub fn render_history_panel(
                 .child(
                     Button::new("goto_record")
                         .primary()
-                        .icon(IconName::Mic)
+                        .icon(IconName::CircleCheck)
                         .label("Go to Record Panel")
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.handle_panel_change(cx, ActivePanel::Record);

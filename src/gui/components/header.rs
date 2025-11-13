@@ -1,7 +1,7 @@
 // Header component for the main application window
 
 use gpui::*;
-use gpui_component::{ActiveTheme, badge::Badge, Icon, IconName};
+use gpui_component::{ActiveTheme, badge::Badge, Icon, IconName, Sizable, StyledExt};
 
 // Spacing constants
 pub const SPACING_SM: f32 = 8.0;
@@ -27,7 +27,7 @@ where
                 .items_center()
                 .gap(px(SPACING_SM))
                 .child(
-                    Icon::new(IconName::Mic)
+                    Icon::new(IconName::Bell)
                         .large()
                         .text_color(cx.theme().primary)
                 )

@@ -1,7 +1,7 @@
 // Monitor panel component for viewing recording progress
 
 use gpui::*;
-use gpui_component::{button::*, ActiveTheme, Icon, IconName};
+use gpui_component::{button::*, ActiveTheme, IconName, Sizable, StyledExt};
 use crate::app::AudioRecorderApp;
 use crate::state::RecordingState;
 
@@ -116,7 +116,7 @@ pub fn render_monitor_panel(
         .child(
             Button::new("stop_recording")
                 .danger()
-                .icon(IconName::Square)
+                .icon(IconName::CircleX)
                 .label("STOP RECORDING")
                 .large()
                 .on_click(cx.listener(move |this, _, window, cx| {

@@ -2,7 +2,7 @@
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-use gpui_component::{button::*, ActiveTheme, Icon, IconName};
+use gpui_component::{button::*, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 use crate::state::ActivePanel;
 use crate::app::AudioRecorderApp;
 
@@ -61,7 +61,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_record")
-                .icon(IconName::Mic)
+                .icon(IconName::CircleCheck)
                 .label("Record")
                 .when(active == ActivePanel::Record, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -70,7 +70,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_monitor")
-                .icon(IconName::Activity)
+                .icon(IconName::Eye)
                 .label("Monitor")
                 .when(active == ActivePanel::Monitor, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -79,7 +79,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_history")
-                .icon(IconName::Clock)
+                .icon(IconName::BookOpen)
                 .label("History")
                 .when(active == ActivePanel::History, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -88,7 +88,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_recovery")
-                .icon(IconName::Wrench)
+                .icon(IconName::Replace)
                 .label("Recovery")
                 .when(active == ActivePanel::Recovery, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {

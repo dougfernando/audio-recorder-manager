@@ -1,7 +1,7 @@
 // Recovery panel component for recovering incomplete recordings
 
 use gpui::*;
-use gpui_component::{button::*, ActiveTheme, Icon, IconName};
+use gpui_component::{button::*, ActiveTheme, Icon, IconName, Sizable, StyledExt};
 use crate::app::AudioRecorderApp;
 
 use super::header::{SPACING_MD, SPACING_LG};
@@ -53,9 +53,9 @@ pub fn render_recovery_panel(
                 .justify_center()
                 .gap(px(SPACING_MD))
                 .child(
-                    div()
-                        .text_3xl()
-                        .child("✅")
+                    Icon::new(IconName::CircleCheck)
+                        .with_size(px(64.0))
+                        .text_color(cx.theme().success)
                 )
                 .child(
                     div()
