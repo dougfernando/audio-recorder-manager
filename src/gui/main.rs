@@ -46,8 +46,8 @@ fn main() {
         // Initialize gpui-component system
         gpui_component::init(cx);
 
-        // Load and apply Catppuccin theme
-        let theme_name = "Catppuccin Mocha";
+        // Load and apply Catppuccin Latte theme
+        let theme_name = "Catppuccin Latte";
         if let Err(err) = gpui_component::ThemeRegistry::watch_dir(
             std::path::PathBuf::from("./themes"),
             cx,
