@@ -1,7 +1,6 @@
 // Settings panel component for configuring the application
 
 use gpui::*;
-use gpui::prelude::FluentBuilder;
 use gpui_component::{button::*, input::*, ActiveTheme, *};
 use audio_recorder_manager::{RecorderConfig, AudioFormat};
 use crate::app::QualityPreset;

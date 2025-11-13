@@ -1,7 +1,6 @@
 // Sidebar navigation component
 
 use gpui::*;
-use gpui::prelude::FluentBuilder;
 use gpui_component::{button::*, ActiveTheme, *};
 use crate::state::ActivePanel;
 use crate::app::AudioRecorderApp;
