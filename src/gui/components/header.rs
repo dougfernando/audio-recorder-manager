@@ -1,7 +1,7 @@
 // Header component for the main application window
 
 use gpui::*;
-use gpui_component::{ActiveTheme, *};
+use gpui_component::{ActiveTheme, badge::Badge, Icon, IconName};
 
 // Spacing constants
 pub const SPACING_SM: f32 = 8.0;
@@ -20,32 +20,41 @@ where
         .bg(cx.theme().background)
         .border_b_2()
         .border_color(cx.theme().border)
-        .shadow_md()
+        .shadow_lg()
         .child(
             div()
-                .text_2xl()
-                .mr(px(SPACING_SM))
-                .child("🎵")
+                .flex()
+                .items_center()
+                .gap(px(SPACING_SM))
+                .child(
+                    Icon::new(IconName::Mic)
+                        .large()
+                        .text_color(cx.theme().primary)
+                )
+                .child(
+                    div()
+                        .text_xl()
+                        .font_bold()
+                        .text_color(cx.theme().foreground)
+                        .child("Audio Recorder Manager")
+                )
         )
         .child(
             div()
-                .text_xl()
-                .font_bold()
-                .text_color(cx.theme().foreground)
-                .child("Audio Recorder Manager")
-        )
-        .child(
-            div()
-                .ml(px(SPACING_MD))
-                .px(px(SPACING_SM))
-                .py(px(4.0))
-                .bg(cx.theme().accent.opacity(0.15))
-                .border_1()
-                .border_color(cx.theme().accent.opacity(0.3))
-                .rounded_md()
-                .text_xs()
-                .font_semibold()
-                .text_color(cx.theme().accent_foreground)
-                .child(format!("v{}", env!("CARGO_PKG_VERSION")))
+                .ml_auto()
+                .child(
+                    Badge::new()
+                        .small()
+                        .color(cx.theme().accent)
+                        .child(
+                            div()
+                                .px(px(SPACING_SM))
+                                .py(px(4.0))
+                                .text_xs()
+                                .font_semibold()
+                                .text_color(cx.theme().accent_foreground)
+                                .child(format!("v{}", env!("CARGO_PKG_VERSION")))
+                        )
+                )
         )
 }

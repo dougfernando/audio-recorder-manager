@@ -2,7 +2,7 @@
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-use gpui_component::{button::*, input::*, ActiveTheme, *};
+use gpui_component::{button::*, input::*, ActiveTheme, Icon, IconName};
 use audio_recorder_manager::{RecorderConfig, AudioFormat};
 use crate::app::QualityPreset;
 
@@ -234,7 +234,8 @@ pub fn render_settings_panel(
                 .child(
                     Button::new("save_settings")
                         .primary()
-                        .label("💾 Save Settings")
+                        .icon(IconName::Save)
+                        .label("Save Settings")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.handle_save_settings(window, cx);
                         }))
@@ -242,7 +243,8 @@ pub fn render_settings_panel(
                 .child(
                     Button::new("reset_settings")
                         .ghost()
-                        .label("🔄 Reset to Defaults")
+                        .icon(IconName::RotateCcw)
+                        .label("Reset to Defaults")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.handle_reset_settings(window, cx);
                         }))

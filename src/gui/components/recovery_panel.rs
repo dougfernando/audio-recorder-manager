@@ -1,7 +1,7 @@
 // Recovery panel component for recovering incomplete recordings
 
 use gpui::*;
-use gpui_component::{button::*, ActiveTheme, *};
+use gpui_component::{button::*, ActiveTheme, Icon, IconName};
 use crate::app::AudioRecorderApp;
 
 use super::header::{SPACING_MD, SPACING_LG};
@@ -37,7 +37,8 @@ pub fn render_recovery_panel(
                 .child(
                     Button::new("scan_recovery")
                         .ghost()
-                        .label("🔍 Scan Now")
+                        .icon(IconName::Search)
+                        .label("Scan Now")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.handle_scan_recovery(window, cx);
                         }))

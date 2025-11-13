@@ -1,7 +1,7 @@
 // Record panel component for starting new recordings
 
 use gpui::*;
-use gpui_component::{button::*, input::*, ActiveTheme, *};
+use gpui_component::{button::*, input::*, ActiveTheme, Icon, IconName};
 use audio_recorder_manager::RecorderConfig;
 use crate::app::AudioRecorderApp;
 
@@ -170,7 +170,9 @@ pub fn render_record_panel(
         .child(
             Button::new("start_recording")
                 .primary()
-                .label("🔴 START RECORDING")
+                .icon(IconName::Circle)
+                .label("START RECORDING")
+                .large()
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.start_recording(window, cx);
                 }))

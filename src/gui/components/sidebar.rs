@@ -2,7 +2,7 @@
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-use gpui_component::{button::*, ActiveTheme, *};
+use gpui_component::{button::*, ActiveTheme, Icon, IconName};
 use crate::state::ActivePanel;
 use crate::app::AudioRecorderApp;
 
@@ -23,32 +23,46 @@ pub fn render_sidebar(
     div()
         .flex()
         .flex_col()
-        .w(px(220.0))
+        .w(px(240.0))
         .h_full()
-        .bg(cx.theme().muted.opacity(0.3))
-        .border_r_1()
+        .bg(cx.theme().muted.opacity(0.15))
+        .border_r_2()
         .border_color(cx.theme().border)
         .p(px(SPACING_MD))
         .gap(px(SPACING_SM))
+        .shadow_md()
         .child(
             div()
                 .flex()
                 .flex_col()
                 .items_center()
                 .pb(px(SPACING_MD))
-                .border_b_1()
-                .border_color(cx.theme().border)
+                .mb(px(SPACING_SM))
+                .border_b_2()
+                .border_color(cx.theme().border.opacity(0.5))
                 .child(
                     div()
-                        .text_lg()
-                        .font_semibold()
-                        .text_color(cx.theme().foreground)
-                        .child("Navigation")
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0))
+                        .child(
+                            Icon::new(IconName::PanelLeft)
+                                .small()
+                                .text_color(cx.theme().primary)
+                        )
+                        .child(
+                            div()
+                                .text_lg()
+                                .font_semibold()
+                                .text_color(cx.theme().foreground)
+                                .child("Navigation")
+                        )
                 )
         )
         .child(
             Button::new("btn_record")
-                .label("🎙️ Record")
+                .icon(IconName::Mic)
+                .label("Record")
                 .when(active == ActivePanel::Record, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Record);
@@ -56,7 +70,8 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_monitor")
-                .label("📊 Monitor")
+                .icon(IconName::Activity)
+                .label("Monitor")
                 .when(active == ActivePanel::Monitor, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Monitor);
@@ -64,7 +79,8 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_history")
-                .label("📚 History")
+                .icon(IconName::Clock)
+                .label("History")
                 .when(active == ActivePanel::History, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::History);
@@ -72,7 +88,8 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_recovery")
-                .label("🔧 Recovery")
+                .icon(IconName::Wrench)
+                .label("Recovery")
                 .when(active == ActivePanel::Recovery, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Recovery);
@@ -80,7 +97,8 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_settings")
-                .label("⚙️ Settings")
+                .icon(IconName::Settings)
+                .label("Settings")
                 .when(active == ActivePanel::Settings, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Settings);
