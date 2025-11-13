@@ -1,9 +1,14 @@
 // Header component for the main application window
 
 use gpui::*;
-use gpui_component::*;
+use gpui_component::{ActiveTheme, *};
 
-pub fn render_header<V>(_window: &mut Window, _cx: &mut Context<V>) -> Div
+// Spacing constants
+pub const SPACING_SM: f32 = 8.0;
+pub const SPACING_MD: f32 = 16.0;
+pub const SPACING_LG: f32 = 24.0;
+
+pub fn render_header<V>(_window: &mut Window, cx: &mut Context<V>) -> Div
 where
     V: 'static,
 {
@@ -11,23 +16,23 @@ where
         .flex()
         .items_center()
         .h(px(60.0))
-        .px_6()
-        .bg(rgb(0xffffff))
+        .px(px(SPACING_LG))
+        .bg(cx.theme().background)
         .border_b_1()
-        .border_color(rgb(0xe0e0e0))
+        .border_color(cx.theme().border)
         .shadow_sm()
         .child(
             div()
                 .text_xl()
                 .font_bold()
-                .text_color(rgb(0x1a1a1a))
-                .child("🎙️ Audio Recorder Manager")
+                .text_color(cx.theme().foreground)
+                .child("Audio Recorder Manager")
         )
         .child(
             div()
-                .ml_4()
+                .ml(px(SPACING_MD))
                 .text_xs()
-                .text_color(rgb(0x999999))
+                .text_color(cx.theme().muted_foreground)
                 .child(format!("v{}", env!("CARGO_PKG_VERSION")))
         )
 }

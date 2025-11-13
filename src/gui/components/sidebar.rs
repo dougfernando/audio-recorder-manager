@@ -2,9 +2,11 @@
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-use gpui_component::{button::*, *};
+use gpui_component::{button::*, ActiveTheme, *};
 use crate::state::ActivePanel;
 use crate::app::AudioRecorderApp;
+
+use super::header::{SPACING_SM, SPACING_MD};
 
 pub struct SidebarProps {
     pub active_panel: ActivePanel,
@@ -23,30 +25,30 @@ pub fn render_sidebar(
         .flex_col()
         .w(px(220.0))
         .h_full()
-        .bg(rgb(0xf5f5f5))
+        .bg(cx.theme().muted.opacity(0.3))
         .border_r_1()
-        .border_color(rgb(0xe0e0e0))
-        .p_4()
-        .gap_2()
+        .border_color(cx.theme().border)
+        .p(px(SPACING_MD))
+        .gap(px(SPACING_SM))
         .child(
             div()
                 .flex()
                 .flex_col()
                 .items_center()
-                .pb_4()
+                .pb(px(SPACING_MD))
                 .border_b_1()
-                .border_color(rgb(0xe0e0e0))
+                .border_color(cx.theme().border)
                 .child(
                     div()
                         .text_lg()
                         .font_semibold()
-                        .text_color(rgb(0x333333))
+                        .text_color(cx.theme().foreground)
                         .child("Navigation")
                 )
         )
         .child(
             Button::new("btn_record")
-                .label("🔴 Record")
+                .label("Record")
                 .when(active == ActivePanel::Record, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Record);
@@ -54,7 +56,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_monitor")
-                .label("📊 Monitor")
+                .label("Monitor")
                 .when(active == ActivePanel::Monitor, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Monitor);
@@ -62,7 +64,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_history")
-                .label("📁 History")
+                .label("History")
                 .when(active == ActivePanel::History, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::History);
@@ -70,7 +72,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_recovery")
-                .label("🔧 Recovery")
+                .label("Recovery")
                 .when(active == ActivePanel::Recovery, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Recovery);
@@ -78,7 +80,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_settings")
-                .label("⚙️ Settings")
+                .label("Settings")
                 .when(active == ActivePanel::Settings, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Settings);
@@ -93,7 +95,7 @@ pub fn render_sidebar(
                 .child(
                     div()
                         .text_xs()
-                        .text_color(rgb(0x999999))
+                        .text_color(cx.theme().muted_foreground)
                         .child("Built with Rust + GPUI")
                 )
         )

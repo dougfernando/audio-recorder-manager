@@ -2,7 +2,14 @@
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-use gpui_component::{button::*, input::{InputEvent, InputState}};
+use gpui_component::{
+    button::*,
+    input::{InputEvent, InputState},
+    notification::NotificationType,
+    ActiveTheme,
+    Root,
+    WindowExt,
+};
 use audio_recorder_manager::{RecorderConfig, AudioFormat, RecordingDuration, RecordingQuality};
 use std::sync::Arc;
 
@@ -14,7 +21,6 @@ pub struct AudioRecorderApp {
     state: AppState,
     duration_text: String,
     duration_input: Entity<InputState>,
-    status_message: String,
     recorder_service: Arc<RecorderService>,
     tokio_runtime: Arc<tokio::runtime::Runtime>,
     // Settings fields
@@ -22,6 +28,9 @@ pub struct AudioRecorderApp {
     settings_default_format: AudioFormat,
     settings_default_quality: QualityPreset,
     settings_max_manual_duration: String,
+    // Settings input states
+    settings_duration_input: Entity<InputState>,
+    settings_max_duration_input: Entity<InputState>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,10 +46,12 @@ impl AudioRecorderApp {
         let tokio_runtime = Arc::new(tokio::runtime::Runtime::new().unwrap());
         let recorder_service = Arc::new(RecorderService::new(config, tokio_runtime.clone()));
 
-        // Create input state for duration field
+        // Create input state for duration field with validation
         let duration_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Duration (seconds)")
+                .default_value("30")
+                .validate(|s, _| s.parse::<i64>().is_ok() || s == "-1")
         });
 
         // Subscribe to input changes
@@ -53,21 +64,56 @@ impl AudioRecorderApp {
         })
         .detach();
 
+        // Create input states for settings panel
+        let settings_duration_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Duration")
+                .default_value("30")
+                .validate(|s, _| s.parse::<u64>().is_ok())
+        });
+
+        let settings_max_duration_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Max Duration")
+                .default_value("7200")
+                .validate(|s, _| s.parse::<u64>().is_ok())
+        });
+
+        // Subscribe to settings input changes
+        cx.subscribe_in(&settings_duration_input, window, |this, input_state, event, _window, cx| {
+            if let InputEvent::Change = event {
+                let value = input_state.read(cx).value();
+                this.settings_default_duration = value.to_string();
+                cx.notify();
+            }
+        })
+        .detach();
+
+        cx.subscribe_in(&settings_max_duration_input, window, |this, input_state, event, _window, cx| {
+            if let InputEvent::Change = event {
+                let value = input_state.read(cx).value();
+                this.settings_max_manual_duration = value.to_string();
+                cx.notify();
+            }
+        })
+        .detach();
+
         Self {
             state,
             duration_text: "30".to_string(),
             duration_input,
-            status_message: String::new(),
             recorder_service,
             tokio_runtime,
             settings_default_duration: "30".to_string(),
             settings_default_format: AudioFormat::Wav,
             settings_default_quality: QualityPreset::Professional,
             settings_max_manual_duration: "7200".to_string(),
+            settings_duration_input,
+            settings_max_duration_input,
         }
     }
 
-    pub fn start_recording(&mut self, cx: &mut Context<Self>) {
+    pub fn start_recording(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // Parse duration from text input
         let duration_secs: i64 = self.duration_text.parse().unwrap_or(30);
         let duration = if duration_secs < 0 {
@@ -92,23 +138,28 @@ impl AudioRecorderApp {
 
         // Start recording via service
         let recorder_service = self.recorder_service.clone();
-        cx.spawn(async move |this, cx| {
+        cx.spawn_in(window, async move |this, window, cx| {
             match recorder_service
                 .start_recording(duration, format, quality)
                 .await
             {
                 Ok(session_id) => {
-                    this.update(cx, |this, cx| {
-                        this.status_message = format!("Recording started: {}", session_id);
+                    this.update_in(window, |this, window, cx| {
+                        window.push_notification(
+                            (NotificationType::Success, format!("Recording started: {}", session_id)),
+                            cx
+                        );
                         this.state.active_panel = ActivePanel::Monitor;
                         cx.notify();
                     })
                     .ok();
                 }
                 Err(e) => {
-                    this.update(cx, |this, cx| {
-                        this.status_message = format!("Failed to start recording: {}", e);
-                        cx.notify();
+                    this.update_in(window, |_this, window, cx| {
+                        window.push_notification(
+                            (NotificationType::Error, format!("Failed to start recording: {}", e)),
+                            cx
+                        );
                     })
                     .ok();
                 }
@@ -117,22 +168,27 @@ impl AudioRecorderApp {
         .detach();
     }
 
-    pub fn stop_recording(&mut self, cx: &mut Context<Self>) {
+    pub fn stop_recording(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let recorder_service = self.recorder_service.clone();
 
-        cx.spawn(async move |this, cx| {
+        cx.spawn_in(window, async move |this, window, cx| {
             match recorder_service.stop_recording().await {
                 Ok(_) => {
-                    this.update(cx, |this, cx| {
-                        this.status_message = "Recording stopped successfully".to_string();
+                    this.update_in(window, |this, window, cx| {
+                        window.push_notification(
+                            (NotificationType::Success, "Recording stopped successfully"),
+                            cx
+                        );
                         this.state.active_panel = ActivePanel::Record;
                         cx.notify();
                     }).ok();
                 }
                 Err(e) => {
-                    this.update(cx, |this, cx| {
-                        this.status_message = format!("Failed to stop recording: {}", e);
-                        cx.notify();
+                    this.update_in(window, |_this, window, cx| {
+                        window.push_notification(
+                            (NotificationType::Error, format!("Failed to stop recording: {}", e)),
+                            cx
+                        );
                     }).ok();
                 }
             }
@@ -145,12 +201,15 @@ impl AudioRecorderApp {
         cx.notify();
     }
 
-    pub fn handle_scan_recovery(&mut self, cx: &mut Context<Self>) {
-        self.status_message = "Scanning for incomplete recordings...".to_string();
+    pub fn handle_scan_recovery(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        window.push_notification(
+            (NotificationType::Info, "Scanning for incomplete recordings..."),
+            cx
+        );
         cx.notify();
     }
 
-    pub fn handle_save_settings(&mut self, cx: &mut Context<Self>) {
+    pub fn handle_save_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // Parse and validate settings
         let _default_duration: u64 = self.settings_default_duration.parse().unwrap_or(30);
         let max_manual_duration: u64 = self.settings_max_manual_duration.parse().unwrap_or(7200);
@@ -158,17 +217,32 @@ impl AudioRecorderApp {
         // Update the config (in a real app, this would persist to disk)
         self.state.config.max_manual_duration_secs = max_manual_duration;
 
-        self.status_message = "Settings saved successfully!".to_string();
+        window.push_notification(
+            (NotificationType::Success, "Settings saved successfully!"),
+            cx
+        );
         cx.notify();
     }
 
-    pub fn handle_reset_settings(&mut self, cx: &mut Context<Self>) {
-        self.status_message = "Settings reset to defaults".to_string();
+    pub fn handle_reset_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.state.config = RecorderConfig::new();
         self.settings_default_duration = "30".to_string();
         self.settings_default_format = AudioFormat::Wav;
         self.settings_default_quality = QualityPreset::Professional;
         self.settings_max_manual_duration = "7200".to_string();
+
+        // Update input states
+        self.settings_duration_input.update(cx, |input, cx| {
+            input.set_text("30", cx);
+        });
+        self.settings_max_duration_input.update(cx, |input, cx| {
+            input.set_text("7200", cx);
+        });
+
+        window.push_notification(
+            (NotificationType::Success, "Settings reset to defaults"),
+            cx
+        );
         cx.notify();
     }
 
@@ -198,13 +272,12 @@ impl Render for AudioRecorderApp {
         let active_panel = self.state.active_panel;
         let config = self.state.config.clone();
         let duration = self.duration_text.clone();
-        let status = self.status_message.clone();
 
         div()
             .flex()
             .flex_col()
             .size_full()
-            .bg(rgb(0xfafafa))
+            .bg(cx.theme().background)
             .child(render_header(window, cx))
             .child(
                 // Main content area
@@ -229,6 +302,9 @@ impl Render for AudioRecorderApp {
                                     cx
                                 ),
                                 ActivePanel::Monitor => render_monitor_panel(
+                                    &MonitorPanelProps {
+                                        recording_state: self.state.recording_state.as_ref(),
+                                    },
                                     window,
                                     cx
                                 ),
@@ -247,6 +323,8 @@ impl Render for AudioRecorderApp {
                                         default_format: self.settings_default_format,
                                         default_quality: self.settings_default_quality,
                                         max_manual_duration: self.settings_max_manual_duration.clone(),
+                                        duration_input: self.settings_duration_input.clone(),
+                                        max_duration_input: self.settings_max_duration_input.clone(),
                                     },
                                     window,
                                     cx
@@ -254,26 +332,9 @@ impl Render for AudioRecorderApp {
                             })
                     )
             )
-            .when(!status.is_empty(), |this| {
-                this.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .h(px(40.0))
-                        .px_6()
-                        .bg(rgb(0x0066cc))
-                        .text_color(rgb(0xffffff))
-                        .child(status.clone())
-                        .child(
-                            Button::new("close_status")
-                                .label("✖")
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.status_message.clear();
-                                    cx.notify();
-                                }))
-                        )
-                )
-            })
+            // Add overlay layers for dialogs, sheets, and notifications
+            .children(Root::render_dialog_layer(cx))
+            .children(Root::render_sheet_layer(cx))
+            .children(Root::render_notification_layer(cx))
     }
 }

@@ -1,8 +1,10 @@
 // Recovery panel component for recovering incomplete recordings
 
 use gpui::*;
-use gpui_component::{button::*, *};
+use gpui_component::{button::*, ActiveTheme, *};
 use crate::app::AudioRecorderApp;
+
+use super::header::{SPACING_MD, SPACING_LG};
 
 pub fn render_recovery_panel(
     _window: &mut Window,
@@ -12,31 +14,32 @@ pub fn render_recovery_panel(
     div()
         .flex()
         .flex_col()
-        .gap_4()
-        .p_6()
+        .gap(px(SPACING_MD))
+        .p(px(SPACING_LG))
         .child(
             div()
                 .text_2xl()
                 .font_bold()
-                .text_color(rgb(0x1a1a1a))
+                .text_color(cx.theme().foreground)
                 .child("Recovery Center")
         )
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap_4()
-                .p_4()
-                .bg(rgb(0xffffff))
+                .gap(px(SPACING_MD))
+                .p(px(SPACING_MD))
+                .bg(cx.theme().background)
                 .border_1()
-                .border_color(rgb(0xe0e0e0))
+                .border_color(cx.theme().border)
                 .rounded_lg()
-                .child(div().child("Scan for incomplete recordings..."))
+                .child(div().text_color(cx.theme().foreground).child("Scan for incomplete recordings..."))
                 .child(
                     Button::new("scan_recovery")
-                        .label("🔄 Scan Now")
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.handle_scan_recovery(cx);
+                        .ghost()
+                        .label("Scan Now")
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.handle_scan_recovery(window, cx);
                         }))
                 )
         )
@@ -47,7 +50,7 @@ pub fn render_recovery_panel(
                 .flex_1()
                 .items_center()
                 .justify_center()
-                .gap_4()
+                .gap(px(SPACING_MD))
                 .child(
                     div()
                         .text_3xl()
@@ -56,13 +59,13 @@ pub fn render_recovery_panel(
                 .child(
                     div()
                         .text_lg()
-                        .text_color(rgb(0x00aa00))
+                        .text_color(cx.theme().success)
                         .child("No incomplete recordings found")
                 )
                 .child(
                     div()
                         .text_sm()
-                        .text_color(rgb(0x666666))
+                        .text_color(cx.theme().muted_foreground)
                         .child("Great! All your recordings completed successfully.")
                 )
         )
