@@ -11,7 +11,7 @@ use gpui_component::{
 use audio_recorder_manager::{RecorderConfig, AudioFormat, RecordingDuration, RecordingQuality};
 use std::sync::Arc;
 
-use super::state::{AppState, ActivePanel};
+use super::state::{AppState, ActivePanel, RecordingState};
 use super::services::RecorderService;
 use super::components::*;
 
@@ -121,32 +121,79 @@ impl AudioRecorderApp {
             RecordingDuration::Fixed(duration_secs as u64)
         };
 
-        // Get format and quality from state (or use defaults)
-        let format = self
-            .state
-            .recording_state
-            .as_ref()
-            .map(|rs| rs.format)
-            .unwrap_or(AudioFormat::Wav);
-        let quality = self
-            .state
-            .recording_state
-            .as_ref()
-            .map(|rs| rs.quality.clone())
-            .unwrap_or_else(|| RecordingQuality::professional());
+        // Get format and quality from defaults
+        let format = self.settings_default_format;
+        let quality = match self.settings_default_quality {
+            QualityPreset::Professional => RecordingQuality::professional(),
+            QualityPreset::Standard => RecordingQuality::standard(),
+        };
 
         // Start recording via service
         let recorder_service = self.recorder_service.clone();
+        let duration_clone = duration.clone();
+        let format_clone = format.clone();
+        let quality_clone = quality.clone();
+
         cx.spawn(async move |this, cx| {
             match recorder_service
                 .start_recording(duration, format, quality)
                 .await
             {
-                Ok(_session_id) => {
+                Ok(session_id) => {
                     this.update(cx, |this, cx| {
-                        // Note: Notifications from async context would require window access
-                        // For now, the panel change provides visual feedback
+                        // Initialize recording state
+                        let filename = format!(
+                            "recording_{}.{}",
+                            chrono::Local::now().format("%Y%m%d_%H%M%S"),
+                            format_clone.extension()
+                        );
+
+                        this.state.recording_state = Some(RecordingState {
+                            session_id,
+                            filename,
+                            duration: duration_clone,
+                            format: format_clone,
+                            quality: quality_clone,
+                            is_manual: matches!(duration_clone, RecordingDuration::Manual { .. }),
+                            elapsed: 0,
+                            progress: 0,
+                            device: String::from("Unknown"),
+                            sample_rate: 0,
+                            channels: 0,
+                            frames_captured: 0,
+                            has_audio: false,
+                            status: String::from("recording"),
+                        });
+
+                        // Switch to monitor panel
                         this.state.active_panel = ActivePanel::Monitor;
+
+                        // Start periodic updates (every 500ms)
+                        cx.spawn(|this, cx| async move {
+                            loop {
+                                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+                                let should_continue = this
+                                    .update(cx, |this, cx| {
+                                        // Only update if we're still recording
+                                        if this.state.recording_state.is_some() {
+                                            this.update_recording_progress(cx);
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    })
+                                    .ok()
+                                    .flatten()
+                                    .unwrap_or(false);
+
+                                if !should_continue {
+                                    break;
+                                }
+                            }
+                        })
+                        .detach();
+
                         cx.notify();
                     })
                     .ok();
@@ -170,6 +217,8 @@ impl AudioRecorderApp {
             match recorder_service.stop_recording().await {
                 Ok(_) => {
                     this.update(cx, |this, cx| {
+                        // Clear recording state
+                        this.state.recording_state = None;
                         // Note: Notifications from async context would require window access
                         // For now, the panel change provides visual feedback
                         this.state.active_panel = ActivePanel::Record;
@@ -182,6 +231,38 @@ impl AudioRecorderApp {
                         cx.notify();
                     }).ok();
                 }
+            }
+        })
+        .detach();
+    }
+
+    /// Update recording progress from status file (called periodically)
+    pub fn update_recording_progress(&mut self, cx: &mut Context<Self>) {
+        let recorder_service = self.recorder_service.clone();
+
+        cx.spawn(async move |this, cx| {
+            if let Ok(Some(status)) = recorder_service.get_recording_status().await {
+                this.update(cx, |this, cx| {
+                    // Update recording state with latest status
+                    if let Some(ref mut recording_state) = this.state.recording_state {
+                        recording_state.elapsed = status.elapsed;
+                        recording_state.progress = status.progress;
+                        recording_state.device = status.device.clone();
+                        recording_state.sample_rate = status.sample_rate;
+                        recording_state.channels = status.channels;
+                        recording_state.frames_captured = status.frames_captured;
+                        recording_state.has_audio = status.has_audio;
+                        recording_state.status = status.status.clone();
+
+                        // If recording completed, clear state
+                        if status.status == "completed" || status.status == "stopped" {
+                            this.state.recording_state = None;
+                            this.state.active_panel = ActivePanel::Record;
+                        }
+
+                        cx.notify();
+                    }
+                }).ok();
             }
         })
         .detach();

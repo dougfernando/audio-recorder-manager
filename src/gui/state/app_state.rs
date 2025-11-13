@@ -50,6 +50,15 @@ pub struct RecordingState {
     pub quality: RecordingQuality,
     #[allow(dead_code)]
     pub is_manual: bool,
+    // Progress tracking fields
+    pub elapsed: u64,
+    pub progress: u8,
+    pub device: String,
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub frames_captured: u64,
+    pub has_audio: bool,
+    pub status: String,
 }
 
 /// GUI-specific configuration

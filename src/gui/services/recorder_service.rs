@@ -2,6 +2,7 @@
 
 use audio_recorder_manager::{
     commands, RecorderConfig, AudioFormat, RecordingDuration, RecordingQuality,
+    status::RecordingStatus,
 };
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -165,5 +166,25 @@ impl RecorderService {
         } else {
             Ok(None)
         }
+    }
+
+    /// Get full recording status from JSON file
+    pub async fn get_recording_status(&self) -> anyhow::Result<Option<RecordingStatus>> {
+        let current = self.current_recording.lock().await;
+
+        if let Some(ref info) = *current {
+            // Read status from status file
+            let status_file = self.config.status_dir.join(format!("{}.json", info.session_id));
+
+            if status_file.exists() {
+                if let Ok(content) = std::fs::read_to_string(&status_file) {
+                    if let Ok(status) = serde_json::from_str::<RecordingStatus>(&content) {
+                        return Ok(Some(status));
+                    }
+                }
+            }
+        }
+
+        Ok(None)
     }
 }

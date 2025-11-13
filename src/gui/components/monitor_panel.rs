@@ -17,6 +17,8 @@ pub fn render_monitor_panel(
     cx: &mut Context<AudioRecorderApp>,
 ) -> Div
 {
+    let recording_state = props.recording_state;
+
     div()
         .flex()
         .flex_col()
@@ -27,7 +29,7 @@ pub fn render_monitor_panel(
                 .text_2xl()
                 .font_bold()
                 .text_color(cx.theme().foreground)
-                .child("Recording in Progress")
+                .child(if recording_state.is_some() { "Recording in Progress" } else { "No Active Recording" })
         )
         .child(
             div()
@@ -71,9 +73,19 @@ pub fn render_monitor_panel(
                     div()
                         .font_semibold()
                         .text_color(cx.theme().accent_foreground)
-                        .child("Progress: 67%")
+                        .child(recording_state.map(|rs| format!("Progress: {}%", rs.progress)).unwrap_or_else(|| "Progress: 0%".to_string()))
                 )
-                .child(div().text_sm().text_color(cx.theme().foreground).child("Time: 20s / 30s"))
+                .child(div().text_sm().text_color(cx.theme().foreground).child(
+                    recording_state.map(|rs| {
+                        use audio_recorder_manager::RecordingDuration;
+                        // Get total duration in seconds
+                        let total = match &rs.duration {
+                            RecordingDuration::Fixed(secs) => *secs,
+                            RecordingDuration::Manual { max } => *max,
+                        };
+                        format!("Time: {}s / {}s", rs.elapsed, total)
+                    }).unwrap_or_else(|| "Time: 0s / 0s".to_string())
+                ))
         )
         .child(
             div()
@@ -81,37 +93,46 @@ pub fn render_monitor_panel(
                 .flex_col()
                 .gap(px(SPACING_SM))
                 .p(px(SPACING_MD))
-                .bg(cx.theme().success.opacity(0.1))
+                .bg(if recording_state.map(|rs| rs.has_audio).unwrap_or(false) {
+                    cx.theme().success.opacity(0.1)
+                } else {
+                    cx.theme().muted.opacity(0.1)
+                })
                 .border_1()
-                .border_color(cx.theme().success.opacity(0.3))
+                .border_color(if recording_state.map(|rs| rs.has_audio).unwrap_or(false) {
+                    cx.theme().success.opacity(0.3)
+                } else {
+                    cx.theme().muted.opacity(0.3)
+                })
                 .rounded_lg()
                 .child(
                     div()
                         .flex()
                         .justify_between()
-                        .child(div().font_semibold().text_color(cx.theme().foreground).child("System Audio (Loopback)"))
-                        .child(div().text_color(cx.theme().success).child("Audio Detected"))
+                        .child(div().font_semibold().text_color(cx.theme().foreground).child(
+                            recording_state.map(|rs| rs.device.clone()).unwrap_or_else(|| "Device".to_string())
+                        ))
+                        .child(div().text_color(
+                            if recording_state.map(|rs| rs.has_audio).unwrap_or(false) {
+                                cx.theme().success
+                            } else {
+                                cx.theme().muted_foreground
+                            }
+                        ).child(if recording_state.map(|rs| rs.has_audio).unwrap_or(false) {
+                            "Audio Detected"
+                        } else {
+                            "No Audio"
+                        }))
                 )
-                .child(div().text_sm().text_color(cx.theme().foreground).child("1,440 frames | Sample Rate: 48,000 Hz"))
-        )
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(SPACING_SM))
-                .p(px(SPACING_MD))
-                .bg(cx.theme().success.opacity(0.1))
-                .border_1()
-                .border_color(cx.theme().success.opacity(0.3))
-                .rounded_lg()
-                .child(
-                    div()
-                        .flex()
-                        .justify_between()
-                        .child(div().font_semibold().text_color(cx.theme().foreground).child("Microphone"))
-                        .child(div().text_color(cx.theme().success).child("Audio Detected"))
-                )
-                .child(div().text_sm().text_color(cx.theme().foreground).child("1,425 frames | Sample Rate: 48,000 Hz (matched)"))
+                .child(div().text_sm().text_color(cx.theme().foreground).child(
+                    recording_state.map(|rs| {
+                        format!("{:,} frames | Sample Rate: {:,} Hz | {} channel(s)",
+                            rs.frames_captured,
+                            rs.sample_rate,
+                            rs.channels
+                        )
+                    }).unwrap_or_else(|| "0 frames | Sample Rate: 0 Hz | 0 channels".to_string())
+                ))
         )
         .child(
             Button::new("stop_recording")
