@@ -506,6 +506,7 @@ dependencies = [
  "log",
  "notify 6.1.1",
  "notify-debouncer-full",
+ "rust-embed",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

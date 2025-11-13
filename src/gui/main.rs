@@ -2,6 +2,8 @@
 // This binary provides a graphical user interface for the audio recorder
 
 use gpui::*;
+use rust_embed::RustEmbed;
+use std::borrow::Cow;
 
 pub mod app;
 mod state;
@@ -10,10 +12,35 @@ mod components;
 
 use app::AudioRecorderApp;
 
+/// An asset source that loads assets from the `./assets` folder.
+#[derive(RustEmbed)]
+#[folder = "./assets"]
+#[include = "icons/**/*.svg"]
+pub struct Assets;
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        if path.is_empty() {
+            return Ok(None);
+        }
+
+        Self::get(path)
+            .map(|f| Some(f.data))
+            .ok_or_else(|| anyhow::anyhow!("could not find asset at path \"{path}\""))
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        Ok(Self::iter()
+            .filter_map(|p| p.starts_with(path).then(|| p.into()))
+            .collect())
+    }
+}
+
 fn main() {
     env_logger::init();
 
-    let app = Application::new();
+    // Register Assets to GPUI application for icon support
+    let app = Application::new().with_assets(Assets);
 
     app.run(move |cx| {
         // Initialize gpui-component system
