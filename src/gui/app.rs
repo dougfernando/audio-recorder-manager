@@ -174,7 +174,7 @@ impl AudioRecorderApp {
                                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
                                 let should_continue = this
-                                    .update(&mut cx, |this, cx| {
+                                    .update(cx, |this, cx| {
                                         // Only update if we're still recording
                                         if this.state.recording_state.is_some() {
                                             this.update_recording_progress(cx);
