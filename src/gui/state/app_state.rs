@@ -13,7 +13,8 @@ pub struct AppState {
     /// Recording state (if recording is active)
     pub recording_state: Option<RecordingState>,
 
-    /// GUI-specific configuration
+    /// GUI-specific configuration (reserved for future use)
+    #[allow(dead_code)]
     pub gui_config: GuiConfig,
 }
 
@@ -43,17 +44,22 @@ pub enum ActivePanel {
 pub struct RecordingState {
     pub session_id: String,
     pub filename: String,
+    #[allow(dead_code)]
     pub duration: RecordingDuration,
     pub format: AudioFormat,
     pub quality: RecordingQuality,
+    #[allow(dead_code)]
     pub is_manual: bool,
 }
 
 /// GUI-specific configuration
 #[derive(Debug, Clone)]
 pub struct GuiConfig {
+    #[allow(dead_code)]
     pub theme: Theme,
+    #[allow(dead_code)]
     pub window_width: u32,
+    #[allow(dead_code)]
     pub window_height: u32,
 }
 
@@ -68,6 +74,7 @@ impl Default for GuiConfig {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum Theme {
     Light,
     Dark,

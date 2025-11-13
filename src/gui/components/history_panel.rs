@@ -66,7 +66,7 @@ pub fn render_history_panel(
                 .child(
                     Button::new("goto_record")
                         .primary()
-                        .label("Go to Record Panel")
+                        .label("🎙️ Go to Record Panel")
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.handle_panel_change(cx, ActivePanel::Record);
                         }))

@@ -20,7 +20,8 @@ pub struct AudioRecorderApp {
     duration_text: String,
     duration_input: Entity<InputState>,
     recorder_service: Arc<RecorderService>,
-    tokio_runtime: Arc<tokio::runtime::Runtime>,
+    // Keep runtime alive for the duration of the app
+    _tokio_runtime: Arc<tokio::runtime::Runtime>,
     // Settings fields
     settings_default_duration: String,
     settings_default_format: AudioFormat,
@@ -101,7 +102,7 @@ impl AudioRecorderApp {
             duration_text: "30".to_string(),
             duration_input,
             recorder_service,
-            tokio_runtime,
+            _tokio_runtime: tokio_runtime,
             settings_default_duration: "30".to_string(),
             settings_default_format: AudioFormat::Wav,
             settings_default_quality: QualityPreset::Professional,
@@ -256,7 +257,6 @@ impl Render for AudioRecorderApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let active_panel = self.state.active_panel;
         let config = self.state.config.clone();
-        let duration = self.duration_text.clone();
 
         div()
             .flex()
@@ -280,7 +280,6 @@ impl Render for AudioRecorderApp {
                                 ActivePanel::Record => render_record_panel(
                                     &RecordPanelProps {
                                         config: config.clone(),
-                                        duration_text: duration,
                                         duration_input: self.duration_input.clone(),
                                     },
                                     window,
@@ -304,10 +303,8 @@ impl Render for AudioRecorderApp {
                                 ActivePanel::Settings => render_settings_panel(
                                     &SettingsPanelProps {
                                         config,
-                                        default_duration: self.settings_default_duration.clone(),
                                         default_format: self.settings_default_format,
                                         default_quality: self.settings_default_quality,
-                                        max_manual_duration: self.settings_max_manual_duration.clone(),
                                         duration_input: self.settings_duration_input.clone(),
                                         max_duration_input: self.settings_max_duration_input.clone(),
                                     },

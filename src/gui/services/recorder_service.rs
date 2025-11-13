@@ -10,10 +10,15 @@ use tokio::sync::Mutex;
 #[derive(Debug, Clone)]
 pub struct RecordingInfo {
     pub session_id: String,
+    #[allow(dead_code)]
     pub filename: String,
+    #[allow(dead_code)]
     pub duration: u64,
+    #[allow(dead_code)]
     pub elapsed: u64,
+    #[allow(dead_code)]
     pub progress: u8,
+    #[allow(dead_code)]
     pub is_recording: bool,
 }
 
@@ -113,18 +118,21 @@ impl RecorderService {
     }
 
     /// Get current recording status
+    #[allow(dead_code)]
     pub async fn get_current_recording(&self) -> Option<RecordingInfo> {
         let current = self.current_recording.lock().await;
         current.clone()
     }
 
     /// Check if currently recording
+    #[allow(dead_code)]
     pub async fn is_recording(&self) -> bool {
         let current = self.current_recording.lock().await;
         current.is_some()
     }
 
     /// Update recording progress (called periodically by GUI)
+    #[allow(dead_code)]
     pub async fn update_progress(&self) -> anyhow::Result<Option<RecordingInfo>> {
         let mut current = self.current_recording.lock().await;
 

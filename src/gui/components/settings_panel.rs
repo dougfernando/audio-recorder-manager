@@ -10,10 +10,8 @@ use super::header::{SPACING_SM, SPACING_MD, SPACING_LG};
 
 pub struct SettingsPanelProps {
     pub config: RecorderConfig,
-    pub default_duration: String,
     pub default_format: AudioFormat,
     pub default_quality: QualityPreset,
-    pub max_manual_duration: String,
     pub duration_input: Entity<InputState>,
     pub max_duration_input: Entity<InputState>,
 }
@@ -236,7 +234,7 @@ pub fn render_settings_panel(
                 .child(
                     Button::new("save_settings")
                         .primary()
-                        .label("Save Settings")
+                        .label("💾 Save Settings")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.handle_save_settings(window, cx);
                         }))
@@ -244,7 +242,7 @@ pub fn render_settings_panel(
                 .child(
                     Button::new("reset_settings")
                         .ghost()
-                        .label("Reset to Defaults")
+                        .label("🔄 Reset to Defaults")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.handle_reset_settings(window, cx);
                         }))

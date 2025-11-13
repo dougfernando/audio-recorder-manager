@@ -37,7 +37,7 @@ pub fn render_recovery_panel(
                 .child(
                     Button::new("scan_recovery")
                         .ghost()
-                        .label("Scan Now")
+                        .label("🔍 Scan Now")
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.handle_scan_recovery(window, cx);
                         }))

@@ -9,7 +9,6 @@ use super::header::{SPACING_SM, SPACING_MD, SPACING_LG};
 
 pub struct RecordPanelProps {
     pub config: RecorderConfig,
-    pub duration_text: String,
     pub duration_input: Entity<InputState>,
 }
 
@@ -171,7 +170,7 @@ pub fn render_record_panel(
         .child(
             Button::new("start_recording")
                 .primary()
-                .label("START RECORDING")
+                .label("🔴 START RECORDING")
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.start_recording(window, cx);
                 }))

@@ -116,7 +116,7 @@ pub fn render_monitor_panel(
         .child(
             Button::new("stop_recording")
                 .danger()
-                .label("STOP RECORDING")
+                .label("⏹️ STOP RECORDING")
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.stop_recording(window, cx);
                 }))

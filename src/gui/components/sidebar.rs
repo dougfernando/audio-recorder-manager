@@ -48,7 +48,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_record")
-                .label("Record")
+                .label("🎙️ Record")
                 .when(active == ActivePanel::Record, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Record);
@@ -56,7 +56,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_monitor")
-                .label("Monitor")
+                .label("📊 Monitor")
                 .when(active == ActivePanel::Monitor, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Monitor);
@@ -64,7 +64,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_history")
-                .label("History")
+                .label("📚 History")
                 .when(active == ActivePanel::History, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::History);
@@ -72,7 +72,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_recovery")
-                .label("Recovery")
+                .label("🔧 Recovery")
                 .when(active == ActivePanel::Recovery, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Recovery);
@@ -80,7 +80,7 @@ pub fn render_sidebar(
         )
         .child(
             Button::new("btn_settings")
-                .label("Settings")
+                .label("⚙️ Settings")
                 .when(active == ActivePanel::Settings, |btn| btn.primary())
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.handle_panel_change(cx, ActivePanel::Settings);
