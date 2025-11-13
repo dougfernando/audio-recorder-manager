@@ -126,7 +126,7 @@ pub fn render_monitor_panel(
                 )
                 .child(div().text_sm().text_color(cx.theme().foreground).child(
                     recording_state.map(|rs| {
-                        format!("{:,} frames | Sample Rate: {:,} Hz | {} channel(s)",
+                        format!("{} frames | Sample Rate: {} Hz | {} channel(s)",
                             rs.frames_captured,
                             rs.sample_rate,
                             rs.channels

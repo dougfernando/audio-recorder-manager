@@ -2,7 +2,7 @@
 
 use gpui::*;
 use gpui::prelude::FluentBuilder;
-use gpui_component::{button::*, input::*, ActiveTheme, IconName, Sizable, StyledExt};
+use gpui_component::{button::*, input::*, ActiveTheme, IconName, StyledExt};
 use audio_recorder_manager::{RecorderConfig, AudioFormat};
 use crate::app::QualityPreset;
 

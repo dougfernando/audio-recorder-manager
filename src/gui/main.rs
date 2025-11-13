@@ -46,6 +46,24 @@ fn main() {
         // Initialize gpui-component system
         gpui_component::init(cx);
 
+        // Load and apply Catppuccin theme
+        let theme_name = "Catppuccin Mocha";
+        if let Err(err) = gpui_component::ThemeRegistry::watch_dir(
+            std::path::PathBuf::from("./themes"),
+            cx,
+            move |cx| {
+                if let Some(theme) = gpui_component::ThemeRegistry::global(cx)
+                    .themes()
+                    .get(&theme_name)
+                    .cloned()
+                {
+                    gpui_component::Theme::global_mut(cx).apply_config(&theme);
+                }
+            },
+        ) {
+            log::error!("Failed to watch themes directory: {}", err);
+        }
+
         // Configure app settings
         cx.activate(true);
 
