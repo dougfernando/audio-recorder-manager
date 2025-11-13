@@ -2,7 +2,8 @@
 
 use gpui::*;
 use gpui_component::{button::*, ActiveTheme, *};
-use crate::{app::AudioRecorderApp, state::RecordingState};
+use crate::app::AudioRecorderApp;
+use crate::state::RecordingState;
 
 use super::header::{SPACING_SM, SPACING_MD, SPACING_LG};
 

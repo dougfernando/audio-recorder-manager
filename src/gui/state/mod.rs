@@ -2,4 +2,4 @@
 
 mod app_state;
 
-pub use app_state::{AppState, ActivePanel};
+pub use app_state::{AppState, ActivePanel, RecordingState};

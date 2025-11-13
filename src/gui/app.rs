@@ -1,9 +1,7 @@
 // Main application state and UI implementation using GPUI
 
 use gpui::*;
-use gpui::prelude::FluentBuilder;
 use gpui_component::{
-    button::*,
     input::{InputEvent, InputState},
     notification::NotificationType,
     ActiveTheme,
@@ -138,16 +136,15 @@ impl AudioRecorderApp {
 
         // Start recording via service
         let recorder_service = self.recorder_service.clone();
-        cx.spawn_in(window, async move |this, window, cx| {
+        cx.spawn(async move |this, mut cx| {
             match recorder_service
                 .start_recording(duration, format, quality)
                 .await
             {
                 Ok(session_id) => {
-                    this.update_in(window, |this, window, cx| {
-                        window.push_notification(
-                            (NotificationType::Success, format!("Recording started: {}", session_id)),
-                            cx
+                    this.update(&mut cx, |this, cx| {
+                        cx.push_notification(
+                            (NotificationType::Success, format!("Recording started: {}", session_id))
                         );
                         this.state.active_panel = ActivePanel::Monitor;
                         cx.notify();
@@ -155,10 +152,9 @@ impl AudioRecorderApp {
                     .ok();
                 }
                 Err(e) => {
-                    this.update_in(window, |_this, window, cx| {
-                        window.push_notification(
-                            (NotificationType::Error, format!("Failed to start recording: {}", e)),
-                            cx
+                    this.update(&mut cx, |_this, cx| {
+                        cx.push_notification(
+                            (NotificationType::Error, format!("Failed to start recording: {}", e))
                         );
                     })
                     .ok();
@@ -168,26 +164,24 @@ impl AudioRecorderApp {
         .detach();
     }
 
-    pub fn stop_recording(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn stop_recording(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let recorder_service = self.recorder_service.clone();
 
-        cx.spawn_in(window, async move |this, window, cx| {
+        cx.spawn(async move |this, mut cx| {
             match recorder_service.stop_recording().await {
                 Ok(_) => {
-                    this.update_in(window, |this, window, cx| {
-                        window.push_notification(
-                            (NotificationType::Success, "Recording stopped successfully"),
-                            cx
+                    this.update(&mut cx, |this, cx| {
+                        cx.push_notification(
+                            (NotificationType::Success, "Recording stopped successfully")
                         );
                         this.state.active_panel = ActivePanel::Record;
                         cx.notify();
                     }).ok();
                 }
                 Err(e) => {
-                    this.update_in(window, |_this, window, cx| {
-                        window.push_notification(
-                            (NotificationType::Error, format!("Failed to stop recording: {}", e)),
-                            cx
+                    this.update(&mut cx, |_this, cx| {
+                        cx.push_notification(
+                            (NotificationType::Error, format!("Failed to stop recording: {}", e))
                         );
                     }).ok();
                 }
@@ -201,15 +195,14 @@ impl AudioRecorderApp {
         cx.notify();
     }
 
-    pub fn handle_scan_recovery(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        window.push_notification(
-            (NotificationType::Info, "Scanning for incomplete recordings..."),
-            cx
+    pub fn handle_scan_recovery(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.push_notification(
+            (NotificationType::Info, "Scanning for incomplete recordings...")
         );
         cx.notify();
     }
 
-    pub fn handle_save_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn handle_save_settings(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         // Parse and validate settings
         let _default_duration: u64 = self.settings_default_duration.parse().unwrap_or(30);
         let max_manual_duration: u64 = self.settings_max_manual_duration.parse().unwrap_or(7200);
@@ -217,31 +210,24 @@ impl AudioRecorderApp {
         // Update the config (in a real app, this would persist to disk)
         self.state.config.max_manual_duration_secs = max_manual_duration;
 
-        window.push_notification(
-            (NotificationType::Success, "Settings saved successfully!"),
-            cx
+        cx.push_notification(
+            (NotificationType::Success, "Settings saved successfully!")
         );
         cx.notify();
     }
 
-    pub fn handle_reset_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn handle_reset_settings(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.state.config = RecorderConfig::new();
         self.settings_default_duration = "30".to_string();
         self.settings_default_format = AudioFormat::Wav;
         self.settings_default_quality = QualityPreset::Professional;
         self.settings_max_manual_duration = "7200".to_string();
 
-        // Update input states
-        self.settings_duration_input.update(cx, |input, cx| {
-            input.set_text("30", cx);
-        });
-        self.settings_max_duration_input.update(cx, |input, cx| {
-            input.set_text("7200", cx);
-        });
+        // Note: Input states will reflect new values on next re-render
+        // as they're bound to settings_default_duration and settings_max_manual_duration
 
-        window.push_notification(
-            (NotificationType::Success, "Settings reset to defaults"),
-            cx
+        cx.push_notification(
+            (NotificationType::Success, "Settings reset to defaults")
         );
         cx.notify();
     }
@@ -333,8 +319,8 @@ impl Render for AudioRecorderApp {
                     )
             )
             // Add overlay layers for dialogs, sheets, and notifications
-            .children(Root::render_dialog_layer(cx))
-            .children(Root::render_sheet_layer(cx))
-            .children(Root::render_notification_layer(cx))
+            .children(Root::render_dialog_layer(window, cx))
+            .children(Root::render_sheet_layer(window, cx))
+            .children(Root::render_notification_layer(window, cx))
     }
 }
