@@ -169,7 +169,7 @@ impl AudioRecorderApp {
                         this.state.active_panel = ActivePanel::Monitor;
 
                         // Schedule first progress update
-                        Self::schedule_recording_update(cx.entity(&this).downgrade(), cx);
+                        Self::schedule_recording_update(cx);
 
                         cx.notify();
                     })
@@ -246,8 +246,8 @@ impl AudioRecorderApp {
     }
 
     /// Schedule a single recording progress update (recursively called for continuous updates)
-    fn schedule_recording_update(this: WeakEntity<Self>, cx: &mut Context<Self>) {
-        cx.spawn(|this, mut cx| async move {
+    fn schedule_recording_update(cx: &mut Context<Self>) {
+        cx.spawn(|this: WeakEntity<Self>, mut cx| async move {
             // Wait 500ms before checking status
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
@@ -266,7 +266,7 @@ impl AudioRecorderApp {
             // Schedule next update if still recording
             if should_continue {
                 let _ = this.update(&mut cx, |_, cx| {
-                    Self::schedule_recording_update(this.clone(), cx);
+                    Self::schedule_recording_update(cx);
                 });
             }
         })
