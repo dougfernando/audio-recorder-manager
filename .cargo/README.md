@@ -2,54 +2,69 @@
 
 This directory contains cargo configuration files for different toolchains.
 
-## Current: GNU Toolchain (config.toml)
+## Current: MSVC Toolchain (Default)
 
-The project is now configured to use `x86_64-pc-windows-gnu` with special linker flags
-to avoid `.drectve` symbol errors that can occur with MinGW.
+With no `config.toml` active, Cargo uses the default MSVC toolchain on Windows.
+This is the recommended configuration for Tauri on Windows.
 
 **Requirements:**
-- MinGW-w64 (latest version recommended)
-- GCC in your PATH
+- Visual Studio Build Tools 2022 with "Desktop development with C++" ✅ (You have this installed!)
+- Or Visual Studio with C++ workload
 
-**If you still get linker errors**, try:
-1. Update MinGW-w64 to the latest version
-2. Clean build: `cargo clean && cd src-tauri && cargo clean`
-3. Or switch to MSVC (see below)
+**No additional configuration needed** - MSVC works out of the box!
 
-## Alternative: MSVC Toolchain (Recommended if GNU causes issues)
+## Alternative: GNU Toolchain
 
-The MSVC toolchain is officially recommended by Tauri and generally more stable on Windows.
+If you need to use the GNU toolchain (MinGW-w64):
 
-**To switch to MSVC:**
+**To switch to GNU:**
 ```bash
-# Rename or delete config.toml
-mv .cargo/config.toml .cargo/config.toml.disabled
+# Activate GNU config
+mv .cargo/config.toml.gnu .cargo/config.toml
 
 # Clean build artifacts
 cargo clean
 cd src-tauri && cargo clean
 ```
 
-**Requirements:**
-- Visual Studio Build Tools with "Desktop development with C++"
-- Or Visual Studio with C++ workload
-- Download: https://visualstudio.microsoft.com/downloads/
+**Requirements for GNU:**
+- MinGW-w64 (latest version recommended)
+- GCC in your PATH
 
-## Backup Files
+## Available Config Files
 
+- `config.toml.gnu` - GNU toolchain with linker flags to avoid .drectve errors
 - `config.toml.backup` - Original simple GNU config (had linker issues)
-- `config.toml.disabled` - For temporarily disabling config
+
+## Switching Between Toolchains
+
+**To use MSVC (current):**
+```bash
+# Ensure no config.toml exists (or rename it)
+mv .cargo/config.toml .cargo/config.toml.gnu
+
+# Clean build artifacts
+cargo clean
+cd src-tauri && cargo clean
+```
+
+**To use GNU:**
+```bash
+# Activate GNU config
+mv .cargo/config.toml.gnu .cargo/config.toml
+
+# Clean build artifacts
+cargo clean
+cd src-tauri && cargo clean
+```
 
 ## Troubleshooting
 
-**If switching between toolchains:**
-Always clean build artifacts to avoid mixing object files:
+**Always clean when switching toolchains:**
 ```bash
 cargo clean
 cd src-tauri && cargo clean
 cd ..
 ```
 
-**If GNU toolchain has linker errors:**
-The `.drectve` warnings are usually harmless, but if you get `collect2.exe: error`,
-either update MinGW or switch to MSVC.
+This prevents mixing object files from different compilers.
