@@ -70,55 +70,68 @@
 </script>
 
 <main>
-  <header>
-    <div class="header-content">
-      <div class="logo">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="16" cy="16" r="14" fill="#4a90e2"/>
+  <!-- Windows 11 Style Title Bar -->
+  <div class="title-bar">
+    <div class="title-content">
+      <div class="app-icon">
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="16" cy="16" r="14" fill="currentColor" opacity="0.8"/>
           <circle cx="16" cy="16" r="8" fill="white"/>
-          <circle cx="16" cy="16" r="4" fill="#4a90e2"/>
+          <circle cx="16" cy="16" r="4" fill="currentColor"/>
         </svg>
-        <h1>Audio Recorder Manager</h1>
       </div>
-      <div class="tabs">
-        <button
-          class="tab {activeTab === 'record' ? 'active' : ''}"
-          on:click={() => switchTab('record')}
-        >
-          Record
-        </button>
-        <button
-          class="tab {activeTab === 'recordings' ? 'active' : ''}"
-          on:click={() => switchTab('recordings')}
-        >
-          Recordings
-        </button>
-        <button
-          class="tab {activeTab === 'recovery' ? 'active' : ''}"
-          on:click={() => switchTab('recovery')}
-        >
-          Recovery
-        </button>
-      </div>
+      <h1 class="app-title">Audio Recorder Manager</h1>
     </div>
-  </header>
+  </div>
 
-  <div class="content">
-    {#if activeTab === 'record'}
-      <div class="record-view">
-        <div class="left-panel">
+  <!-- Windows 11 Style Tab Navigation -->
+  <nav class="tab-nav">
+    <button
+      class="nav-tab {activeTab === 'record' ? 'active' : ''}"
+      on:click={() => switchTab('record')}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <circle cx="8" cy="8" r="6"/>
+      </svg>
+      Record
+    </button>
+    <button
+      class="nav-tab {activeTab === 'recordings' ? 'active' : ''}"
+      on:click={() => switchTab('recordings')}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h12v2H2v-2z"/>
+      </svg>
+      Recordings
+    </button>
+    <button
+      class="nav-tab {activeTab === 'recovery' ? 'active' : ''}"
+      on:click={() => switchTab('recovery')}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 1.5a4.5 4.5 0 110 9 4.5 4.5 0 010-9z"/>
+        <path d="M8 5v4l3 1.5"/>
+      </svg>
+      Recovery
+    </button>
+  </nav>
+
+  <!-- Main Content Area -->
+  <div class="content-wrapper">
+    <div class="content fade-in">
+      {#if activeTab === 'record'}
+        <!-- Single Column Layout for Recording -->
+        <div class="record-container">
           <RecordingPanel />
+          <ActiveRecording />
           <DeviceStatus />
         </div>
-        <div class="right-panel">
-          <ActiveRecording />
-        </div>
-      </div>
-    {:else if activeTab === 'recordings'}
-      <RecordingsList />
-    {:else if activeTab === 'recovery'}
-      <Recovery />
-    {/if}
+      {:else if activeTab === 'recordings'}
+        <RecordingsList />
+      {:else if activeTab === 'recovery'}
+        <Recovery />
+      {/if}
+    </div>
   </div>
 </main>
 
@@ -128,82 +141,138 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    background-color: var(--bg-secondary);
+    background-color: var(--layer-fill-default);
   }
 
-  header {
-    background-color: var(--bg-primary);
-    border-bottom: 1px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
+  /* Windows 11 Style Title Bar */
+  .title-bar {
+    background-color: var(--card-background);
+    backdrop-filter: blur(40px);
+    border-bottom: 1px solid var(--divider-stroke);
+    padding: var(--spacing-md) var(--spacing-xxl);
+    flex-shrink: 0;
   }
 
-  .header-content {
-    padding: 16px 24px;
+  .title-content {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: var(--spacing-md);
   }
 
-  .logo {
+  .app-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--accent-default);
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: center;
   }
 
-  h1 {
-    font-size: 20px;
+  .app-title {
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0;
+    line-height: 20px;
   }
 
-  .tabs {
+  /* Windows 11 Style Navigation Tabs */
+  .tab-nav {
     display: flex;
-    gap: 8px;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm) var(--spacing-xxl) 0 var(--spacing-xxl);
+    background-color: var(--card-background);
+    border-bottom: 1px solid var(--divider-stroke);
+    flex-shrink: 0;
   }
 
-  .tab {
-    padding: 8px 20px;
+  .nav-tab {
+    position: relative;
+    padding: var(--spacing-sm) var(--spacing-lg);
     background-color: transparent;
     color: var(--text-secondary);
-    font-size: 14px;
-    font-weight: 500;
-    border-radius: var(--radius-md);
-    transition: all 0.2s ease;
+    font-size: 13px;
+    font-weight: 400;
+    border: none;
+    border-radius: var(--corner-radius-small) var(--corner-radius-small) 0 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    transition: all 0.08s ease;
+    min-height: 32px;
+    border-bottom: 2px solid transparent;
   }
 
-  .tab:hover {
-    background-color: var(--bg-secondary);
+  .nav-tab:hover {
+    background-color: var(--layer-fill-alt);
+    color: var(--text-primary);
   }
 
-  .tab.active {
-    background-color: var(--primary-color);
-    color: white;
+  .nav-tab.active {
+    background-color: var(--layer-fill-default);
+    color: var(--accent-default);
+    font-weight: 600;
+    border-bottom-color: var(--accent-default);
+  }
+
+  .nav-tab svg {
+    opacity: 0.7;
+  }
+
+  .nav-tab.active svg {
+    opacity: 1;
+  }
+
+  /* Content Area */
+  .content-wrapper {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
   }
 
   .content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px;
-  }
-
-  .record-view {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
     height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--spacing-xxl);
   }
 
-  .left-panel,
-  .right-panel {
+  /* Single Column Layout - Windows 11 Style */
+  .record-container {
+    max-width: 800px;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--spacing-lg);
   }
 
-  @media (max-width: 1024px) {
-    .record-view {
-      grid-template-columns: 1fr;
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .title-bar,
+    .tab-nav,
+    .content {
+      padding-left: var(--spacing-lg);
+      padding-right: var(--spacing-lg);
     }
+
+    .nav-tab {
+      font-size: 12px;
+      padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    .nav-tab svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .record-container {
+      max-width: 100%;
+    }
+  }
+
+  /* Smooth transitions between tabs */
+  .fade-in {
+    animation: fadeIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 </style>
