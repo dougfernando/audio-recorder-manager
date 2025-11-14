@@ -70,22 +70,15 @@
 </script>
 
 <main>
-  <!-- Windows 11 Style Title Bar -->
-  <div class="title-bar">
-    <div class="title-content">
-      <div class="app-icon">
-        <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="16" cy="16" r="14" fill="currentColor" opacity="0.8"/>
-          <circle cx="16" cy="16" r="8" fill="white"/>
-          <circle cx="16" cy="16" r="4" fill="currentColor"/>
-        </svg>
-      </div>
-      <h1 class="app-title">Audio Recorder Manager</h1>
-    </div>
-  </div>
-
-  <!-- Windows 11 Style Tab Navigation -->
+  <!-- Windows 11 Style Tab Navigation (No redundant title) -->
   <nav class="tab-nav">
+    <div class="app-icon">
+      <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="16" cy="16" r="14" fill="currentColor" opacity="0.8"/>
+        <circle cx="16" cy="16" r="8" fill="white"/>
+        <circle cx="16" cy="16" r="4" fill="currentColor"/>
+      </svg>
+    </div>
     <button
       class="nav-tab {activeTab === 'record' ? 'active' : ''}"
       on:click={() => switchTab('record')}
@@ -120,12 +113,23 @@
   <div class="content-wrapper">
     <div class="content fade-in">
       {#if activeTab === 'record'}
-        <!-- Single Column Layout for Recording -->
-        <div class="record-container">
-          <RecordingPanel />
-          <ActiveRecording />
-          <DeviceStatus />
-        </div>
+        <!-- State-aware Recording View -->
+        {#if $isRecording}
+          <!-- When Recording: Show only active recording (prominent, full-width) -->
+          <div class="recording-active-view">
+            <ActiveRecording />
+          </div>
+        {:else}
+          <!-- When Idle: Show controls + device status side-by-side (compact) -->
+          <div class="recording-idle-view">
+            <div class="main-panel">
+              <RecordingPanel />
+            </div>
+            <div class="side-panel">
+              <DeviceStatus />
+            </div>
+          </div>
+        {/if}
       {:else if activeTab === 'recordings'}
         <RecordingsList />
       {:else if activeTab === 'recovery'}
@@ -144,19 +148,16 @@
     background-color: var(--layer-fill-default);
   }
 
-  /* Windows 11 Style Title Bar */
-  .title-bar {
-    background-color: var(--card-background);
-    backdrop-filter: blur(40px);
-    border-bottom: 1px solid var(--divider-stroke);
-    padding: var(--spacing-md) var(--spacing-xxl);
-    flex-shrink: 0;
-  }
-
-  .title-content {
+  /* Windows 11 Style Navigation Tabs */
+  .tab-nav {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-xxl);
+    background-color: var(--card-background);
+    backdrop-filter: blur(40px);
+    border-bottom: 2px solid var(--divider-stroke);
+    flex-shrink: 0;
   }
 
   .app-icon {
@@ -166,24 +167,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .app-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-    line-height: 20px;
-  }
-
-  /* Windows 11 Style Navigation Tabs */
-  .tab-nav {
-    display: flex;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-sm) var(--spacing-xxl) 0 var(--spacing-xxl);
-    background-color: var(--card-background);
-    border-bottom: 1px solid var(--divider-stroke);
-    flex-shrink: 0;
+    margin-right: var(--spacing-md);
   }
 
   .nav-tab {
@@ -191,17 +175,16 @@
     padding: var(--spacing-sm) var(--spacing-lg);
     background-color: transparent;
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 400;
     border: none;
-    border-radius: var(--corner-radius-small) var(--corner-radius-small) 0 0;
+    border-radius: var(--corner-radius-small);
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
     transition: all 0.08s ease;
     min-height: 32px;
-    border-bottom: 2px solid transparent;
   }
 
   .nav-tab:hover {
@@ -210,14 +193,13 @@
   }
 
   .nav-tab.active {
-    background-color: var(--layer-fill-default);
-    color: var(--accent-default);
-    font-weight: 600;
-    border-bottom-color: var(--accent-default);
+    background-color: var(--accent-default);
+    color: var(--text-on-accent);
+    font-weight: 500;
   }
 
   .nav-tab svg {
-    opacity: 0.7;
+    opacity: 0.85;
   }
 
   .nav-tab.active svg {
@@ -238,26 +220,47 @@
     padding: var(--spacing-xxl);
   }
 
-  /* Single Column Layout - Windows 11 Style */
-  .record-container {
-    max-width: 800px;
+  /* Recording Active View - Full width, prominent */
+  .recording-active-view {
+    max-width: 900px;
     margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-lg);
   }
 
-  /* Responsive adjustments */
-  @media (max-width: 768px) {
-    .title-bar,
-    .tab-nav,
+  /* Recording Idle View - Two column compact layout */
+  .recording-idle-view {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: var(--spacing-xxl);
+    align-items: start;
+  }
+
+  .main-panel {
+    min-width: 0; /* Prevent grid overflow */
+  }
+
+  .side-panel {
+    min-width: 0; /* Prevent grid overflow */
+  }
+
+  /* Responsive - Stack on smaller screens */
+  @media (max-width: 1024px) {
+    .recording-idle-view {
+      grid-template-columns: 1fr;
+      max-width: 700px;
+    }
+
     .content {
-      padding-left: var(--spacing-lg);
-      padding-right: var(--spacing-lg);
+      padding: var(--spacing-lg);
+    }
+
+    .tab-nav {
+      padding: var(--spacing-sm) var(--spacing-lg);
     }
 
     .nav-tab {
-      font-size: 12px;
+      font-size: 13px;
       padding: var(--spacing-sm) var(--spacing-md);
     }
 
@@ -265,13 +268,24 @@
       width: 14px;
       height: 14px;
     }
+  }
 
-    .record-container {
-      max-width: 100%;
+  @media (max-width: 640px) {
+    .app-icon {
+      margin-right: var(--spacing-sm);
+    }
+
+    .nav-tab {
+      font-size: 0; /* Hide text on very small screens */
+      padding: var(--spacing-sm);
+    }
+
+    .nav-tab svg {
+      margin: 0;
     }
   }
 
-  /* Smooth transitions between tabs */
+  /* Smooth transitions */
   .fade-in {
     animation: fadeIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
