@@ -4,7 +4,6 @@
   import { invoke } from '@tauri-apps/api/tauri';
   import RecordingPanel from './lib/components/RecordingPanel.svelte';
   import ActiveRecording from './lib/components/ActiveRecording.svelte';
-  import DeviceStatus from './lib/components/DeviceStatus.svelte';
   import RecordingsList from './lib/components/RecordingsList.svelte';
   import Recovery from './lib/components/Recovery.svelte';
   import {
@@ -12,7 +11,6 @@
     currentSession,
     recordingStatus,
     recordings,
-    devices,
   } from './lib/stores';
 
   let activeTab = 'record';
@@ -20,7 +18,6 @@
   onMount(async () => {
     // Load initial data
     await loadRecordings();
-    await loadDevices();
 
     // Listen for recording status updates from backend
     const unlisten = await listen('recording-status-update', (event) => {
@@ -50,17 +47,6 @@
       recordings.set(result);
     } catch (error) {
       console.error('Failed to load recordings:', error);
-    }
-  }
-
-  async function loadDevices() {
-    try {
-      const result = await invoke('get_status');
-      if (result.devices) {
-        devices.set(result.devices);
-      }
-    } catch (error) {
-      console.error('Failed to load devices:', error);
     }
   }
 
@@ -120,14 +106,9 @@
             <ActiveRecording />
           </div>
         {:else}
-          <!-- When Idle: Show controls + device status side-by-side (compact) -->
+          <!-- When Idle: Show recording controls -->
           <div class="recording-idle-view">
-            <div class="main-panel">
-              <RecordingPanel />
-            </div>
-            <div class="side-panel">
-              <DeviceStatus />
-            </div>
+            <RecordingPanel />
           </div>
         {/if}
       {:else if activeTab === 'recordings'}
@@ -226,22 +207,10 @@
     margin: 0 auto;
   }
 
-  /* Recording Idle View - Two column compact layout */
+  /* Recording Idle View - Single column centered layout */
   .recording-idle-view {
-    max-width: 1200px;
+    max-width: 600px;
     margin: 0 auto;
-    display: grid;
-    grid-template-columns: 1.5fr 1fr;
-    gap: var(--spacing-xxl);
-    align-items: start;
-  }
-
-  .main-panel {
-    min-width: 0; /* Prevent grid overflow */
-  }
-
-  .side-panel {
-    min-width: 0; /* Prevent grid overflow */
   }
 
   /* Responsive - Stack on smaller screens */

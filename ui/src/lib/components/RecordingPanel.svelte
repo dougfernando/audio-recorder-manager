@@ -105,14 +105,6 @@
     </div>
   </div>
 
-  <div class="quality-info">
-    {#each qualities as quality}
-      {#if quality.value === $selectedQuality}
-        <small>{quality.description} • {quality.description}</small>
-      {/if}
-    {/each}
-  </div>
-
   <button
     class="btn btn-primary btn-lg start-btn"
     on:click={startRecording}
@@ -195,17 +187,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-lg);
-  }
-
-  .quality-info {
     margin-bottom: var(--spacing-lg);
-    padding: var(--spacing-sm) var(--spacing-md);
-    background-color: var(--info-bg);
-    color: var(--info);
-    border-radius: var(--corner-radius-small);
-    font-size: 13px;
-    text-align: center;
-    font-weight: 500;
   }
 
   .start-btn {
