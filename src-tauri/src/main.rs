@@ -74,6 +74,7 @@ struct RecordingStatusInfo {
     channels: Option<u16>,
     frames_captured: Option<u64>,
     has_audio: Option<bool>,
+    // Per-channel data for dual-channel recording
     loopback_frames: Option<u64>,
     loopback_has_audio: Option<bool>,
     mic_frames: Option<u64>,
