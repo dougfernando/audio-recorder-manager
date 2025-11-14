@@ -73,22 +73,19 @@
       {#each $recordings as recording}
         <div class="recording-card card">
           <div class="recording-header">
-            <div class="recording-icon">
+            <div class="recording-icon {recording.format === 'wav' ? 'wav' : 'm4a'}">
               {#if recording.format === 'wav'}
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 18V5l12-2v13"/>
-                  <circle cx="6" cy="18" r="3"/>
-                  <circle cx="18" cy="16" r="3"/>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
                 </svg>
               {:else}
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 18V5l12-2v13"/>
-                  <circle cx="6" cy="18" r="3"/>
-                  <circle cx="18" cy="16" r="3"/>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                  <path d="M20 6v2h-2V6h2z" opacity="0.5"/>
                 </svg>
               {/if}
             </div>
-            <div class="format-badge">{recording.format.toUpperCase()}</div>
+            <div class="format-badge {recording.format}">{recording.format.toUpperCase()}</div>
           </div>
 
           <div class="recording-info">
@@ -160,7 +157,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: var(--spacing-xxl);
   }
 
   h2 {
@@ -185,7 +182,7 @@
   .recordings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
+    gap: var(--spacing-lg);
   }
 
   .recording-card {
@@ -195,7 +192,7 @@
   }
 
   .recording-card:hover {
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--elevation-flyout);
     transform: translateY(-2px);
   }
 
@@ -203,7 +200,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: var(--spacing-lg);
   }
 
   .recording-icon {
@@ -212,23 +209,39 @@
     justify-content: center;
     width: 56px;
     height: 56px;
-    background: linear-gradient(135deg, var(--primary-color), #357abd);
-    border-radius: var(--radius-lg);
+    border-radius: var(--corner-radius-large);
     color: white;
   }
 
+  .recording-icon.wav {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  .recording-icon.m4a {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  }
+
   .format-badge {
-    padding: 4px 10px;
-    background-color: var(--bg-secondary);
-    border-radius: 12px;
+    padding: 4px var(--spacing-sm);
+    border-radius: 10px;
     font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .format-badge.wav {
+    background-color: var(--info-bg);
+    color: var(--info);
+  }
+
+  .format-badge.m4a {
+    background-color: var(--success-bg);
+    color: var(--success);
   }
 
   .recording-info {
     flex: 1;
-    margin-bottom: 16px;
+    margin-bottom: var(--spacing-lg);
   }
 
   .recording-name {
@@ -246,15 +259,16 @@
     color: var(--text-secondary);
     display: flex;
     gap: 6px;
+    font-family: 'Consolas', 'Monaco', monospace;
   }
 
   .recording-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--spacing-sm);
   }
 
   .btn-sm {
-    padding: 8px 14px;
+    padding: var(--spacing-sm) var(--spacing-md);
     font-size: 13px;
     flex: 1;
   }
@@ -264,12 +278,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 80px 20px;
+    padding: var(--spacing-xxxl) var(--spacing-lg);
     color: var(--text-tertiary);
   }
 
   .empty-state svg {
-    margin-bottom: 16px;
+    margin-bottom: var(--spacing-lg);
     opacity: 0.3;
   }
 

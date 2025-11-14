@@ -43,20 +43,30 @@
 
   {#if $devices && $devices.length > 0}
     <div class="devices-list">
-      {#each $devices as device}
+      {#each $devices as device, index}
         <div class="device-item">
-          <div class="device-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
+          <div class="device-icon {index === 0 ? 'primary' : 'secondary'}">
+            {#if device.name.toLowerCase().includes('microphone') || device.name.toLowerCase().includes('mic')}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+              </svg>
+            {:else}
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+              </svg>
+            {/if}
           </div>
           <div class="device-info">
             <div class="device-name">{device.name}</div>
             <div class="device-specs">
-              {device.sample_rate / 1000}kHz • {device.channels} channels
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="8" cy="8" r="2"/>
+              </svg>
+              {device.sample_rate / 1000}kHz
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="8" cy="8" r="2"/>
+              </svg>
+              {device.channels} ch
             </div>
           </div>
         </div>
@@ -81,7 +91,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: var(--spacing-lg);
   }
 
   .card-title {
@@ -89,7 +99,7 @@
   }
 
   .btn-sm {
-    padding: 6px 12px;
+    padding: 6px var(--spacing-md);
     font-size: 13px;
   }
 
@@ -109,32 +119,41 @@
   .devices-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--spacing-md);
   }
 
   .device-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px;
-    background-color: var(--bg-secondary);
-    border-radius: var(--radius-md);
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background-color: var(--card-background-secondary);
+    border: 1px solid var(--stroke-surface);
+    border-radius: var(--corner-radius-medium);
     transition: all 0.2s ease;
   }
 
   .device-item:hover {
-    background-color: var(--bg-tertiary);
+    border-color: var(--stroke-surface-flyout);
+    box-shadow: var(--elevation-card);
   }
 
   .device-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    background-color: var(--bg-primary);
-    border-radius: var(--radius-md);
-    color: var(--primary-color);
+    width: 48px;
+    height: 48px;
+    border-radius: var(--corner-radius-medium);
+    color: white;
+  }
+
+  .device-icon.primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+
+  .device-icon.secondary {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
   }
 
   .device-info {
@@ -142,16 +161,23 @@
   }
 
   .device-name {
-    font-weight: 500;
+    font-weight: 600;
     font-size: 14px;
     color: var(--text-primary);
     margin-bottom: 4px;
   }
 
   .device-specs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     color: var(--text-secondary);
     font-family: 'Consolas', 'Monaco', monospace;
+  }
+
+  .device-specs svg {
+    opacity: 0.4;
   }
 
   .empty-state {
@@ -159,12 +185,12 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 40px 20px;
+    padding: var(--spacing-xxxl) var(--spacing-lg);
     color: var(--text-tertiary);
   }
 
   .empty-state svg {
-    margin-bottom: 12px;
+    margin-bottom: var(--spacing-md);
     opacity: 0.3;
   }
 
