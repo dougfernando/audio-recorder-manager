@@ -1,6 +1,6 @@
 <script>
   import { invoke } from '@tauri-apps/api/tauri';
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import {
     isRecording,
     currentSession,
@@ -11,14 +11,23 @@
   let isStopping = false;
   let pollInterval;
 
-  // Poll for status updates every second as backup
-  onMount(() => {
+  // Reactive statement: start/stop polling based on recording state
+  $: {
+    // Clear existing interval
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+
+    // Start polling if recording
     if ($isRecording && $currentSession) {
+      console.log('Starting status polling for session:', $currentSession);
       pollInterval = setInterval(async () => {
         try {
           const status = await invoke('get_recording_status', {
             sessionId: $currentSession
           });
+          console.log('Polled status:', status);
           if (status && status.status === 'recording') {
             recordingStatus.set(status);
           }
@@ -27,7 +36,7 @@
         }
       }, 1000);
     }
-  });
+  }
 
   onDestroy(() => {
     if (pollInterval) {
@@ -67,6 +76,11 @@
   $: loopbackHasAudio = $recordingStatus?.loopback_has_audio || false;
   $: micFrames = $recordingStatus?.mic_frames || 0;
   $: micHasAudio = $recordingStatus?.mic_has_audio || false;
+
+  // Debug logging for frame updates
+  $: if (loopbackFrames > 0 || micFrames > 0) {
+    console.log('Frame counts updated - Loopback:', loopbackFrames, 'Mic:', micFrames);
+  }
 </script>
 
 {#if $isRecording && $recordingStatus}
@@ -75,6 +89,10 @@
     <div class="recording-indicator">
       <div class="pulse-dot"></div>
       <span class="recording-text">RECORDING</span>
+      <span class="live-badge">
+        <span class="live-dot"></span>
+        LIVE
+      </span>
     </div>
     <span class="session-id">{$recordingStatus.session_id || 'N/A'}</span>
   </div>
@@ -126,7 +144,9 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
             <path d="M3 5h10v6H3V5z"/>
           </svg>
-          <span class="frames-count">{loopbackFrames.toLocaleString()}</span>
+          <span class="frames-count" class:updating={loopbackFrames > 0}>
+            {loopbackFrames.toLocaleString()}
+          </span>
           <span class="frames-label">frames</span>
         </div>
         {#if loopbackHasAudio}
@@ -159,7 +179,9 @@
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
             <path d="M3 5h10v6H3V5z"/>
           </svg>
-          <span class="frames-count">{micFrames.toLocaleString()}</span>
+          <span class="frames-count" class:updating={micFrames > 0}>
+            {micFrames.toLocaleString()}
+          </span>
           <span class="frames-label">frames</span>
         </div>
         {#if micHasAudio}
@@ -250,6 +272,38 @@
     font-size: 16px;
     font-weight: 700;
     letter-spacing: 1px;
+  }
+
+  .live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px var(--spacing-md);
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    background-color: #4ade80;
+    border-radius: 50%;
+    animation: livePulse 2s ease-in-out infinite;
+  }
+
+  @keyframes livePulse {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+    }
+    50% {
+      opacity: 0.7;
+      box-shadow: 0 0 0 4px rgba(74, 222, 128, 0);
+    }
   }
 
   .session-id {
@@ -432,8 +486,16 @@
 
   .frames-count {
     font-weight: 600;
-    font-size: 16px;
+    font-size: 18px;
     color: var(--accent-default);
+    transition: all 0.3s ease;
+    min-width: 80px;
+    text-align: left;
+  }
+
+  .frames-count.updating {
+    color: var(--success);
+    font-weight: 700;
   }
 
   .frames-label {
