@@ -20,7 +20,7 @@ pub async fn execute(
     quality: RecordingQuality,
     config: RecorderConfig,
 ) -> Result<()> {
-    env_logger::init();
+    // Note: env_logger::init() is called by the binary (CLI or Tauri), not here
 
     // Create recording session
     let session = RecordingSession::new(audio_format, quality.clone(), duration);
