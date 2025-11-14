@@ -187,6 +187,11 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
                 frames_captured: loopback_recorder.get_frames_captured(),
                 has_audio: loopback_recorder.has_audio_detected(),
                 status: "recording".to_string(),
+                // Per-channel data
+                loopback_frames: Some(loopback_recorder.get_frames_captured()),
+                loopback_has_audio: Some(loopback_recorder.has_audio_detected()),
+                mic_frames: mic_recorder.as_ref().map(|m| m.get_frames_captured()),
+                mic_has_audio: mic_recorder.as_ref().map(|m| m.has_audio_detected()),
             })?;
         }
 

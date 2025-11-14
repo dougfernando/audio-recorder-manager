@@ -294,12 +294,16 @@ impl RecordingHandle {
             elapsed,
             progress,
             quality: "professional".to_string(),
-            quality_info: RecordingQuality::professional(),
             device: self.device_name.clone(),
             sample_rate: self.sample_rate,
             channels: self.channels,
             frames_captured: self.get_frames_captured(),
             has_audio: self.has_audio_detected(),
+            // Per-channel data (single channel recorder doesn't have this)
+            loopback_frames: None,
+            loopback_has_audio: None,
+            mic_frames: None,
+            mic_has_audio: None,
         }
     }
 

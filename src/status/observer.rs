@@ -14,6 +14,11 @@ pub struct RecordingStatus {
     pub frames_captured: u64,
     pub has_audio: bool,
     pub status: String,
+    // Per-channel data for dual-channel recording
+    pub loopback_frames: Option<u64>,
+    pub loopback_has_audio: Option<bool>,
+    pub mic_frames: Option<u64>,
+    pub mic_has_audio: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
