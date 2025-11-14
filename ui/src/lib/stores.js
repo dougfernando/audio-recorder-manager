@@ -15,7 +15,7 @@ export const devices = writable([]);
 
 // UI state
 export const selectedDuration = writable(30);
-export const selectedFormat = writable('wav');
+export const selectedFormat = writable('m4a');
 export const selectedQuality = writable('professional');
 export const isManualMode = writable(false);
 
