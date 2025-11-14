@@ -1,31 +1,55 @@
 # Cargo Configuration
 
-This directory contains cargo configuration files.
+This directory contains cargo configuration files for different toolchains.
 
-## config.toml.backup
+## Current: GNU Toolchain (config.toml)
 
-The original `config.toml` was configured for GNU toolchain (`x86_64-pc-windows-gnu`).
-This has been backed up because it caused linker issues with Tauri on Windows.
+The project is now configured to use `x86_64-pc-windows-gnu` with special linker flags
+to avoid `.drectve` symbol errors that can occur with MinGW.
 
-For Tauri on Windows, the MSVC toolchain is recommended and more reliable.
+**Requirements:**
+- MinGW-w64 (latest version recommended)
+- GCC in your PATH
 
-## Using MSVC Toolchain (Recommended for Tauri)
+**If you still get linker errors**, try:
+1. Update MinGW-w64 to the latest version
+2. Clean build: `cargo clean && cd src-tauri && cargo clean`
+3. Or switch to MSVC (see below)
 
-With no `config.toml`, Cargo will use the default MSVC toolchain on Windows.
+## Alternative: MSVC Toolchain (Recommended if GNU causes issues)
 
-Requirements:
-- Visual Studio Build Tools with "Desktop development with C++"
-- Or Visual Studio with C++ workload
+The MSVC toolchain is officially recommended by Tauri and generally more stable on Windows.
 
-## Reverting to GNU if Needed
-
-If you need the GNU toolchain for CLI builds:
+**To switch to MSVC:**
 ```bash
-mv config.toml.backup config.toml
-```
+# Rename or delete config.toml
+mv .cargo/config.toml .cargo/config.toml.disabled
 
-Note: You may need to clean build artifacts when switching:
-```bash
+# Clean build artifacts
 cargo clean
 cd src-tauri && cargo clean
 ```
+
+**Requirements:**
+- Visual Studio Build Tools with "Desktop development with C++"
+- Or Visual Studio with C++ workload
+- Download: https://visualstudio.microsoft.com/downloads/
+
+## Backup Files
+
+- `config.toml.backup` - Original simple GNU config (had linker issues)
+- `config.toml.disabled` - For temporarily disabling config
+
+## Troubleshooting
+
+**If switching between toolchains:**
+Always clean build artifacts to avoid mixing object files:
+```bash
+cargo clean
+cd src-tauri && cargo clean
+cd ..
+```
+
+**If GNU toolchain has linker errors:**
+The `.drectve` warnings are usually harmless, but if you get `collect2.exe: error`,
+either update MinGW or switch to MSVC.
