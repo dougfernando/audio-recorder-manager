@@ -17,6 +17,8 @@ tokio = { version = "1.41", features = ["full", "rt-multi-thread"] }
 audio-recorder-manager = { path = ".." }
 notify = "7.0"
 chrono = { version = "0.4", features = ["serde"] }
+env_logger = "0.11"
+log = "0.4"
 
 [features]
 default = ["custom-protocol"]

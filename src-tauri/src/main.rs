@@ -9,7 +9,6 @@ use audio_recorder_manager::{
 };
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -124,6 +123,15 @@ async fn start_recording(
     // Start recording in background task
     let session_id = chrono::Local::now().format("rec-%Y%m%d_%H%M%S").to_string();
     let session_id_clone = session_id.clone();
+    let session_id_clone2 = session_id.clone();
+
+    // Get file path before moving config
+    let file_path = config
+        .recordings_dir
+        .join(format!("recording_{}.{}", session_id, format))
+        .to_string_lossy()
+        .to_string();
+    let filename = format!("recording_{}.{}", session_id_clone, format);
 
     // Add to active sessions
     {
@@ -133,23 +141,17 @@ async fn start_recording(
 
     // Spawn recording task
     tokio::spawn(async move {
-        let result = record::execute(duration, audio_format, recording_quality, config).await;
-        if let Err(e) = result {
+        let _result = record::execute(duration, audio_format, recording_quality, config).await;
+        if let Err(e) = _result {
             eprintln!("Recording error: {}", e);
         }
     });
 
     Ok(RecordingResponse {
         status: "success".to_string(),
-        session_id: Some(session_id_clone),
-        file_path: Some(
-            config
-                .recordings_dir
-                .join(format!("recording_{}.{}", session_id, format))
-                .to_string_lossy()
-                .to_string(),
-        ),
-        filename: Some(format!("recording_{}.{}", session_id, format)),
+        session_id: Some(session_id_clone2),
+        file_path: Some(file_path),
+        filename: Some(filename),
         duration: Some(duration_secs),
         quality: Some(quality),
         message: "Recording started successfully".to_string(),
@@ -166,7 +168,7 @@ async fn stop_recording(
     let config = RecorderConfig::new();
 
     // Execute stop command
-    let result = stop::execute(session_id.clone(), config)
+    stop::execute(session_id.clone(), config)
         .await
         .map_err(|e| e.to_string())?;
 
