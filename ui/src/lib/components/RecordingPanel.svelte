@@ -134,27 +134,27 @@
 
 <style>
   .error-message {
-    background-color: #fff2f0;
-    border: 1px solid #ffccc7;
-    color: var(--danger-color);
-    padding: 12px;
-    border-radius: var(--radius-md);
-    margin-bottom: 16px;
+    background-color: var(--danger-bg);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: var(--spacing-md);
+    border-radius: var(--corner-radius-medium);
+    margin-bottom: var(--spacing-lg);
     font-size: 14px;
   }
 
   .duration-presets {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
   }
 
   .preset-btn {
-    padding: 10px;
-    background-color: var(--bg-secondary);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--card-background-secondary);
     border: 2px solid transparent;
-    border-radius: var(--radius-md);
+    border-radius: var(--corner-radius-small);
     font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
@@ -162,23 +162,24 @@
   }
 
   .preset-btn:hover:not(:disabled) {
-    background-color: var(--bg-tertiary);
+    background-color: var(--layer-fill-alt);
+    border-color: var(--stroke-surface-flyout);
   }
 
   .preset-btn.active {
-    background-color: #e6f7ff;
-    border-color: var(--primary-color);
-    color: var(--primary-color);
+    background-color: var(--info-bg);
+    border-color: var(--accent-default);
+    color: var(--accent-default);
   }
 
   .manual-mode {
-    margin-top: 8px;
+    margin-top: var(--spacing-sm);
   }
 
   .checkbox-label {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--spacing-sm);
     font-size: 14px;
     color: var(--text-secondary);
     cursor: pointer;
@@ -193,17 +194,18 @@
   .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    gap: var(--spacing-lg);
   }
 
   .quality-info {
-    margin-bottom: 16px;
-    padding: 8px 12px;
-    background-color: var(--bg-secondary);
-    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--info-bg);
+    color: var(--info);
+    border-radius: var(--corner-radius-small);
     font-size: 13px;
-    color: var(--text-secondary);
     text-align: center;
+    font-weight: 500;
   }
 
   .start-btn {
