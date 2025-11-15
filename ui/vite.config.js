@@ -17,6 +17,14 @@ export default defineConfig({
     target: 'chrome105',
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    // Optimize for faster load times
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      }
+    },
+    // Reduce chunk size warnings
+    chunkSizeWarningLimit: 1000,
   },
 
   // Prevent vite from obscuring rust errors

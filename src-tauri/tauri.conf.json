@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Audio Recorder Manager",
-    "version": "0.3.0"
+    "version": "0.5.0"
   },
   "tauri": {
     "allowlist": {
@@ -58,7 +58,7 @@
           "language": ["en-US"]
         },
         "webviewInstallMode": {
-          "type": "downloadBootstrapper"
+          "type": "skip"
         }
       }
     },

@@ -405,27 +405,33 @@ pub async fn convert_wav_to_m4a(wav_path: &PathBuf, m4a_path: &PathBuf) -> Resul
     log::info!("Converting WAV to M4A: {:?} -> {:?}", wav_path, m4a_path);
 
     // Check if FFmpeg is available
-    let ffmpeg_check = Command::new("ffmpeg")
-        .arg("-version")
-        .output()
-        .await;
+    let mut ffmpeg_check = Command::new("ffmpeg");
+    ffmpeg_check.arg("-version");
 
-    if ffmpeg_check.is_err() {
+    #[cfg(windows)]
+    ffmpeg_check.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let check_result = ffmpeg_check.output().await;
+
+    if check_result.is_err() {
         anyhow::bail!("FFmpeg is not installed or not in PATH. Please install FFmpeg to use M4A encoding.");
     }
 
     // Convert using FFmpeg with AAC codec
-    let output = Command::new("ffmpeg")
-        .arg("-i")
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-i")
         .arg(wav_path)
         .arg("-c:a")
         .arg("aac")
         .arg("-b:a")
         .arg("256k")
         .arg("-y") // Overwrite output file
-        .arg(m4a_path)
-        .output()
-        .await?;
+        .arg(m4a_path);
+
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let output = cmd.output().await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -456,23 +462,39 @@ pub async fn merge_audio_streams_smart(
     );
 
     // Check if FFmpeg is available
-    let ffmpeg_check = Command::new("ffmpeg")
-        .arg("-version")
-        .output()
-        .await;
+    let mut ffmpeg_check = Command::new("ffmpeg");
+    ffmpeg_check.arg("-version");
 
-    if ffmpeg_check.is_err() {
+    #[cfg(windows)]
+    ffmpeg_check.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let check_result = ffmpeg_check.output().await;
+
+    if check_result.is_err() {
         anyhow::bail!("FFmpeg is not installed or not in PATH. Please install FFmpeg for dual-channel recording.");
     }
 
     let target_sample_rate = quality.sample_rate.to_string();
+
+    // Helper function to create FFmpeg command with hidden console on Windows
+    #[cfg(windows)]
+    fn setup_ffmpeg_command() -> Command {
+        let mut cmd = Command::new("ffmpeg");
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd
+    }
+
+    #[cfg(not(windows))]
+    fn setup_ffmpeg_command() -> Command {
+        Command::new("ffmpeg")
+    }
 
     // Determine merge strategy based on audio detection flags
     let output = if loopback_has_audio && mic_has_audio {
         // Scenario A: Both have audio - Create dual-mono stereo (L=loopback, R=mic)
         // Convert mic mono to stereo first, then merge with amerge
         log::info!("Merging both channels (dual-mono stereo)");
-        Command::new("ffmpeg")
+        setup_ffmpeg_command()
             .arg("-i").arg(loopback_wav)
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
@@ -486,7 +508,7 @@ pub async fn merge_audio_streams_smart(
     } else if loopback_has_audio && !mic_has_audio {
         // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
         log::info!("Using loopback only (microphone was silent)");
-        Command::new("ffmpeg")
+        setup_ffmpeg_command()
             .arg("-i").arg(loopback_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=stereo[aout]")
@@ -499,7 +521,7 @@ pub async fn merge_audio_streams_smart(
     } else if !loopback_has_audio && mic_has_audio {
         // Scenario C: Mic only - Convert mono to stereo (duplicate to both channels)
         log::info!("Using microphone only (system audio was silent)");
-        Command::new("ffmpeg")
+        setup_ffmpeg_command()
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=mono,asplit=2[l][r];[l][r]amerge=inputs=2,pan=stereo|c0=c0|c1=c1[aout]")
@@ -512,7 +534,7 @@ pub async fn merge_audio_streams_smart(
     } else {
         // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
         log::info!("Both channels were silent, creating silent stereo file");
-        Command::new("ffmpeg")
+        setup_ffmpeg_command()
             .arg("-i").arg(loopback_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=stereo[aout]")
