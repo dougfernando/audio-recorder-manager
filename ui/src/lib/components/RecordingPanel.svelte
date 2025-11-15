@@ -58,40 +58,53 @@
   {/if}
 
   <div class="form-group">
-    <label class="form-label">Duration</label>
-    <div class="duration-presets">
+    <label class="form-label">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      Duration
+    </label>
+    <div class="duration-grid">
       {#each durationPresets as preset}
         <button
-          class="preset-btn {$selectedDuration === preset && !$isManualMode ? 'active' : ''}"
+          class="duration-btn {$selectedDuration === preset && !$isManualMode ? 'active' : ''}"
           on:click={() => {
             selectedDuration.set(preset);
             isManualMode.set(false);
           }}
           disabled={$isRecording}
         >
-          {formatDuration(preset)}
+          <span class="duration-value">{formatDuration(preset)}</span>
         </button>
       {/each}
       <button
-        class="preset-btn manual-btn {$isManualMode ? 'active' : ''}"
+        class="duration-btn manual-mode-btn {$isManualMode ? 'active' : ''}"
         on:click={() => {
           isManualMode.set(true);
         }}
         disabled={$isRecording}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10"/>
-          <line x1="12" y1="8" x2="12" y2="12"/>
-          <line x1="12" y1="16" x2="12.01" y2="16"/>
+          <line x1="12" y1="8" x2="12" y2="16"/>
         </svg>
-        Manual
+        <span class="duration-value">Manual</span>
       </button>
     </div>
   </div>
 
   <div class="form-row">
     <div class="form-group">
-      <label class="form-label">Format</label>
+      <label class="form-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <line x1="9" y1="15" x2="15" y2="15"/>
+        </svg>
+        Format
+      </label>
       <select class="form-select" bind:value={$selectedFormat} disabled={$isRecording}>
         {#each formats as format}
           <option value={format}>{format.toUpperCase()}</option>
@@ -100,7 +113,12 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Quality</label>
+      <label class="form-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        Quality
+      </label>
       <select class="form-select" bind:value={$selectedQuality} disabled={$isRecording}>
         {#each qualities as quality}
           <option value={quality.value}>{quality.label}</option>
@@ -150,46 +168,86 @@
     font-size: 14px;
   }
 
-  .duration-presets {
+  .form-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-md);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .form-label svg {
+    opacity: 0.7;
+    color: var(--accent-default);
+  }
+
+  .duration-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-md);
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
   }
 
-  .preset-btn {
-    padding: var(--spacing-sm) var(--spacing-md);
-    background-color: var(--card-background-secondary);
-    border: 2px solid transparent;
-    border-radius: var(--corner-radius-small);
-    font-size: 14px;
-    font-weight: 500;
+  .duration-btn {
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(249, 249, 249, 0.85) 100%);
+    border: 2px solid rgba(0, 103, 192, 0.08);
+    border-radius: var(--corner-radius-medium);
+    font-size: 16px;
+    font-weight: 600;
     color: var(--text-primary);
-    transition: all 0.2s ease;
-  }
-
-  .preset-btn:hover:not(:disabled) {
-    background-color: var(--layer-fill-alt);
-    border-color: var(--stroke-surface-flyout);
-  }
-
-  .preset-btn.active {
-    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-    border-color: var(--accent-default);
-    color: var(--accent-default);
-    box-shadow: 0 2px 6px rgba(0, 103, 192, 0.15);
-    font-weight: 500;
-  }
-
-  .manual-btn {
+    transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    min-height: 56px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
   }
 
-  .manual-btn svg {
+  .duration-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(249, 249, 249, 0.95) 100%);
+    border-color: rgba(0, 103, 192, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 103, 192, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .duration-btn.active {
+    background: linear-gradient(135deg, #0067C0 0%, #0078D4 100%);
+    border-color: transparent;
+    color: var(--text-on-accent);
+    box-shadow: 0 4px 16px rgba(0, 103, 192, 0.35), 0 0 0 1px rgba(0, 103, 192, 0.1);
+    font-weight: 700;
+  }
+
+  .duration-btn.active:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0078D4 0%, #4A9EFF 100%);
+    box-shadow: 0 6px 20px rgba(0, 103, 192, 0.45);
+  }
+
+  .duration-value {
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .manual-mode-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+  }
+
+  .manual-mode-btn svg {
     flex-shrink: 0;
+    stroke-width: 2.5;
+  }
+
+  .manual-mode-btn.active svg {
+    stroke: var(--text-on-accent);
   }
 
   .form-row {
