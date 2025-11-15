@@ -15,6 +15,18 @@ impl JsonFileObserver {
     fn get_status_file(&self, session_id: &str) -> PathBuf {
         self.status_dir.join(format!("{}.json", session_id))
     }
+
+    pub fn write_processing_status(&self, session_id: &str, message: &str) -> Result<()> {
+        let status_file = self.get_status_file(session_id);
+        let processing_status = serde_json::json!({
+            "session_id": session_id,
+            "status": "processing",
+            "message": message,
+        });
+        let json = serde_json::to_string_pretty(&processing_status)?;
+        fs::write(&status_file, json)?;
+        Ok(())
+    }
 }
 
 impl StatusObserver for JsonFileObserver {

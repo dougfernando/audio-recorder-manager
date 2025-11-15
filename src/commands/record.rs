@@ -210,6 +210,12 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
         eprintln!("[Recording] Completed successfully!");
         eprintln!("[Merging] Merging audio channels...");
 
+        // Write processing status
+        let _ = observer.write_processing_status(
+            session.id.as_str(),
+            "Merging audio channels..."
+        );
+
         // Wait a moment for files to be fully written
         tokio::time::sleep(Duration::from_millis(config.file_write_delay_ms)).await;
 
@@ -293,6 +299,13 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
     if matches!(session.format, AudioFormat::M4a) {
         log::info!("Converting WAV to M4A...");
         eprintln!("[Converting] WAV to M4A format...");
+
+        // Write processing status
+        let _ = observer.write_processing_status(
+            session.id.as_str(),
+            "Converting to M4A format..."
+        );
+
         let m4a_path = filepath.with_extension("m4a");
 
         match convert_wav_to_m4a(&filepath, &m4a_path).await {
@@ -328,6 +341,7 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
             .and_then(|n| n.to_str())
             .unwrap_or("unknown")
             .to_string(),
+        file_path: Some(final_filepath.to_string_lossy().to_string()),
         duration: session.duration.to_api_value(),
         file_size_mb: format!("{:.2}", file_size_mb),
         format: session.format.to_string(),

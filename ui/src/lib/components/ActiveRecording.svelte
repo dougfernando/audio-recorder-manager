@@ -28,8 +28,18 @@
             sessionId: $currentSession
           });
           console.log('Polled status:', status);
-          if (status && status.status === 'recording') {
+          if (status) {
             recordingStatus.set(status);
+            // If completed, stop recording state
+            if (status.status === 'completed') {
+              setTimeout(() => {
+                isRecording.set(false);
+                currentSession.set(null);
+                if (pollInterval) {
+                  clearInterval(pollInterval);
+                }
+              }, 5000); // Show completion for 5 seconds
+            }
           }
         } catch (error) {
           console.error('Failed to poll recording status:', error);
@@ -53,16 +63,19 @@
         sessionId: $currentSession,
       });
 
-      console.log('Recording stopped');
+      console.log('Stop signal sent, waiting for processing to complete...');
+      // Don't clear the states here - let the polling continue
+      // so it can detect the "processing" and "completed" status updates
+      // The polling will auto-stop when it detects status === 'completed'
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+      // On error, clean up
       isRecording.set(false);
       currentSession.set(null);
       recordingStatus.set(null);
-
       if (pollInterval) {
         clearInterval(pollInterval);
       }
-    } catch (error) {
-      console.error('Failed to stop recording:', error);
     } finally {
       isStopping = false;
     }
@@ -84,20 +97,65 @@
 </script>
 
 {#if $isRecording && $recordingStatus}
-  <!-- Recording Header with Pulse Animation -->
-  <div class="recording-header">
-    <div class="recording-indicator">
-      <div class="pulse-dot"></div>
-      <span class="recording-text">RECORDING</span>
-      <span class="live-badge">
-        <span class="live-dot"></span>
-        LIVE
-      </span>
+  <!-- Processing Status Header -->
+  {#if $recordingStatus.status === 'processing'}
+    <div class="processing-header">
+      <div class="processing-indicator">
+        <div class="spinner"></div>
+        <span class="processing-text">PROCESSING</span>
+      </div>
+      <span class="session-id">{$recordingStatus.session_id || 'N/A'}</span>
     </div>
-    <span class="session-id">{$recordingStatus.session_id || 'N/A'}</span>
-  </div>
+    <div class="processing-message">
+      {$recordingStatus.message || 'Processing audio...'}
+    </div>
+  {:else if $recordingStatus.status === 'completed'}
+    <!-- Completion Header -->
+    <div class="completion-header">
+      <div class="completion-indicator">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+        <span class="completion-text">COMPLETED</span>
+      </div>
+      <span class="session-id">{$recordingStatus.session_id || 'N/A'}</span>
+    </div>
+    <div class="completion-details">
+      <div class="completion-message">{$recordingStatus.message || 'Recording completed successfully'}</div>
+      {#if $recordingStatus.filename}
+        <div class="file-info">
+          <strong>File:</strong> {$recordingStatus.filename}
+        </div>
+      {/if}
+      {#if $recordingStatus.file_path}
+        <div class="file-path">
+          <strong>Location:</strong>
+          <code>{$recordingStatus.file_path}</code>
+        </div>
+      {/if}
+      {#if $recordingStatus.file_size_mb}
+        <div class="file-size">
+          <strong>Size:</strong> {$recordingStatus.file_size_mb} MB
+        </div>
+      {/if}
+    </div>
+  {:else}
+    <!-- Recording Header with Pulse Animation -->
+    <div class="recording-header">
+      <div class="recording-indicator">
+        <div class="pulse-dot"></div>
+        <span class="recording-text">RECORDING</span>
+        <span class="live-badge">
+          <span class="live-dot"></span>
+          LIVE
+        </span>
+      </div>
+      <span class="session-id">{$recordingStatus.session_id || 'N/A'}</span>
+    </div>
+  {/if}
 
-  <!-- Large Timer Display -->
+  <!-- Large Timer Display (only show during recording) -->
+  {#if $recordingStatus.status === 'recording'}
   <div class="timer-card">
     <div class="time-display">
       <span class="elapsed">{formatTime(elapsed)}</span>
@@ -196,8 +254,10 @@
       </div>
     </div>
   </div>
+  {/if}
 
-  <!-- Stop Button -->
+  <!-- Stop Button (only show during recording) -->
+  {#if $recordingStatus.status === 'recording'}
   <button
     class="btn btn-danger btn-lg stop-btn"
     on:click={stopRecording}
@@ -215,6 +275,7 @@
       Stop Recording
     {/if}
   </button>
+  {/if}
 {:else}
   <!-- Idle State -->
   <div class="idle-state">
@@ -557,6 +618,118 @@
   .idle-state p {
     font-size: 14px;
     color: var(--text-secondary);
+  }
+
+  /* Processing Header */
+  .processing-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, var(--warning) 0%, #F59E0B 100%);
+    border-radius: var(--corner-radius-medium) var(--corner-radius-medium) 0 0;
+    margin: calc(var(--spacing-lg) * -1) calc(var(--spacing-lg) * -1) var(--spacing-lg);
+  }
+
+  .processing-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+  }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .processing-text {
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  .processing-message {
+    padding: var(--spacing-lg);
+    background-color: var(--warning-bg);
+    color: var(--warning);
+    border-radius: var(--corner-radius-medium);
+    margin-bottom: var(--spacing-lg);
+    text-align: center;
+    font-weight: 600;
+  }
+
+  /* Completion Header */
+  .completion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, var(--success) 0%, #10B981 100%);
+    border-radius: var(--corner-radius-medium) var(--corner-radius-medium) 0 0;
+    margin: calc(var(--spacing-lg) * -1) calc(var(--spacing-lg) * -1) var(--spacing-lg);
+  }
+
+  .completion-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    color: white;
+  }
+
+  .completion-text {
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  .completion-details {
+    padding: var(--spacing-lg);
+    background-color: var(--success-bg);
+    border: 2px solid var(--success);
+    border-radius: var(--corner-radius-medium);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .completion-message {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--success);
+    margin-bottom: var(--spacing-md);
+  }
+
+  .file-info, .file-path, .file-size {
+    margin-top: var(--spacing-sm);
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  .file-info strong, .file-path strong, .file-size strong {
+    color: var(--text-primary);
+    margin-right: var(--spacing-sm);
+  }
+
+  .file-path code {
+    display: inline-block;
+    margin-top: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background-color: var(--layer-fill-alt);
+    border-radius: var(--corner-radius-small);
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    word-break: break-all;
+    color: var(--text-primary);
   }
 
   /* Responsive */

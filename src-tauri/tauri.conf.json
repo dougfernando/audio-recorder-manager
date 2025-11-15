@@ -20,7 +20,8 @@
       "dialog": {
         "all": false,
         "open": true,
-        "save": true
+        "save": true,
+        "ask": true
       },
       "fs": {
         "all": false,
@@ -73,10 +74,10 @@
         "fullscreen": false,
         "resizable": true,
         "title": "Audio Recorder Manager",
-        "width": 1000,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600
+        "width": 1100,
+        "height": 750,
+        "minWidth": 900,
+        "minHeight": 650
       }
     ]
   }

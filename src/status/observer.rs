@@ -25,6 +25,7 @@ pub struct RecordingStatus {
 pub struct RecordingResult {
     pub session_id: String,
     pub filename: String,
+    pub file_path: Option<String>,
     pub duration: i64,
     pub file_size_mb: String,
     pub format: String,

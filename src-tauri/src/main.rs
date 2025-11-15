@@ -13,6 +13,9 @@ use std::str::FromStr;
 use std::sync::Mutex;
 use tauri::{Manager, State};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 // State to track active recording sessions
 struct AppState {
     active_sessions: Mutex<Vec<String>>,
@@ -362,6 +365,55 @@ async fn get_active_sessions(state: State<'_, AppState>) -> Result<Vec<String>, 
     Ok(sessions.clone())
 }
 
+/// Open a recording file with the default application
+#[tauri::command]
+async fn open_recording(file_path: String) -> Result<String, String> {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+
+    // Verify the file exists
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // Open the file with the default application
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(&["/C", "start", "", &file_path]);
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("Opening files is only supported on Windows".to_string());
+    }
+
+    Ok(format!("Opened: {}", file_path))
+}
+
+/// Delete a recording file
+#[tauri::command]
+async fn delete_recording(file_path: String) -> Result<String, String> {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+
+    // Verify the file exists
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // Delete the file
+    std::fs::remove_file(path)
+        .map_err(|e| format!("Failed to delete file: {}", e))?;
+
+    Ok(format!("Successfully deleted: {}", file_path))
+}
+
 /// Set up file watcher for status directory
 fn setup_status_watcher(app_handle: tauri::AppHandle) {
     let config = RecorderConfig::new();
@@ -429,6 +481,8 @@ fn main() {
             get_recording_status,
             list_recordings,
             get_active_sessions,
+            open_recording,
+            delete_recording,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

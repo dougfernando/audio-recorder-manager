@@ -1,6 +1,6 @@
 <script>
   import { invoke } from '@tauri-apps/api/tauri';
-  import { open } from '@tauri-apps/api/shell';
+  import { ask } from '@tauri-apps/api/dialog';
   import { recordings, formatFileSize } from '../stores';
   import { onMount } from 'svelte';
 
@@ -24,28 +24,52 @@
   }
 
   async function openRecording(path) {
+    console.log('Opening recording:', path);
     try {
-      await open(path);
+      const result = await invoke('open_recording', { filePath: path });
+      console.log('Successfully opened:', result);
     } catch (error) {
       console.error('Failed to open recording:', error);
+      const errorMsg = error?.message || error?.toString() || 'Unknown error';
+      alert(`Failed to open recording: ${errorMsg}\n\nPath: ${path}`);
     }
   }
 
   async function deleteRecording(recording) {
-    if (!confirm(`Are you sure you want to delete "${recording.filename}"?`)) {
-      return;
-    }
+    console.log('Delete requested for:', recording.filename);
 
-    isDeleting[recording.filename] = true;
     try {
-      // Note: This functionality would need to be implemented in the backend
-      // For now, we'll just show the UI
-      console.log('Delete not implemented yet:', recording.path);
+      // Use Tauri's native dialog API for confirmation
+      const confirmed = await ask(
+        `Are you sure you want to delete "${recording.filename}"?`,
+        {
+          title: 'Delete Recording',
+          type: 'warning'
+        }
+      );
+      console.log('Confirmation result:', confirmed);
+
+      if (!confirmed) {
+        console.log('Deletion cancelled by user');
+        return;
+      }
+
+      isDeleting[recording.filename] = true;
+      console.log('Starting deletion of:', recording.path);
+
+      const result = await invoke('delete_recording', {
+        filePath: recording.path
+      });
+      console.log('Delete result:', result);
+      console.log('Successfully deleted:', recording.filename);
       await loadRecordings();
     } catch (error) {
       console.error('Failed to delete recording:', error);
+      const errorMsg = error?.message || error?.toString() || 'Unknown error';
+      alert(`Failed to delete recording: ${errorMsg}`);
     } finally {
-      isDeleting[recording.filename] = false;
+      delete isDeleting[recording.filename];
+      isDeleting = isDeleting; // Trigger reactivity
     }
   }
 </script>

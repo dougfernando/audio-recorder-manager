@@ -126,7 +126,7 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    background-color: var(--layer-fill-default);
+    background: linear-gradient(135deg, #F5F5F7 0%, #E8EDF2 100%);
   }
 
   /* Windows 11 Style Navigation Tabs */
@@ -134,10 +134,11 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    padding: var(--spacing-sm) var(--spacing-xxl);
-    background-color: var(--card-background);
-    backdrop-filter: blur(40px);
-    border-bottom: 2px solid var(--divider-stroke);
+    padding: var(--spacing-md) var(--spacing-xxl);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+    backdrop-filter: blur(40px) saturate(180%);
+    border-bottom: 1px solid rgba(0, 95, 192, 0.1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     flex-shrink: 0;
   }
 
@@ -174,9 +175,10 @@
   }
 
   .nav-tab.active {
-    background-color: var(--accent-default);
+    background: linear-gradient(135deg, #0067C0 0%, #0078D4 100%);
     color: var(--text-on-accent);
     font-weight: 500;
+    box-shadow: 0 2px 8px rgba(0, 103, 192, 0.3), 0 0 0 1px rgba(0, 103, 192, 0.1);
   }
 
   .nav-tab svg {

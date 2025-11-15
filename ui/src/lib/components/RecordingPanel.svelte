@@ -48,7 +48,7 @@
   }
 </script>
 
-<div class="card">
+<div class="card recording-card">
   <h2 class="card-title">Start Recording</h2>
 
   {#if errorMessage}
@@ -72,16 +72,20 @@
           {formatDuration(preset)}
         </button>
       {/each}
-    </div>
-    <div class="manual-mode">
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          bind:checked={$isManualMode}
-          disabled={$isRecording}
-        />
-        <span>Manual Mode (stop manually)</span>
-      </label>
+      <button
+        class="preset-btn manual-btn {$isManualMode ? 'active' : ''}"
+        on:click={() => {
+          isManualMode.set(true);
+        }}
+        disabled={$isRecording}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Manual
+      </button>
     </div>
   </div>
 
@@ -125,6 +129,17 @@
 </div>
 
 <style>
+  .recording-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+    border: 1px solid rgba(0, 103, 192, 0.1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 103, 192, 0.05);
+  }
+
+  .recording-card:hover {
+    border-color: rgba(0, 103, 192, 0.15);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 103, 192, 0.08);
+  }
+
   .error-message {
     background-color: var(--danger-bg);
     border: 1px solid var(--danger);
@@ -159,28 +174,22 @@
   }
 
   .preset-btn.active {
-    background-color: var(--info-bg);
+    background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
     border-color: var(--accent-default);
     color: var(--accent-default);
+    box-shadow: 0 2px 6px rgba(0, 103, 192, 0.15);
+    font-weight: 500;
   }
 
-  .manual-mode {
-    margin-top: var(--spacing-sm);
-  }
-
-  .checkbox-label {
+  .manual-btn {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
-    font-size: 14px;
-    color: var(--text-secondary);
-    cursor: pointer;
+    justify-content: center;
+    gap: 6px;
   }
 
-  .checkbox-label input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
+  .manual-btn svg {
+    flex-shrink: 0;
   }
 
   .form-row {
@@ -192,5 +201,19 @@
 
   .start-btn {
     width: 100%;
+    background: linear-gradient(135deg, #0067C0 0%, #0078D4 100%);
+    box-shadow: 0 4px 12px rgba(0, 103, 192, 0.3);
+    transition: all 0.2s ease;
+  }
+
+  .start-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0078D4 0%, #4A9EFF 100%);
+    box-shadow: 0 6px 16px rgba(0, 103, 192, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .start-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 103, 192, 0.3);
   }
 </style>
