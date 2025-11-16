@@ -648,19 +648,27 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
 }
 
 fn main() {
-    // Initialize logger to write to file
+    // Initialize logger to write to file in application folder
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+
+    let log_path = exe_dir.join("tauri_app.log");
+
     let log_file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open("tauri_app.log")
+        .open(&log_path)
         .expect("Failed to open log file");
 
     env_logger::Builder::from_default_env()
         .target(env_logger::Target::Pipe(Box::new(log_file)))
-        .filter_level(log::LevelFilter::Debug)
+        .filter_level(log::LevelFilter::Info)
         .init();
 
     log::info!("Tauri application starting...");
+    log::info!("Log file: {}", log_path.display());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
