@@ -6,6 +6,7 @@ pub mod domain;
 pub mod error;
 pub mod recorder;
 pub mod status;
+pub mod transcription;
 pub mod wasapi_loopback;
 pub mod wasapi_microphone;
 

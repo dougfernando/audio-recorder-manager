@@ -6,6 +6,7 @@ use audio_recorder_manager::{
     config::RecorderConfig,
     domain::{AudioFormat, RecordingDuration},
     recorder::RecordingQuality,
+    transcription::{load_config, save_config, transcribe_audio, TranscriptionConfig},
 };
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
@@ -414,6 +415,96 @@ async fn delete_recording(file_path: String) -> Result<String, String> {
     Ok(format!("Successfully deleted: {}", file_path))
 }
 
+/// Load transcription configuration
+#[tauri::command]
+async fn load_transcription_config() -> Result<TranscriptionConfig, String> {
+    load_config().map_err(|e| e.to_string())
+}
+
+/// Save transcription configuration
+#[tauri::command]
+async fn save_transcription_config(config: TranscriptionConfig) -> Result<(), String> {
+    save_config(&config).map_err(|e| e.to_string())
+}
+
+/// Transcribe an audio file using Gemini API
+#[tauri::command]
+async fn transcribe_recording(
+    file_path: String,
+    session_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    use std::path::Path;
+
+    log::info!("Transcription requested for: {}", file_path);
+
+    // Load configuration
+    let config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
+
+    // Validate API key
+    if config.api_key.is_empty() {
+        log::error!("Transcription failed: API key not configured");
+        return Err("API key not configured. Please configure it in Settings.".to_string());
+    }
+
+    // Validate file path
+    let path = Path::new(&file_path);
+    if !path.exists() {
+        log::error!("Transcription failed: File not found at {}", file_path);
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // Generate session ID if not provided
+    let session_id = session_id.unwrap_or_else(|| {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        format!("transcribe_{}", timestamp)
+    });
+
+    log::info!("Starting transcription with session ID: {}", session_id);
+
+    // Run transcription (now async, no need for spawn_blocking)
+    let path_clone = path.to_path_buf();
+    let api_key = config.api_key.clone();
+    let model = config.model.clone();
+    let prompt = config.prompt.clone();
+    let optimize = config.optimize_audio;
+    let session_id_clone = session_id.clone();
+
+    transcribe_audio(&path_clone, &api_key, &model, &prompt, optimize, &session_id_clone)
+        .await
+        .map(|result| {
+            log::info!("Transcription completed successfully");
+            serde_json::to_value(result).unwrap()
+        })
+        .map_err(|e| {
+            log::error!("Transcription failed: {}", e);
+            e.to_string()
+        })
+}
+
+/// Read transcript file content
+#[tauri::command]
+async fn read_transcript(file_path: String) -> Result<String, String> {
+    use std::path::Path;
+
+    log::info!("Reading transcript from: {}", file_path);
+
+    let path = Path::new(&file_path);
+    if !path.exists() {
+        log::error!("Transcript file not found: {}", file_path);
+        return Err(format!("Transcript file not found: {}", file_path));
+    }
+
+    std::fs::read_to_string(path)
+        .map_err(|e| {
+            log::error!("Failed to read transcript file: {}", e);
+            format!("Failed to read transcript: {}", e)
+        })
+}
+
 /// Set up file watcher for status directory
 fn setup_status_watcher(app_handle: tauri::AppHandle) {
     let config = RecorderConfig::new();
@@ -483,6 +574,10 @@ fn main() {
             get_active_sessions,
             open_recording,
             delete_recording,
+            load_transcription_config,
+            save_transcription_config,
+            transcribe_recording,
+            read_transcript,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

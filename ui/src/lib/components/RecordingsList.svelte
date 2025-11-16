@@ -3,12 +3,17 @@
   import { ask } from '@tauri-apps/api/dialog';
   import { recordings, formatFileSize } from '../stores';
   import { onMount } from 'svelte';
+  import TranscriptViewer from './TranscriptViewer.svelte';
 
   let isLoading = false;
   let isDeleting = {};
+  let isTranscribing = {};
+  let transcriptPath = {};
+  let viewingTranscript = null; // { path: string, name: string }
 
   onMount(async () => {
     await loadRecordings();
+    checkForTranscripts();
   });
 
   async function loadRecordings() {
@@ -72,6 +77,57 @@
       isDeleting = isDeleting; // Trigger reactivity
     }
   }
+
+  async function transcribeRecording(recording) {
+    console.log('Transcribe requested for:', recording.filename);
+
+    try {
+      isTranscribing[recording.filename] = true;
+      isTranscribing = isTranscribing; // Trigger reactivity
+
+      const result = await invoke('transcribe_recording', {
+        filePath: recording.path,
+      });
+
+      console.log('Transcription result:', result);
+
+      if (result.success && result.transcript_file) {
+        transcriptPath[recording.filename] = result.transcript_file;
+        transcriptPath = transcriptPath; // Trigger reactivity
+        alert(`Transcription completed!\n\nSaved to: ${result.transcript_file}`);
+      } else {
+        throw new Error(result.error || 'Transcription failed');
+      }
+    } catch (error) {
+      console.error('Failed to transcribe recording:', error);
+      const errorMsg = error?.message || error?.toString() || 'Unknown error';
+      alert(`Failed to transcribe recording: ${errorMsg}`);
+    } finally {
+      delete isTranscribing[recording.filename];
+      isTranscribing = isTranscribing; // Trigger reactivity
+    }
+  }
+
+  function viewTranscript(recording) {
+    const mdPath = transcriptPath[recording.filename] || recording.path.replace(/\.(wav|m4a)$/i, '.md');
+    viewingTranscript = {
+      path: mdPath,
+      name: recording.filename
+    };
+  }
+
+  function closeTranscriptViewer() {
+    viewingTranscript = null;
+  }
+
+  function checkForTranscripts() {
+    // Check if .md files exist for each recording
+    $recordings.forEach((recording) => {
+      const mdPath = recording.path.replace(/\.(wav|m4a)$/, '.md');
+      // We can't easily check file existence from frontend, so this would need backend support
+      // For now, we'll just enable the button and let the backend handle it
+    });
+  }
 </script>
 
 <div class="recordings-container">
@@ -134,7 +190,40 @@
               Play
             </button>
             <button
-              class="btn btn-secondary btn-sm"
+              class="btn btn-success btn-sm"
+              on:click={() => transcribeRecording(recording)}
+              disabled={isTranscribing[recording.filename]}
+            >
+              {#if isTranscribing[recording.filename]}
+                <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
+                Transcribing...
+              {:else}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <line x1="10" y1="9" x2="8" y2="9"/>
+                </svg>
+                Transcribe
+              {/if}
+            </button>
+            {#if transcriptPath[recording.filename]}
+              <button
+                class="btn btn-info btn-sm"
+                on:click={() => viewTranscript(recording)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                View Transcript
+              </button>
+            {/if}
+            <button
+              class="btn btn-danger btn-sm"
               on:click={() => deleteRecording(recording)}
               disabled={isDeleting[recording.filename]}
             >
@@ -170,6 +259,14 @@
     </div>
   {/if}
 </div>
+
+{#if viewingTranscript}
+  <TranscriptViewer
+    transcriptPath={viewingTranscript.path}
+    recordingName={viewingTranscript.name}
+    onClose={closeTranscriptViewer}
+  />
+{/if}
 
 <style>
   .recordings-container {
