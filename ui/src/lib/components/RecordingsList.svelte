@@ -9,11 +9,13 @@
   let isDeleting = {};
   let isTranscribing = {};
   let transcriptPath = {};
+  let transcriptionProgress = {}; // { filename: { step, progress, message } }
   let viewingTranscript = null; // { path: string, name: string }
+  let progressPollingIntervals = {};
 
   onMount(async () => {
     await loadRecordings();
-    checkForTranscripts();
+    await checkForTranscripts();
   });
 
   async function loadRecordings() {
@@ -21,6 +23,8 @@
     try {
       const result = await invoke('list_recordings');
       recordings.set(result);
+      // Check for transcripts after recordings are loaded
+      await checkForTranscripts();
     } catch (error) {
       console.error('Failed to load recordings:', error);
     } finally {
@@ -81,12 +85,19 @@
   async function transcribeRecording(recording) {
     console.log('Transcribe requested for:', recording.filename);
 
+    // Generate session ID for progress tracking
+    const sessionId = `transcribe_${Date.now()}`;
+
     try {
       isTranscribing[recording.filename] = true;
       isTranscribing = isTranscribing; // Trigger reactivity
 
+      // Start polling for progress
+      startProgressPolling(recording.filename, sessionId);
+
       const result = await invoke('transcribe_recording', {
         filePath: recording.path,
+        sessionId: sessionId,
       });
 
       console.log('Transcription result:', result);
@@ -103,6 +114,8 @@
       const errorMsg = error?.message || error?.toString() || 'Unknown error';
       alert(`Failed to transcribe recording: ${errorMsg}`);
     } finally {
+      // Stop polling
+      stopProgressPolling(recording.filename);
       delete isTranscribing[recording.filename];
       isTranscribing = isTranscribing; // Trigger reactivity
     }
@@ -120,13 +133,61 @@
     viewingTranscript = null;
   }
 
-  function checkForTranscripts() {
+  async function checkForTranscripts() {
     // Check if .md files exist for each recording
-    $recordings.forEach((recording) => {
-      const mdPath = recording.path.replace(/\.(wav|m4a)$/, '.md');
-      // We can't easily check file existence from frontend, so this would need backend support
-      // For now, we'll just enable the button and let the backend handle it
-    });
+    for (const recording of $recordings) {
+      try {
+        const exists = await invoke('check_transcript_exists', {
+          filePath: recording.path
+        });
+        if (exists) {
+          // Get the actual transcript path from backend
+          const mdPath = await invoke('get_transcript_path', {
+            filePath: recording.path
+          });
+          transcriptPath[recording.filename] = mdPath;
+        }
+      } catch (error) {
+        console.error('Failed to check transcript for', recording.filename, error);
+      }
+    }
+    transcriptPath = transcriptPath; // Trigger reactivity
+  }
+
+  function startProgressPolling(filename, sessionId) {
+    // Clear any existing interval
+    if (progressPollingIntervals[filename]) {
+      clearInterval(progressPollingIntervals[filename]);
+    }
+
+    // Poll for progress every 500ms
+    progressPollingIntervals[filename] = setInterval(async () => {
+      try {
+        const status = await invoke('get_transcription_status', {
+          sessionId: sessionId
+        });
+
+        if (status) {
+          transcriptionProgress[filename] = {
+            step: status.step,
+            progress: status.progress,
+            message: status.message
+          };
+          transcriptionProgress = transcriptionProgress; // Trigger reactivity
+        }
+      } catch (error) {
+        console.error('Failed to get transcription status:', error);
+      }
+    }, 500);
+  }
+
+  function stopProgressPolling(filename) {
+    if (progressPollingIntervals[filename]) {
+      clearInterval(progressPollingIntervals[filename]);
+      delete progressPollingIntervals[filename];
+      delete transcriptionProgress[filename];
+      transcriptionProgress = transcriptionProgress; // Trigger reactivity
+    }
   }
 </script>
 
@@ -210,18 +271,17 @@
                 Transcribe
               {/if}
             </button>
-            {#if transcriptPath[recording.filename]}
-              <button
-                class="btn btn-info btn-sm"
-                on:click={() => viewTranscript(recording)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                </svg>
-                View Transcript
-              </button>
-            {/if}
+            <button
+              class="btn btn-info btn-sm"
+              on:click={() => viewTranscript(recording)}
+              disabled={!transcriptPath[recording.filename]}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              View Transcript
+            </button>
             <button
               class="btn btn-danger btn-sm"
               on:click={() => deleteRecording(recording)}
@@ -237,6 +297,19 @@
               {/if}
             </button>
           </div>
+
+          {#if transcriptionProgress[recording.filename]}
+            <div class="transcription-progress">
+              <div class="progress-header">
+                <span class="progress-step">{transcriptionProgress[recording.filename].step}</span>
+                <span class="progress-percentage">{transcriptionProgress[recording.filename].progress}%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: {transcriptionProgress[recording.filename].progress}%"></div>
+              </div>
+              <div class="progress-message">{transcriptionProgress[recording.filename].message}</div>
+            </div>
+          {/if}
         </div>
       {/each}
     </div>
@@ -302,13 +375,14 @@
 
   .recordings-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--spacing-lg);
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: var(--spacing-xl);
   }
 
   .recording-card {
     display: flex;
     flex-direction: column;
+    padding: var(--spacing-lg);
     transition: all 0.2s ease;
   }
 
@@ -328,8 +402,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 56px;
-    height: 56px;
+    width: 64px;
+    height: 64px;
     border-radius: var(--corner-radius-large);
     color: white;
   }
@@ -384,14 +458,14 @@
   }
 
   .recording-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: var(--spacing-sm);
   }
 
   .btn-sm {
     padding: var(--spacing-sm) var(--spacing-md);
     font-size: 13px;
-    flex: 1;
   }
 
   .empty-state {
@@ -416,5 +490,52 @@
 
   .empty-state small {
     font-size: 14px;
+  }
+
+  .transcription-progress {
+    margin-top: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--stroke-surface);
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .progress-step {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-default);
+    text-transform: capitalize;
+  }
+
+  .progress-percentage {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 6px;
+    background-color: rgba(0, 103, 192, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-default) 0%, var(--accent-secondary) 100%);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-message {
+    font-size: 12px;
+    color: var(--text-tertiary);
   }
 </style>

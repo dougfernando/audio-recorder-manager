@@ -408,9 +408,21 @@ async fn delete_recording(file_path: String) -> Result<String, String> {
         return Err(format!("File not found: {}", file_path));
     }
 
-    // Delete the file
+    // Delete the audio file
     std::fs::remove_file(path)
         .map_err(|e| format!("Failed to delete file: {}", e))?;
+
+    // Also delete the transcript if it exists (in transcriptions directory)
+    let config = RecorderConfig::new();
+    if let Some(file_stem) = path.file_stem() {
+        let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+        if transcript_path.exists() {
+            log::info!("Deleting associated transcript: {:?}", transcript_path);
+            std::fs::remove_file(&transcript_path)
+                .map_err(|e| log::warn!("Failed to delete transcript: {}", e))
+                .ok();
+        }
+    }
 
     Ok(format!("Successfully deleted: {}", file_path))
 }
@@ -465,15 +477,19 @@ async fn transcribe_recording(
 
     log::info!("Starting transcription with session ID: {}", session_id);
 
+    // Load recorder config to get transcriptions directory
+    let recorder_config = RecorderConfig::new();
+
     // Run transcription (now async, no need for spawn_blocking)
     let path_clone = path.to_path_buf();
+    let transcriptions_dir = recorder_config.transcriptions_dir.clone();
     let api_key = config.api_key.clone();
     let model = config.model.clone();
     let prompt = config.prompt.clone();
     let optimize = config.optimize_audio;
     let session_id_clone = session_id.clone();
 
-    transcribe_audio(&path_clone, &api_key, &model, &prompt, optimize, &session_id_clone)
+    transcribe_audio(&path_clone, &transcriptions_dir, &api_key, &model, &prompt, optimize, &session_id_clone)
         .await
         .map(|result| {
             log::info!("Transcription completed successfully");
@@ -503,6 +519,91 @@ async fn read_transcript(file_path: String) -> Result<String, String> {
             log::error!("Failed to read transcript file: {}", e);
             format!("Failed to read transcript: {}", e)
         })
+}
+
+/// Check if a transcript exists for a given audio file
+#[tauri::command]
+async fn check_transcript_exists(file_path: String) -> Result<bool, String> {
+    use std::path::Path;
+
+    // Load recorder config to get transcriptions directory
+    let config = RecorderConfig::new();
+
+    let path = Path::new(&file_path);
+    let file_stem = path.file_stem()
+        .ok_or_else(|| "Invalid file path".to_string())?;
+
+    let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+
+    Ok(transcript_path.exists())
+}
+
+/// Get the transcript file path for a given audio file
+#[tauri::command]
+async fn get_transcript_path(file_path: String) -> Result<String, String> {
+    use std::path::Path;
+
+    // Load recorder config to get transcriptions directory
+    let config = RecorderConfig::new();
+
+    let path = Path::new(&file_path);
+    let file_stem = path.file_stem()
+        .ok_or_else(|| "Invalid file path".to_string())?;
+
+    let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+
+    Ok(transcript_path.to_string_lossy().to_string())
+}
+
+/// Get transcription status for a session
+#[tauri::command]
+async fn get_transcription_status(session_id: String) -> Result<Option<serde_json::Value>, String> {
+    use audio_recorder_manager::transcription::read_transcription_status;
+
+    read_transcription_status(&session_id)
+        .map(|status| status.map(|s| serde_json::to_value(s).unwrap()))
+        .map_err(|e| e.to_string())
+}
+
+/// Load recorder configuration (paths for recordings and transcriptions)
+#[tauri::command]
+async fn load_recorder_config() -> Result<serde_json::Value, String> {
+    let config = RecorderConfig::new();
+    serde_json::to_value(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))
+}
+
+/// Save recorder configuration (paths for recordings and transcriptions)
+#[tauri::command]
+async fn save_recorder_config(
+    recordings_dir: String,
+    transcriptions_dir: String,
+) -> Result<(), String> {
+    let mut config = RecorderConfig::new();
+    config.recordings_dir = std::path::PathBuf::from(recordings_dir);
+    config.transcriptions_dir = std::path::PathBuf::from(transcriptions_dir);
+
+    config.ensure_directories()
+        .map_err(|e| format!("Failed to create directories: {}", e))?;
+
+    config.save()
+        .map_err(|e| format!("Failed to save config: {}", e))?;
+
+    Ok(())
+}
+
+/// Pick a folder using native dialog
+#[tauri::command]
+async fn pick_folder(default_path: Option<String>) -> Result<Option<String>, String> {
+    use tauri::api::dialog::blocking::FileDialogBuilder;
+
+    let mut dialog = FileDialogBuilder::new();
+
+    if let Some(path) = default_path {
+        dialog = dialog.set_directory(path);
+    }
+
+    Ok(dialog.pick_folder().map(|p| p.to_string_lossy().to_string()))
 }
 
 /// Set up file watcher for status directory
@@ -578,6 +679,12 @@ fn main() {
             save_transcription_config,
             transcribe_recording,
             read_transcript,
+            check_transcript_exists,
+            get_transcript_path,
+            get_transcription_status,
+            load_recorder_config,
+            save_recorder_config,
+            pick_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

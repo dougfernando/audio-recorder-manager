@@ -120,6 +120,7 @@ fn get_status_dir() -> Result<PathBuf> {
 /// Transcribe an audio file using the Gemini API
 pub async fn transcribe_audio(
     audio_file_path: &Path,
+    transcriptions_dir: &Path,
     api_key: &str,
     model: &str,
     prompt: &str,
@@ -131,7 +132,15 @@ pub async fn transcribe_audio(
         bail!("Audio file not found: {}", audio_file_path.display());
     }
 
-    let output_file = audio_file_path.with_extension("md");
+    // Ensure transcriptions directory exists
+    fs::create_dir_all(transcriptions_dir)
+        .context("Failed to create transcriptions directory")?;
+
+    // Create output file in transcriptions directory with same name as audio file
+    let file_stem = audio_file_path
+        .file_stem()
+        .context("Failed to get file stem")?;
+    let output_file = transcriptions_dir.join(file_stem).with_extension("md");
 
     // Determine MIME type
     let mime_type = match audio_file_path.extension().and_then(|e| e.to_str()) {
