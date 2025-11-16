@@ -1,10 +1,18 @@
-# Rust
+# Rust Build
 /target/
+/crates/*/target/
 **/*.rs.bk
 *.pdb
+Cargo.lock
 
-# Storage directories - recordings and status
+# Storage directories - recordings and status (all locations)
 /storage/
+**/storage/recordings/
+**/storage/status/
+**/storage/signals/
+**/storage/transcriptions/
+*.wav
+*.m4a
 
 # IDE
 .vscode/
@@ -26,7 +34,7 @@ Thumbs.db
 *.so
 *.dylib
 
-# Python (for inspiration folder - if needed)
+# Python (reference code)
 __pycache__/
 *.py[cod]
 *$py.class
@@ -34,13 +42,26 @@ __pycache__/
 env/
 venv/
 
-# Frontend (UI)
-ui/node_modules/
-ui/dist/
-ui/.vite/
-ui/package-lock.json
+# Frontend (UI) - new location
+/crates/tauri-app/ui/node_modules/
+/crates/tauri-app/ui/dist/
+/crates/tauri-app/ui/.vite/
+package-lock.json
+
+# Legacy UI (old location - will be removed)
+/ui/node_modules/
+/ui/dist/
+/ui/.vite/
 
 # Tauri
-src-tauri/target/
-src-tauri/Cargo.lock
-src-tauri/WixTools/
+/crates/tauri-app/WixTools/
+
+# Test files (should be in tests/fixtures/)
+test_*.json
+nul
+
+# Old files (backup during reorganization)
+*.old
+/src/
+/src-tauri/
+/ui/

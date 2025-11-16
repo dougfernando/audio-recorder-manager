@@ -1,6 +1,15 @@
 # Audio Recorder Manager
 
-A high-performance command-line audio recorder manager built with Rust, converted from the Python version for improved performance and reliability.
+A high-performance audio recording system built with Rust, featuring both a command-line interface and a desktop GUI application. Organized as a Cargo workspace monorepo with a shared core library.
+
+## Project Structure
+
+This is a **Cargo workspace** with three crates:
+- **`crates/core`**: Shared library (`audio-recorder-manager-core`) - core recording logic
+- **`crates/cli`**: Command-line interface (`audio-recorder-manager-cli`)
+- **`crates/tauri-app`**: Desktop GUI application with Svelte frontend
+
+Both CLI and GUI use the same storage location (`storage/`) for recordings and transcriptions.
 
 ## Acknowledgments
 
@@ -59,11 +68,22 @@ No additional build dependencies required.
 
 ## Installation
 
+### Build from Source
+
 ```bash
+# Build entire workspace (CLI + Tauri)
 cargo build --release
+
+# Build only CLI
+cargo build -p audio-recorder-manager-cli --release
+
+# Build only Tauri app
+cargo build -p audio-recorder-manager-tauri --release
 ```
 
-The compiled binary will be in `target/release/audio-recorder-manager.exe` (Windows) or `target/release/audio-recorder-manager` (Linux/macOS).
+The compiled CLI binary will be in `target/release/audio-recorder-manager.exe` (Windows) or `target/release/audio-recorder-manager` (Linux/macOS).
+
+For Tauri GUI, see [docs/tauri-setup.md](docs/tauri-setup.md).
 
 ## Usage
 
@@ -205,31 +225,40 @@ Recording status is written to `storage/status/{session_id}.json` every second:
 
 ## Architecture
 
-The codebase follows a modular architecture for maintainability and scalability:
+The project is organized as a **Cargo workspace monorepo**:
 
-### Core Modules
+```
+audio-recorder-manager/
+├── crates/
+│   ├── core/              # Shared library (all business logic)
+│   │   ├── commands/      # record, stop, recover, status
+│   │   ├── transcription/ # Audio transcription
+│   │   ├── status/        # Status file management
+│   │   └── ...
+│   ├── cli/               # CLI binary (thin wrapper)
+│   └── tauri-app/         # Tauri GUI + Svelte frontend
+├── storage/               # Shared storage (gitignored)
+│   ├── recordings/        # Output files
+│   ├── status/            # Recording status
+│   ├── signals/           # Stop signals
+│   └── transcriptions/    # Transcripts
+├── docs/                  # Documentation
+│   ├── architecture.md    # Detailed design docs
+│   ├── migration-guide.md # Reorganization guide
+│   └── tauri-setup.md     # UI development
+└── examples/              # Example scripts
 
-- **main.rs**: Application entry point (18 lines)
-- **cli.rs**: Command-line argument parsing and routing
-- **commands/**: Command implementations
-  - **record.rs**: Dual-channel recording orchestration and session management
-  - **stop.rs**: Stop signal creation and active session detection
-  - **recover.rs**: Recovery of interrupted recordings with merge and conversion
-  - **status.rs**: Audio device enumeration
-- **config.rs**: Configuration management
-- **devices.rs**: Audio device detection using `cpal`
-- **domain.rs**: Core domain types (SessionId, AudioFormat, RecordingDuration)
-- **recorder.rs**: Audio capture, quality presets, and FFmpeg integration
-- **status/**: Status file management
-- **wasapi_loopback/**: Windows WASAPI loopback recording (system audio)
-- **wasapi_microphone/**: Windows WASAPI microphone recording (input audio)
+```
 
 ### Design Principles
 
+- **Monorepo**: Single source of truth with shared core library
 - **Separation of Concerns**: Each module has a single, clear responsibility
-- **Command Pattern**: Each command is self-contained in its own module
+- **Unified Storage**: CLI and GUI share the same recordings directory
 - **Type Safety**: Strong typing prevents runtime errors
 - **Async/Await**: Non-blocking I/O with Tokio runtime
+
+See [docs/architecture.md](docs/architecture.md) for detailed documentation.
 
 ## Performance Improvements over Python
 
@@ -242,18 +271,24 @@ The codebase follows a modular architecture for maintainability and scalability:
 ## Development
 
 ```bash
-# Check for compilation errors
+# Check entire workspace
 cargo check
 
-# Run with logging
-RUST_LOG=debug cargo run -- record 5 wav
+# Run CLI with logging
+RUST_LOG=debug cargo run -p audio-recorder-manager-cli -- record 5 wav
 
 # Run tests
-cargo test
+cargo test -p audio-recorder-manager-core
 
 # Build optimized release
 cargo build --release
+
+# Tauri development
+cd crates/tauri-app/ui && npm install
+cd .. && cargo tauri dev
 ```
+
+See [docs/migration-guide.md](docs/migration-guide.md) for detailed development workflow.
 
 ## License
 
