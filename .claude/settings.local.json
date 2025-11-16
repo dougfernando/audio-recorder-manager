@@ -48,7 +48,11 @@
       "Bash(timeout /t 5 /nobreak)",
       "Bash(tee:*)",
       "Bash(timeout /t 10 /nobreak)",
-      "Bash(../../target/debug/audio-recorder-manager-tauri.exe)"
+      "Bash(../../target/debug/audio-recorder-manager-tauri.exe)",
+      "Bash(timeout /t 30 /nobreak)",
+      "Bash(timeout /t 60 /nobreak)",
+      "Bash(timeout /t 120 /nobreak)",
+      "Bash(timeout /t 180 /nobreak)"
     ],
     "deny": [],
     "ask": []
