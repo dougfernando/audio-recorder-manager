@@ -5,6 +5,21 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Audio Recorder Manager</title>
+    <script>
+      // Track page load timing
+      window.__pageLoadStart = performance.now();
+      console.log('[TIMING] HTML parsing started');
+
+      // Log when DOM is ready
+      document.addEventListener('DOMContentLoaded', () => {
+        console.log('[TIMING] DOMContentLoaded event fired:', performance.now(), 'ms from navigation');
+      });
+
+      // Log when page is fully loaded (including images, stylesheets, etc.)
+      window.addEventListener('load', () => {
+        console.log('[TIMING] Window load event fired:', performance.now(), 'ms from navigation');
+      });
+    </script>
     <style>
       /* Loading screen to improve perceived performance */
       #app:empty::before {
@@ -24,7 +39,13 @@
     </style>
   </head>
   <body>
+    <script>
+      console.log('[TIMING] Body parsing started:', performance.now(), 'ms from navigation');
+    </script>
     <div id="app"></div>
+    <script>
+      console.log('[TIMING] About to load main.js module:', performance.now(), 'ms from navigation');
+    </script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
