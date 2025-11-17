@@ -15,7 +15,7 @@ use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watche
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Mutex;
-use tauri::{Emitter, Listener, Manager, State};
+use tauri::{Emitter, State};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
