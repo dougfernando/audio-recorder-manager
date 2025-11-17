@@ -1,24 +1,58 @@
 <script>
-  import { onMount } from 'svelte';
+  console.log('[TIMING] App.svelte script starting to execute');
+  const componentStart = performance.now();
+
+  import { onMount, afterUpdate, tick } from 'svelte';
+  console.log('[TIMING] Imported lifecycle functions:', performance.now() - componentStart, 'ms');
+
   import { listen } from '@tauri-apps/api/event';
+  console.log('[TIMING] Imported @tauri-apps/api/event:', performance.now() - componentStart, 'ms');
+
   import { invoke } from '@tauri-apps/api/core';
+  console.log('[TIMING] Imported @tauri-apps/api/core:', performance.now() - componentStart, 'ms');
+
+  console.log('[TIMING] Importing components...');
   import RecordingPanel from './lib/components/RecordingPanel.svelte';
   import ActiveRecording from './lib/components/ActiveRecording.svelte';
   import RecordingsList from './lib/components/RecordingsList.svelte';
   import Recovery from './lib/components/Recovery.svelte';
   import Settings from './lib/components/Settings.svelte';
+  console.log('[TIMING] All components imported:', performance.now() - componentStart, 'ms');
+
   import {
     isRecording,
     currentSession,
     recordingStatus,
     recordings,
   } from './lib/stores';
+  console.log('[TIMING] Stores imported:', performance.now() - componentStart, 'ms');
 
   let activeTab = 'record';
   let hasLoadedRecordings = false;
+  let firstRenderComplete = false;
+
+  console.log('[TIMING] App.svelte script setup complete:', performance.now() - componentStart, 'ms');
+
+  // Track first render completion
+  afterUpdate(() => {
+    if (!firstRenderComplete) {
+      firstRenderComplete = true;
+      console.log('[TIMING] First render complete (afterUpdate):', performance.now() - componentStart, 'ms');
+
+      // Schedule next frame check to confirm visual rendering
+      requestAnimationFrame(() => {
+        console.log('[TIMING] First frame painted:', performance.now() - componentStart, 'ms');
+        console.log('[TIMING] === UI IS NOW VISIBLE ===');
+      });
+    }
+  });
 
   onMount(async () => {
+    console.log('[TIMING] App.svelte onMount started:', performance.now() - componentStart, 'ms');
+    const mountStart = performance.now();
+
     // Listen for recording status updates from backend
+    console.log('[TIMING] Setting up event listener...');
     const unlisten = await listen('recording-status-update', (event) => {
       recordingStatus.set(event.payload);
 
@@ -35,6 +69,10 @@
         }
       }
     });
+    console.log('[TIMING] Event listener setup complete:', performance.now() - mountStart, 'ms');
+
+    console.log('[TIMING] App.svelte onMount complete:', performance.now() - componentStart, 'ms');
+    console.log('[TIMING] Component fully mounted and ready');
 
     // Cleanup on unmount
     return () => {

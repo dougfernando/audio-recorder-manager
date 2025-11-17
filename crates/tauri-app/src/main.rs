@@ -648,6 +648,8 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
 }
 
 fn main() {
+    let app_start = std::time::Instant::now();
+
     // Initialize logger to write to file in application folder
     let exe_dir = std::env::current_exe()
         .ok()
@@ -667,46 +669,74 @@ fn main() {
         .filter_level(log::LevelFilter::Info)
         .init();
 
+    log::info!("========================================");
     log::info!("Tauri application starting...");
     log::info!("Log file: {}", log_path.display());
+    log::info!("[TIMING] App start: {:?}", app_start.elapsed());
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_dialog::init())
-        .manage(AppState {
-            active_sessions: Mutex::new(Vec::new()),
-        })
-        .setup(|app| {
+    log::info!("[TIMING] Creating Tauri builder: {:?}", app_start.elapsed());
+    let builder = tauri::Builder::default();
+
+    log::info!("[TIMING] Initializing shell plugin: {:?}", app_start.elapsed());
+    let builder = builder.plugin(tauri_plugin_shell::init());
+
+    log::info!("[TIMING] Initializing dialog plugin: {:?}", app_start.elapsed());
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+
+    log::info!("[TIMING] Setting up app state: {:?}", app_start.elapsed());
+    let builder = builder.manage(AppState {
+        active_sessions: Mutex::new(Vec::new()),
+    });
+
+    log::info!("[TIMING] Configuring setup handler: {:?}", app_start.elapsed());
+    let builder = builder.setup({
+        let app_start = app_start.clone();
+        move |app| {
+            log::info!("[TIMING] Setup handler executing: {:?}", app_start.elapsed());
+
             // Ensure storage directories exist
+            log::info!("[TIMING] Creating RecorderConfig: {:?}", app_start.elapsed());
             let config = RecorderConfig::new();
+
+            log::info!("[TIMING] Ensuring directories exist: {:?}", app_start.elapsed());
             config.ensure_directories().expect("Failed to create storage directories");
 
             // Set up status file watcher
+            log::info!("[TIMING] Setting up status watcher: {:?}", app_start.elapsed());
             setup_status_watcher(app.handle().clone());
 
+            log::info!("[TIMING] Setup handler complete: {:?}", app_start.elapsed());
             Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            start_recording,
-            stop_recording,
-            get_status,
-            recover_recordings,
-            get_recording_status,
-            list_recordings,
-            get_active_sessions,
-            open_recording,
-            delete_recording,
-            load_transcription_config,
-            save_transcription_config,
-            transcribe_recording,
-            read_transcript,
-            check_transcript_exists,
-            get_transcript_path,
-            get_transcription_status,
-            load_recorder_config,
-            save_recorder_config,
-            pick_folder,
-        ])
+        }
+    });
+
+    log::info!("[TIMING] Configuring invoke handler: {:?}", app_start.elapsed());
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        start_recording,
+        stop_recording,
+        get_status,
+        recover_recordings,
+        get_recording_status,
+        list_recordings,
+        get_active_sessions,
+        open_recording,
+        delete_recording,
+        load_transcription_config,
+        save_transcription_config,
+        transcribe_recording,
+        read_transcript,
+        check_transcript_exists,
+        get_transcript_path,
+        get_transcription_status,
+        load_recorder_config,
+        save_recorder_config,
+        pick_folder,
+    ]);
+
+    log::info!("[TIMING] Starting Tauri application run loop: {:?}", app_start.elapsed());
+    builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+
+    log::info!("[TIMING] Application exited: {:?}", app_start.elapsed());
 }
