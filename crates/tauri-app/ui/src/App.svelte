@@ -15,11 +15,9 @@
   } from './lib/stores';
 
   let activeTab = 'record';
+  let hasLoadedRecordings = false;
 
   onMount(async () => {
-    // Load initial data
-    await loadRecordings();
-
     // Listen for recording status updates from backend
     const unlisten = await listen('recording-status-update', (event) => {
       recordingStatus.set(event.payload);
@@ -31,8 +29,10 @@
       } else if (event.payload.status === 'completed' || event.payload.status === 'stopped') {
         isRecording.set(false);
         currentSession.set(null);
-        // Reload recordings list
-        loadRecordings();
+        // Reload recordings list if already loaded
+        if (hasLoadedRecordings) {
+          loadRecordings();
+        }
       }
     });
 
@@ -46,6 +46,7 @@
     try {
       const result = await invoke('list_recordings');
       recordings.set(result);
+      hasLoadedRecordings = true;
     } catch (error) {
       console.error('Failed to load recordings:', error);
     }
@@ -53,6 +54,11 @@
 
   function switchTab(tab) {
     activeTab = tab;
+
+    // Lazy load recordings when user first visits the recordings tab
+    if (tab === 'recordings' && !hasLoadedRecordings) {
+      loadRecordings();
+    }
   }
 </script>
 
