@@ -1,6 +1,9 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(windows)]
+mod splash_screen;
+
 use audio_recorder_manager_core::{
     commands::{record, recover, status, stop},
     config::RecorderConfig,
@@ -674,6 +677,24 @@ fn main() {
     log::info!("Log file: {}", log_path.display());
     log::info!("[TIMING] App start: {:?}", app_start.elapsed());
 
+    // Create native splash screen (shows instantly, no WebView2 dependency)
+    #[cfg(windows)]
+    let splash = {
+        log::info!("[TIMING] Creating native splash screen: {:?}", app_start.elapsed());
+        match splash_screen::SplashScreen::new() {
+            Ok(s) => {
+                log::info!("[TIMING] Native splash screen created and visible: {:?}", app_start.elapsed());
+                Some(s)
+            }
+            Err(e) => {
+                log::warn!("Failed to create splash screen: {}", e);
+                None
+            }
+        }
+    };
+    #[cfg(not(windows))]
+    let splash: Option<()> = None;
+
     log::info!("[TIMING] Creating Tauri builder: {:?}", app_start.elapsed());
     let builder = tauri::Builder::default();
 
@@ -690,22 +711,32 @@ fn main() {
 
     log::info!("[TIMING] Configuring setup handler: {:?}", app_start.elapsed());
     let builder = builder.setup({
-        let app_start = app_start.clone();
+        let app_start_clone = app_start.clone();
+        let splash_opt = splash;
         move |app| {
-            log::info!("[TIMING] Setup handler executing: {:?}", app_start.elapsed());
+            log::info!("[TIMING] Setup handler executing: {:?}", app_start_clone.elapsed());
 
             // Ensure storage directories exist
-            log::info!("[TIMING] Creating RecorderConfig: {:?}", app_start.elapsed());
+            log::info!("[TIMING] Creating RecorderConfig: {:?}", app_start_clone.elapsed());
             let config = RecorderConfig::new();
 
-            log::info!("[TIMING] Ensuring directories exist: {:?}", app_start.elapsed());
+            log::info!("[TIMING] Ensuring directories exist: {:?}", app_start_clone.elapsed());
             config.ensure_directories().expect("Failed to create storage directories");
 
             // Set up status file watcher
-            log::info!("[TIMING] Setting up status watcher: {:?}", app_start.elapsed());
+            log::info!("[TIMING] Setting up status watcher: {:?}", app_start_clone.elapsed());
             setup_status_watcher(app.handle().clone());
 
-            log::info!("[TIMING] Setup handler complete: {:?}", app_start.elapsed());
+            log::info!("[TIMING] Setup handler complete: {:?}", app_start_clone.elapsed());
+
+            // Close splash screen now that main window is ready
+            #[cfg(windows)]
+            if let Some(s) = splash_opt {
+                log::info!("[TIMING] Closing splash screen: {:?}", app_start_clone.elapsed());
+                s.close();
+                log::info!("[TIMING] Splash screen closed: {:?}", app_start_clone.elapsed());
+            }
+
             Ok(())
         }
     });
