@@ -1,6 +1,8 @@
 # Performance Logging Guide
 
-This document describes the comprehensive logging added to identify bottlenecks causing the black screen delay when loading the Tauri app.
+This document describes the comprehensive logging added to identify bottlenecks causing delays when loading the Tauri app.
+
+> **Note**: The black screen issue has been fixed using deferred window visibility. See [WEBVIEW2_BLACK_SCREEN_FIX.md](./WEBVIEW2_BLACK_SCREEN_FIX.md) for details. This logging is still useful for identifying other performance bottlenecks.
 
 ## Overview
 
@@ -25,6 +27,8 @@ Timing logs have been added throughout the entire application stack to measure t
 - Setup handler execution
 - Directory creation
 - File watcher setup
+- **Window ready event** (when frontend signals it's ready to show)
+- **Window show operation** (when window becomes visible)
 - Invoke handler configuration
 - Application run loop start
 
@@ -36,6 +40,10 @@ Timing logs have been added throughout the entire application stack to measure t
 [TIMING] Creating Tauri builder: 2ms
 [TIMING] Initializing shell plugin: 5ms
 [TIMING] Setup handler executing: 15ms
+[TIMING] Setup handler complete: 25ms
+[TIMING] Received window-ready event: 1500ms
+[TIMING] Showing window now...
+[TIMING] Window shown successfully: 1502ms
 ```
 
 ### Frontend Logs (Browser Console)
