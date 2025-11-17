@@ -2,7 +2,6 @@
   import { invoke } from '@tauri-apps/api/core';
   import { ask } from '@tauri-apps/plugin-dialog';
   import { recordings, formatFileSize } from '../stores';
-  import { onMount } from 'svelte';
   import TranscriptViewer from './TranscriptViewer.svelte';
 
   let isLoading = false;
@@ -13,10 +12,10 @@
   let viewingTranscript = null; // { path: string, name: string }
   let progressPollingIntervals = {};
 
-  onMount(async () => {
-    await loadRecordings();
-    await checkForTranscripts();
-  });
+  // Check for transcripts whenever recordings change
+  $: if ($recordings.length > 0) {
+    checkForTranscripts();
+  }
 
   async function loadRecordings() {
     isLoading = true;
@@ -313,14 +312,28 @@
         </div>
       {/each}
     </div>
-  {:else if isLoading}
-    <div class="empty-state">
-      <svg class="spin" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12a9 9 0 11-6.219-8.56"/>
-      </svg>
-      <p>Loading recordings...</p>
+  {:else if $recordings.length === 0 && isLoading}
+    <!-- Skeleton loading UI -->
+    <div class="recordings-grid">
+      {#each Array(3) as _, i}
+        <div class="recording-card card skeleton">
+          <div class="skeleton-header">
+            <div class="skeleton-icon"></div>
+            <div class="skeleton-badge"></div>
+          </div>
+          <div class="skeleton-info">
+            <div class="skeleton-title"></div>
+            <div class="skeleton-meta"></div>
+          </div>
+          <div class="skeleton-actions">
+            <div class="skeleton-btn"></div>
+            <div class="skeleton-btn"></div>
+          </div>
+        </div>
+      {/each}
     </div>
-  {:else}
+  {:else if $recordings.length === 0}
+    <!-- Empty state when no recordings and not loading -->
     <div class="empty-state">
       <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M9 18V5l12-2v13"/>
@@ -537,5 +550,77 @@
   .progress-message {
     font-size: 12px;
     color: var(--text-tertiary);
+  }
+
+  /* Skeleton Loading Styles */
+  .recording-card.skeleton {
+    pointer-events: none;
+    user-select: none;
+  }
+
+  @keyframes skeleton-pulse {
+    0%, 100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  .skeleton-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .skeleton-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(90deg, rgba(0, 103, 192, 0.08) 0%, rgba(0, 103, 192, 0.12) 100%);
+    border-radius: 50%;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  .skeleton-badge {
+    width: 50px;
+    height: 24px;
+    background: linear-gradient(90deg, rgba(0, 103, 192, 0.08) 0%, rgba(0, 103, 192, 0.12) 100%);
+    border-radius: var(--corner-radius-small);
+    animation: skeleton-pulse 1.5s ease-in-out infinite 0.2s;
+  }
+
+  .skeleton-info {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .skeleton-title {
+    width: 80%;
+    height: 18px;
+    background: linear-gradient(90deg, rgba(0, 103, 192, 0.08) 0%, rgba(0, 103, 192, 0.12) 100%);
+    border-radius: var(--corner-radius-small);
+    margin-bottom: var(--spacing-sm);
+    animation: skeleton-pulse 1.5s ease-in-out infinite 0.1s;
+  }
+
+  .skeleton-meta {
+    width: 60%;
+    height: 14px;
+    background: linear-gradient(90deg, rgba(0, 103, 192, 0.08) 0%, rgba(0, 103, 192, 0.12) 100%);
+    border-radius: var(--corner-radius-small);
+    animation: skeleton-pulse 1.5s ease-in-out infinite 0.3s;
+  }
+
+  .skeleton-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+  }
+
+  .skeleton-btn {
+    flex: 1;
+    height: 36px;
+    background: linear-gradient(90deg, rgba(0, 103, 192, 0.08) 0%, rgba(0, 103, 192, 0.12) 100%);
+    border-radius: var(--corner-radius-medium);
+    animation: skeleton-pulse 1.5s ease-in-out infinite 0.4s;
   }
 </style>
