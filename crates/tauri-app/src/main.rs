@@ -705,33 +705,6 @@ fn main() {
             log::info!("[TIMING] Setting up status watcher: {:?}", app_start.elapsed());
             setup_status_watcher(app.handle().clone());
 
-            // Show window when frontend is ready (avoids black screen)
-            let window = app.get_webview_window("main").expect("Failed to get main window");
-            let window_clone = window.clone();
-            let app_start_clone = app_start.clone();
-
-            // Listen for window-ready event from frontend
-            let _listener = window.listen("window-ready", move |_event| {
-                log::info!("[TIMING] Received window-ready event: {:?}", app_start_clone.elapsed());
-                log::info!("[TIMING] Showing window now...");
-                if let Err(e) = window_clone.show() {
-                    log::error!("Failed to show window: {}", e);
-                } else {
-                    log::info!("[TIMING] Window shown successfully: {:?}", app_start_clone.elapsed());
-                }
-            });
-
-            // Fallback: Show window after 3 seconds if frontend doesn't emit ready event
-            let window_fallback = window.clone();
-            let app_start_fallback = app_start.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(3));
-                if !window_fallback.is_visible().unwrap_or(true) {
-                    log::warn!("[TIMING] Fallback: Showing window after 3s timeout: {:?}", app_start_fallback.elapsed());
-                    let _ = window_fallback.show();
-                }
-            });
-
             log::info!("[TIMING] Setup handler complete: {:?}", app_start.elapsed());
             Ok(())
         }
