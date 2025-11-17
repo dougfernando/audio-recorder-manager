@@ -146,7 +146,7 @@ unsafe extern "system" fn window_proc(
 
                 // Title
                 let title = "Audio Recorder Manager";
-                let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+                let mut title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
 
                 let mut title_rect = rect;
                 title_rect.top = 60;
@@ -172,7 +172,7 @@ unsafe extern "system" fn window_proc(
                 let old_font = SelectObject(hdc, font);
                 DrawTextW(
                     hdc,
-                    &title_wide,
+                    &mut title_wide,
                     &mut title_rect,
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE,
                 );
@@ -181,7 +181,7 @@ unsafe extern "system" fn window_proc(
 
                 // Loading text
                 let loading = "Loading...";
-                let loading_wide: Vec<u16> = loading.encode_utf16().chain(std::iter::once(0)).collect();
+                let mut loading_wide: Vec<u16> = loading.encode_utf16().chain(std::iter::once(0)).collect();
 
                 let mut loading_rect = rect;
                 loading_rect.top = 110;
@@ -208,7 +208,7 @@ unsafe extern "system" fn window_proc(
                 SetTextColor(hdc, COLORREF(0x00666666)); // Lighter gray
                 DrawTextW(
                     hdc,
-                    &loading_wide,
+                    &mut loading_wide,
                     &mut loading_rect,
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE,
                 );
