@@ -1,6 +1,14 @@
 # WebView2 Black Screen Fix
 
-This document explains the fix implemented to eliminate the black screen delay when loading the Tauri app on Windows.
+> **⚠️ UPDATE**: This approach was superseded after timing analysis revealed the actual bottleneck. See [WEBVIEW2_INITIALIZATION_DELAY.md](./WEBVIEW2_INITIALIZATION_DELAY.md) for the real fix.
+>
+> **TL;DR**: The delay was in WebView2 initialization (15 seconds), not UI rendering. Hiding the window didn't help because the delay happened during window creation itself.
+
+---
+
+## Original Approach (Not Used)
+
+This document explains the original fix attempted to eliminate the black screen delay when loading the Tauri app on Windows.
 
 ## The Problem
 

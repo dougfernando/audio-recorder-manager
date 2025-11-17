@@ -17,11 +17,12 @@
         "height": 750,
         "minWidth": 900,
         "minHeight": 650,
-        "visible": false,
+        "visible": true,
         "center": true,
         "decorations": true,
         "transparent": false,
-        "backgroundColor": "#F5F5F7"
+        "backgroundColor": "#F5F5F7",
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
       }
     ],
     "security": {

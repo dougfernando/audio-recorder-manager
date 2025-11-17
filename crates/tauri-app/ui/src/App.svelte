@@ -40,19 +40,9 @@
       console.log('[TIMING] First render complete (afterUpdate):', performance.now() - componentStart, 'ms');
 
       // Schedule next frame check to confirm visual rendering
-      requestAnimationFrame(async () => {
+      requestAnimationFrame(() => {
         console.log('[TIMING] First frame painted:', performance.now() - componentStart, 'ms');
-
-        // Emit window-ready event to backend to show the window
-        // This prevents the black screen by ensuring UI is rendered before showing
-        try {
-          const { emit } = await import('@tauri-apps/api/event');
-          await emit('window-ready', { timestamp: performance.now() });
-          console.log('[TIMING] Emitted window-ready event:', performance.now() - componentStart, 'ms');
-          console.log('[TIMING] === UI IS NOW VISIBLE ===');
-        } catch (error) {
-          console.error('[TIMING] Failed to emit window-ready event:', error);
-        }
+        console.log('[TIMING] === UI IS NOW VISIBLE ===');
       });
     }
   });
