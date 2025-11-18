@@ -328,9 +328,11 @@ Your entire response should be a single markdown document.`;
   }
 
   .settings-card {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
-    border: 1px solid rgba(0, 103, 192, 0.1);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 103, 192, 0.05);
+    background:
+      var(--bg-gradient-blue),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+    border: 1px solid rgba(79, 172, 254, 0.2);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(79, 172, 254, 0.1);
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -497,10 +499,18 @@ Your entire response should be a single markdown document.`;
     color: var(--text-primary);
     margin-bottom: var(--spacing-lg);
     margin-top: var(--spacing-xl);
+    padding-left: var(--spacing-sm);
+    border-left: 3px solid;
+    border-image: var(--gradient-purple) 1;
   }
 
   .section-title:first-child {
     margin-top: 0;
+    border-image: var(--gradient-blue) 1;
+  }
+
+  .section-title:nth-child(2) {
+    border-image: var(--gradient-teal) 1;
   }
 
   .section-divider {
@@ -616,9 +626,11 @@ Your entire response should be a single markdown document.`;
   /* Dark mode adjustments */
   @media (prefers-color-scheme: dark) {
     .settings-card {
-      background: linear-gradient(135deg, rgba(42, 42, 42, 0.95) 0%, rgba(36, 36, 36, 0.85) 100%);
-      border: 1px solid rgba(96, 205, 255, 0.1);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(96, 205, 255, 0.05);
+      background:
+        var(--bg-gradient-blue),
+        linear-gradient(135deg, rgba(42, 42, 42, 0.95) 0%, rgba(36, 36, 36, 0.85) 100%);
+      border: 1px solid rgba(79, 172, 254, 0.3);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(79, 172, 254, 0.15);
     }
 
     .settings-footer {

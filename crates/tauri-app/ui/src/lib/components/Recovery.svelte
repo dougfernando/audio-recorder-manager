@@ -220,14 +220,17 @@
   .info-card {
     display: flex;
     gap: 16px;
-    background-color: #e6f7ff;
-    border: 1px solid #91d5ff;
+    background:
+      var(--bg-gradient-teal),
+      linear-gradient(135deg, #e6f7ff 0%, #f0fff4 100%);
+    border: 1px solid rgba(67, 233, 123, 0.3);
     margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(67, 233, 123, 0.08);
   }
 
   .info-card svg {
     flex-shrink: 0;
-    color: var(--primary-color);
+    color: #43e97b;
     margin-top: 2px;
   }
 
@@ -419,6 +422,17 @@
 
     .empty-state small {
       font-size: 13px;
+    }
+  }
+
+  /* Dark mode adjustments */
+  @media (prefers-color-scheme: dark) {
+    .info-card {
+      background:
+        var(--bg-gradient-teal),
+        linear-gradient(135deg, rgba(30, 60, 50, 0.5) 0%, rgba(20, 50, 40, 0.5) 100%);
+      border: 1px solid rgba(67, 233, 123, 0.4);
+      box-shadow: 0 2px 8px rgba(67, 233, 123, 0.15);
     }
   }
 </style>

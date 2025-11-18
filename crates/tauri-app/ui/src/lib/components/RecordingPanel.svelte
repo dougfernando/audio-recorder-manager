@@ -148,14 +148,16 @@
 
 <style>
   .recording-card {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
-    border: 1px solid rgba(0, 103, 192, 0.1);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 103, 192, 0.05);
+    background:
+      var(--bg-gradient-purple),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(102, 126, 234, 0.1);
   }
 
   .recording-card:hover {
-    border-color: rgba(0, 103, 192, 0.15);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 103, 192, 0.08);
+    border-color: rgba(102, 126, 234, 0.3);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(102, 126, 234, 0.15);
   }
 
   .error-message {
@@ -181,8 +183,8 @@
   }
 
   .form-label svg {
-    opacity: 0.7;
-    color: var(--accent-default);
+    opacity: 0.9;
+    color: #667eea;
   }
 
   .duration-grid {
@@ -333,6 +335,22 @@
     .start-btn {
       font-size: 14px;
       padding: var(--spacing-md) var(--spacing-lg);
+    }
+  }
+
+  /* Dark mode adjustments */
+  @media (prefers-color-scheme: dark) {
+    .recording-card {
+      background:
+        var(--bg-gradient-purple),
+        linear-gradient(135deg, rgba(42, 42, 42, 0.95) 0%, rgba(36, 36, 36, 0.85) 100%);
+      border: 1px solid rgba(102, 126, 234, 0.3);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(102, 126, 234, 0.15);
+    }
+
+    .recording-card:hover {
+      border-color: rgba(102, 126, 234, 0.4);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38), 0 4px 8px rgba(102, 126, 234, 0.2);
     }
   }
 </style>

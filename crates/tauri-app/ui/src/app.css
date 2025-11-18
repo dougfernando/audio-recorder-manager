@@ -51,6 +51,20 @@
   --danger-bg: #FDE7E9;
   --info: #005FB8;
   --info-bg: #F0F6FF;
+
+  /* Modern Gradient Colors */
+  --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-blue: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --gradient-pink: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-orange: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  --gradient-teal: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+
+  /* Subtle Background Gradients (for cards) */
+  --bg-gradient-purple: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+  --bg-gradient-blue: linear-gradient(135deg, rgba(79, 172, 254, 0.08) 0%, rgba(0, 242, 254, 0.08) 100%);
+  --bg-gradient-pink: linear-gradient(135deg, rgba(240, 147, 251, 0.08) 0%, rgba(245, 87, 108, 0.08) 100%);
+  --bg-gradient-orange: linear-gradient(135deg, rgba(250, 112, 154, 0.08) 0%, rgba(254, 225, 64, 0.08) 100%);
+  --bg-gradient-teal: linear-gradient(135deg, rgba(67, 233, 123, 0.08) 0%, rgba(56, 249, 215, 0.08) 100%);
 }
 
 /* Dark Mode Support */
@@ -82,6 +96,13 @@
     --warning-bg: #3D2C1A;
     --danger-bg: #3D1F20;
     --info-bg: #1A2A3D;
+
+    /* Dark Mode Gradients - slightly more vibrant */
+    --bg-gradient-purple: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    --bg-gradient-blue: linear-gradient(135deg, rgba(79, 172, 254, 0.15) 0%, rgba(0, 242, 254, 0.15) 100%);
+    --bg-gradient-pink: linear-gradient(135deg, rgba(240, 147, 251, 0.15) 0%, rgba(245, 87, 108, 0.15) 100%);
+    --bg-gradient-orange: linear-gradient(135deg, rgba(250, 112, 154, 0.15) 0%, rgba(254, 225, 64, 0.15) 100%);
+    --bg-gradient-teal: linear-gradient(135deg, rgba(67, 233, 123, 0.15) 0%, rgba(56, 249, 215, 0.15) 100%);
   }
 }
 
