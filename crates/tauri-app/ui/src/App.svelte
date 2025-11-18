@@ -317,4 +317,21 @@
   .fade-in {
     animation: fadeIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
+
+  /* Dark mode adjustments */
+  @media (prefers-color-scheme: dark) {
+    main {
+      background: linear-gradient(135deg, #1C1C1C 0%, #2A2A2A 100%);
+    }
+
+    .tab-nav {
+      background: linear-gradient(180deg, rgba(42, 42, 42, 0.95) 0%, rgba(36, 36, 36, 0.85) 100%);
+      border-bottom: 1px solid rgba(96, 205, 255, 0.15);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    }
+
+    .nav-tab:hover {
+      background-color: var(--layer-fill-default);
+    }
+  }
 </style>
