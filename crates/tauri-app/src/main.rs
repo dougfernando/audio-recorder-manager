@@ -653,10 +653,25 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
 fn main() {
     let app_start = std::time::Instant::now();
 
-    // Disable WebView2 network features to speed up initialization
+    // Optimize WebView2 initialization to reduce startup delay
+    // Point to system WebView2 runtime to avoid search delays
+    if let Ok(program_files) = std::env::var("ProgramFiles(x86)") {
+        let webview2_path = std::path::Path::new(&program_files)
+            .join("Microsoft")
+            .join("EdgeWebView")
+            .join("Application");
+        if webview2_path.exists() {
+            std::env::set_var("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", webview2_path);
+        }
+    }
+
+    // Disable network features to speed up initialization
     std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-        "--disable-background-networking --disable-sync --disable-translate --no-first-run");
-    std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", std::env::temp_dir().join("audio-recorder-webview2"));
+        "--disable-background-networking --disable-sync --disable-component-update --no-first-run");
+
+    // Use a dedicated user data folder in temp to avoid permission/access delays
+    let user_data_folder = std::env::temp_dir().join("audio-recorder-webview2");
+    std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", user_data_folder);
 
     // Initialize logger to write to file in application folder
     let exe_dir = std::env::current_exe()
