@@ -96,7 +96,7 @@ fn create_splash_window(is_closed: Arc<AtomicBool>) -> Result<()> {
 
         SPLASH_HWND = Some(hwnd);
 
-        ShowWindow(hwnd, SW_SHOW);
+        let _ = ShowWindow(hwnd, SW_SHOW);
         let _ = UpdateWindow(hwnd);
 
         // Message loop
@@ -215,7 +215,7 @@ unsafe extern "system" fn window_proc(
                 SelectObject(hdc, old_font);
                 let _ = DeleteObject(loading_font);
 
-                EndPaint(hwnd, &ps);
+                let _ = EndPaint(hwnd, &ps);
             }
 
             LRESULT(0)

@@ -7,6 +7,15 @@
     "devUrl": "http://localhost:5173",
     "frontendDist": "ui/dist"
   },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  },
   "app": {
     "windows": [
       {

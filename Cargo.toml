@@ -10,7 +10,7 @@ license = "MIT"
 
 [workspace.dependencies]
 # Shared dependencies across workspace
-tokio = { version = "1.41", features = ["full", "rt-multi-thread", "process"] }
+tokio = { version = "1.41", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "fs"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
@@ -32,8 +32,24 @@ clap = { version = "4.5", features = ["derive", "cargo"] }
 # System utilities
 dirs = "5.0"
 
+[profile.dev]
+opt-level = 1          # Basic optimizations for faster runtime
+incremental = true     # Enable incremental compilation
+
+[profile.dev.package."*"]
+opt-level = 3          # Fully optimize dependencies, keep your code fast to compile
+
+[profile.dev.build-override]
+opt-level = 3          # Optimize build scripts
+
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+[profile.release-dev]
+inherits = "release"
+lto = false           # Disable LTO for faster builds
+codegen-units = 16    # More parallel compilation
+strip = false
