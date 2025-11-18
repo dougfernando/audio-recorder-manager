@@ -149,8 +149,8 @@ pub fn init_cli_logging(
         .with(layers)
         .try_init()?;
 
-    // Bridge log crate to tracing
-    tracing_log::LogTracer::init()?;
+    // Bridge log crate to tracing (ignore error if already initialized)
+    let _ = tracing_log::LogTracer::init();
 
     Ok(())
 }
@@ -211,8 +211,8 @@ pub fn init_tauri_logging(
         .with(layers)
         .try_init()?;
 
-    // Bridge log crate to tracing
-    tracing_log::LogTracer::init()?;
+    // Bridge log crate to tracing (ignore error if already initialized)
+    let _ = tracing_log::LogTracer::init();
 
     Ok(())
 }
