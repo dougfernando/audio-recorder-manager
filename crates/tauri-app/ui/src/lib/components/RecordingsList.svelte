@@ -623,4 +623,113 @@
     border-radius: var(--corner-radius-medium);
     animation: skeleton-pulse 1.5s ease-in-out infinite 0.4s;
   }
+
+  /* Responsive Design */
+  @media (max-width: 1024px) {
+    .recordings-grid {
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: var(--spacing-lg);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .recordings-container {
+      padding: 0;
+    }
+
+    .header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-md);
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .header h2 {
+      font-size: 20px;
+    }
+
+    .header .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .recordings-grid {
+      grid-template-columns: 1fr;
+      gap: var(--spacing-md);
+    }
+
+    .recording-actions {
+      grid-template-columns: 1fr 1fr;
+      gap: var(--spacing-xs);
+    }
+
+    .btn-sm {
+      padding: var(--spacing-xs) var(--spacing-sm);
+      font-size: 12px;
+    }
+
+    .btn-sm svg {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .header h2 {
+      font-size: 18px;
+    }
+
+    .recording-card {
+      padding: var(--spacing-md);
+    }
+
+    .recording-icon {
+      width: 48px;
+      height: 48px;
+    }
+
+    .recording-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .recording-name {
+      font-size: 13px;
+    }
+
+    .recording-meta {
+      font-size: 11px;
+    }
+
+    .format-badge {
+      font-size: 10px;
+      padding: 3px var(--spacing-xs);
+    }
+
+    .recording-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .btn-sm {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .empty-state {
+      padding: var(--spacing-xxl) var(--spacing-md);
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+    }
+
+    .empty-state p {
+      font-size: 16px;
+    }
+
+    .empty-state small {
+      font-size: 13px;
+    }
+  }
 </style>

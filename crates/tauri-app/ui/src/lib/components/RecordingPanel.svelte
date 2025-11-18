@@ -274,4 +274,65 @@
     transform: translateY(0);
     box-shadow: 0 2px 8px rgba(0, 103, 192, 0.3);
   }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .duration-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--spacing-sm);
+    }
+
+    .duration-btn {
+      padding: var(--spacing-md);
+      min-height: 48px;
+      font-size: 14px;
+    }
+
+    .duration-value {
+      font-size: 14px;
+    }
+
+    .form-row {
+      grid-template-columns: 1fr;
+      gap: var(--spacing-md);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .recording-card {
+      padding: var(--spacing-md);
+    }
+
+    .card-title {
+      font-size: 16px;
+    }
+
+    .duration-grid {
+      gap: var(--spacing-xs);
+    }
+
+    .duration-btn {
+      padding: var(--spacing-sm);
+      min-height: 44px;
+      font-size: 13px;
+    }
+
+    .duration-value {
+      font-size: 13px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .form-select {
+      font-size: 13px;
+    }
+
+    .start-btn {
+      font-size: 14px;
+      padding: var(--spacing-md) var(--spacing-lg);
+    }
+  }
 </style>

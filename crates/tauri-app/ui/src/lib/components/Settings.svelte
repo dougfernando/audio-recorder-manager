@@ -137,19 +137,9 @@ Your entire response should be a single markdown document.`;
 
 <div class="settings-container">
   <div class="card settings-card">
-    <h2 class="card-title">Transcription Settings</h2>
-
-    {#if errorMessage}
-      <div class="error-message">
-        {errorMessage}
-      </div>
-    {/if}
-
-    {#if saveMessage}
-      <div class="success-message">
-        {saveMessage}
-      </div>
-    {/if}
+    <div class="settings-header">
+      <h2 class="card-title">Transcription Settings</h2>
+    </div>
 
     {#if isLoading}
       <div class="loading-state">
@@ -157,8 +147,9 @@ Your entire response should be a single markdown document.`;
         <p>Loading settings...</p>
       </div>
     {:else}
-      <form on:submit|preventDefault={saveConfig}>
-        <h3 class="section-title">Storage Paths</h3>
+      <form on:submit|preventDefault={saveConfig} class="settings-form">
+        <div class="settings-content">
+          <h3 class="section-title">Storage Paths</h3>
 
         <div class="form-group">
           <label class="form-label" for="recordings-dir">
@@ -290,20 +281,36 @@ Your entire response should be a single markdown document.`;
             Customize the instructions for how the AI should transcribe your audio
           </small>
         </div>
+        </div>
 
-        <div class="button-row">
-          <button type="submit" class="btn btn-primary btn-lg" disabled={isSaving}>
-            {#if isSaving}
-              Saving...
-            {:else}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/>
-                <polyline points="7 3 7 8 15 8"/>
-              </svg>
-              Save Settings
-            {/if}
-          </button>
+        <div class="settings-footer">
+          {#if errorMessage}
+            <div class="error-message">
+              {errorMessage}
+            </div>
+          {/if}
+
+          {#if saveMessage}
+            <div class="success-message">
+              {saveMessage}
+            </div>
+          {/if}
+
+          <div class="button-row">
+            <button type="submit" class="btn btn-primary btn-lg" disabled={isSaving}>
+              {#if isSaving}
+                <div class="btn-spinner"></div>
+                Saving...
+              {:else}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                Save Settings
+              {/if}
+            </button>
+          </div>
         </div>
       </form>
     {/if}
@@ -314,12 +321,47 @@ Your entire response should be a single markdown document.`;
   .settings-container {
     max-width: 900px;
     margin: 0 auto;
+    padding: var(--spacing-lg);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
 
   .settings-card {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
     border: 1px solid rgba(0, 103, 192, 0.1);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 103, 192, 0.05);
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    margin-bottom: 0;
+  }
+
+  .settings-header {
+    padding: var(--spacing-lg) var(--spacing-lg) 0;
+    flex-shrink: 0;
+  }
+
+  .settings-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .settings-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--spacing-lg);
+    padding-top: 0;
+  }
+
+  .settings-footer {
+    flex-shrink: 0;
+    padding: var(--spacing-lg);
+    border-top: 1px solid var(--stroke-surface);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.5) 100%);
   }
 
   .error-message {
@@ -328,8 +370,9 @@ Your entire response should be a single markdown document.`;
     color: var(--danger);
     padding: var(--spacing-md);
     border-radius: var(--corner-radius-medium);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
     font-size: 14px;
+    animation: slideDown 0.2s ease-out;
   }
 
   .success-message {
@@ -338,9 +381,21 @@ Your entire response should be a single markdown document.`;
     color: var(--success);
     padding: var(--spacing-md);
     border-radius: var(--corner-radius-medium);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
     font-size: 14px;
     font-weight: 500;
+    animation: slideDown 0.2s ease-out;
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .loading-state {
@@ -420,7 +475,16 @@ Your entire response should be a single markdown document.`;
   .button-row {
     display: flex;
     justify-content: flex-end;
-    margin-top: var(--spacing-xl);
+    gap: var(--spacing-md);
+  }
+
+  .btn-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
   }
 
   .form-label input[type="checkbox"] {
@@ -456,5 +520,109 @@ Your entire response should be a single markdown document.`;
 
   .path-input-group .btn {
     flex-shrink: 0;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .settings-container {
+      padding: var(--spacing-md);
+    }
+
+    .settings-header,
+    .settings-content,
+    .settings-footer {
+      padding: var(--spacing-md);
+    }
+
+    .card-title {
+      font-size: 16px;
+    }
+
+    .section-title {
+      font-size: 15px;
+    }
+
+    .path-input-group {
+      flex-direction: column;
+    }
+
+    .path-input-group .btn {
+      width: 100%;
+    }
+
+    .prompt-label-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-sm);
+    }
+
+    .button-row {
+      justify-content: stretch;
+    }
+
+    .button-row .btn {
+      flex: 1;
+    }
+
+    .form-textarea {
+      font-size: 12px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .settings-container {
+      padding: var(--spacing-sm);
+    }
+
+    .settings-header,
+    .settings-content,
+    .settings-footer {
+      padding: var(--spacing-sm);
+    }
+
+    .card-title {
+      font-size: 15px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      margin-bottom: var(--spacing-md);
+    }
+
+    .form-group {
+      margin-bottom: var(--spacing-md);
+    }
+
+    .form-label {
+      font-size: 12px;
+    }
+
+    .form-input,
+    .form-select {
+      font-size: 13px;
+    }
+
+    .btn-sm {
+      font-size: 12px;
+      padding: var(--spacing-xs) var(--spacing-sm);
+    }
+
+    .btn-lg {
+      font-size: 14px;
+      padding: var(--spacing-sm) var(--spacing-lg);
+    }
+  }
+
+  /* Dark mode adjustments */
+  @media (prefers-color-scheme: dark) {
+    .settings-card {
+      background: linear-gradient(135deg, rgba(42, 42, 42, 0.95) 0%, rgba(36, 36, 36, 0.85) 100%);
+      border: 1px solid rgba(96, 205, 255, 0.1);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(96, 205, 255, 0.05);
+    }
+
+    .settings-footer {
+      background: linear-gradient(180deg, rgba(42, 42, 42, 0) 0%, rgba(32, 32, 32, 0.5) 100%);
+    }
   }
 </style>

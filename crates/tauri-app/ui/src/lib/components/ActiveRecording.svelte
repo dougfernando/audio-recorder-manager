@@ -734,12 +734,205 @@
 
   /* Responsive */
   @media (max-width: 768px) {
+    .recording-header,
+    .processing-header,
+    .completion-header {
+      padding: var(--spacing-md);
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-sm);
+    }
+
+    .recording-text,
+    .processing-text,
+    .completion-text {
+      font-size: 14px;
+    }
+
+    .session-id {
+      font-size: 12px;
+    }
+
     .channels-grid {
       grid-template-columns: 1fr;
+      gap: var(--spacing-md);
     }
 
     .time-display {
       font-size: 36px;
+    }
+
+    .timer-card {
+      padding: var(--spacing-lg);
+    }
+
+    .channel-card {
+      padding: var(--spacing-md);
+    }
+
+    .channel-icon {
+      width: 40px;
+      height: 40px;
+    }
+
+    .channel-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .frames-count {
+      font-size: 16px;
+      min-width: 60px;
+    }
+
+    .completion-details {
+      padding: var(--spacing-md);
+    }
+
+    .file-path code {
+      font-size: 12px;
+      word-break: break-all;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .recording-header,
+    .processing-header,
+    .completion-header {
+      padding: var(--spacing-sm);
+      margin: calc(var(--spacing-md) * -1) calc(var(--spacing-md) * -1) var(--spacing-md);
+    }
+
+    .recording-indicator,
+    .processing-indicator,
+    .completion-indicator {
+      gap: var(--spacing-sm);
+    }
+
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+    }
+
+    .recording-text,
+    .processing-text,
+    .completion-text {
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+
+    .live-badge {
+      padding: 3px var(--spacing-sm);
+      font-size: 10px;
+    }
+
+    .live-dot {
+      width: 5px;
+      height: 5px;
+    }
+
+    .session-id {
+      font-size: 11px;
+    }
+
+    .timer-card {
+      padding: var(--spacing-md);
+    }
+
+    .time-display {
+      font-size: 28px;
+      gap: var(--spacing-sm);
+    }
+
+    .manual-badge {
+      font-size: 14px;
+      padding: var(--spacing-xs) var(--spacing-md);
+    }
+
+    .progress-label {
+      font-size: 13px;
+    }
+
+    .channels-grid {
+      gap: var(--spacing-sm);
+    }
+
+    .channel-card {
+      padding: var(--spacing-sm);
+    }
+
+    .channel-icon {
+      width: 36px;
+      height: 36px;
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .channel-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .channel-name {
+      font-size: 13px;
+    }
+
+    .channel-badge {
+      font-size: 10px;
+      padding: 3px var(--spacing-xs);
+    }
+
+    .frames-count {
+      font-size: 14px;
+      min-width: 50px;
+    }
+
+    .frames-label {
+      font-size: 11px;
+    }
+
+    .waveform {
+      height: 24px;
+    }
+
+    .completion-message {
+      font-size: 14px;
+    }
+
+    .file-info,
+    .file-path,
+    .file-size {
+      font-size: 13px;
+    }
+
+    .file-path code {
+      font-size: 11px;
+    }
+
+    .processing-message {
+      padding: var(--spacing-md);
+      font-size: 13px;
+    }
+
+    .idle-state {
+      padding: var(--spacing-xxl) var(--spacing-md);
+    }
+
+    .idle-icon svg {
+      width: 64px;
+      height: 64px;
+    }
+
+    .idle-state h3 {
+      font-size: 18px;
+    }
+
+    .idle-state p {
+      font-size: 13px;
+    }
+
+    .stop-btn {
+      font-size: 14px;
+      padding: var(--spacing-md) var(--spacing-lg);
     }
   }
 </style>

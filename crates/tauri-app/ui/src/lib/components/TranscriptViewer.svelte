@@ -354,4 +354,161 @@
     white-space: pre-wrap;
     word-wrap: break-word;
   }
+
+  /* Responsive Design */
+  @media (max-width: 1024px) {
+    .transcript-viewer {
+      max-width: 95vw;
+    }
+
+    .viewer-header {
+      padding: var(--spacing-md) var(--spacing-lg);
+    }
+
+    .viewer-content {
+      padding: var(--spacing-lg);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .transcript-viewer-overlay {
+      padding: var(--spacing-md);
+    }
+
+    .transcript-viewer {
+      max-width: 100vw;
+      max-height: 95vh;
+    }
+
+    .viewer-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-md);
+      padding: var(--spacing-md);
+    }
+
+    .header-info h2 {
+      font-size: 18px;
+    }
+
+    .recording-name {
+      font-size: 12px;
+    }
+
+    .header-actions {
+      width: 100%;
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }
+
+    .view-mode-toggle {
+      order: -1;
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .toggle-btn {
+      flex: 1;
+      justify-content: center;
+    }
+
+    .viewer-content {
+      padding: var(--spacing-md);
+    }
+
+    .markdown-content :global(h1) {
+      font-size: 22px;
+    }
+
+    .markdown-content :global(h2) {
+      font-size: 18px;
+    }
+
+    .markdown-content :global(h3) {
+      font-size: 16px;
+    }
+
+    .markdown-content :global(p),
+    .markdown-content :global(li) {
+      font-size: 14px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .transcript-viewer-overlay {
+      padding: 0;
+    }
+
+    .transcript-viewer {
+      border-radius: 0;
+      max-height: 100vh;
+    }
+
+    .viewer-header {
+      padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    .header-info h2 {
+      font-size: 16px;
+    }
+
+    .recording-name {
+      font-size: 11px;
+    }
+
+    .header-actions {
+      gap: var(--spacing-xs);
+    }
+
+    .btn-sm {
+      padding: var(--spacing-xs) var(--spacing-sm);
+    }
+
+    .btn-sm svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .toggle-btn {
+      font-size: 12px;
+      padding: var(--spacing-xs) var(--spacing-sm);
+    }
+
+    .toggle-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .viewer-content {
+      padding: var(--spacing-sm);
+    }
+
+    .markdown-content :global(h1) {
+      font-size: 20px;
+      margin: var(--spacing-lg) 0 var(--spacing-md) 0;
+    }
+
+    .markdown-content :global(h2) {
+      font-size: 16px;
+      margin: var(--spacing-md) 0 var(--spacing-sm) 0;
+    }
+
+    .markdown-content :global(h3) {
+      font-size: 14px;
+    }
+
+    .markdown-content :global(p),
+    .markdown-content :global(li) {
+      font-size: 13px;
+    }
+
+    .markdown-content :global(code) {
+      font-size: 12px;
+    }
+
+    .raw-content {
+      font-size: 11px;
+      padding: var(--spacing-md);
+    }
+  }
 </style>

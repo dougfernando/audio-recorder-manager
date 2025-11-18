@@ -203,4 +203,63 @@
   .empty-state small {
     font-size: 12px;
   }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-sm);
+    }
+
+    .header .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .device-item {
+      padding: var(--spacing-sm);
+    }
+
+    .device-icon {
+      width: 40px;
+      height: 40px;
+    }
+
+    .device-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .card-title {
+      font-size: 16px;
+    }
+
+    .device-name {
+      font-size: 13px;
+    }
+
+    .device-specs {
+      font-size: 11px;
+    }
+
+    .empty-state {
+      padding: var(--spacing-xxl) var(--spacing-md);
+    }
+
+    .empty-state svg {
+      width: 40px;
+      height: 40px;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+    }
+
+    .empty-state small {
+      font-size: 11px;
+    }
+  }
 </style>
