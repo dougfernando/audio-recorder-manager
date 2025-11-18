@@ -8,6 +8,7 @@ use audio_recorder_manager_core::{
     commands::{record, recover, status, stop},
     config::RecorderConfig,
     domain::{AudioFormat, RecordingDuration},
+    logging,
     recorder::RecordingQuality,
     transcription::{load_config, save_config, transcribe_audio, TranscriptionConfig},
 };
@@ -420,9 +421,9 @@ async fn delete_recording(file_path: String) -> Result<String, String> {
     if let Some(file_stem) = path.file_stem() {
         let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
         if transcript_path.exists() {
-            log::info!("Deleting associated transcript: {:?}", transcript_path);
+            tracing::info!("Deleting associated transcript: {:?}", transcript_path);
             std::fs::remove_file(&transcript_path)
-                .map_err(|e| log::warn!("Failed to delete transcript: {}", e))
+                .map_err(|e| tracing::warn!("Failed to delete transcript: {}", e))
                 .ok();
         }
     }
@@ -450,21 +451,21 @@ async fn transcribe_recording(
 ) -> Result<serde_json::Value, String> {
     use std::path::Path;
 
-    log::info!("Transcription requested for: {}", file_path);
+    tracing::info!("Transcription requested for: {}", file_path);
 
     // Load configuration
     let config = load_config().map_err(|e| format!("Failed to load config: {}", e))?;
 
     // Validate API key
     if config.api_key.is_empty() {
-        log::error!("Transcription failed: API key not configured");
+        tracing::error!("Transcription failed: API key not configured");
         return Err("API key not configured. Please configure it in Settings.".to_string());
     }
 
     // Validate file path
     let path = Path::new(&file_path);
     if !path.exists() {
-        log::error!("Transcription failed: File not found at {}", file_path);
+        tracing::error!("Transcription failed: File not found at {}", file_path);
         return Err(format!("File not found: {}", file_path));
     }
 
@@ -478,7 +479,7 @@ async fn transcribe_recording(
         format!("transcribe_{}", timestamp)
     });
 
-    log::info!("Starting transcription with session ID: {}", session_id);
+    tracing::info!("Starting transcription with session ID: {}", session_id);
 
     // Load recorder config to get transcriptions directory
     let recorder_config = RecorderConfig::new();
@@ -495,11 +496,11 @@ async fn transcribe_recording(
     transcribe_audio(&path_clone, &transcriptions_dir, &api_key, &model, &prompt, optimize, &session_id_clone)
         .await
         .map(|result| {
-            log::info!("Transcription completed successfully");
+            tracing::info!("Transcription completed successfully");
             serde_json::to_value(result).unwrap()
         })
         .map_err(|e| {
-            log::error!("Transcription failed: {}", e);
+            tracing::error!("Transcription failed: {}", e);
             e.to_string()
         })
 }
@@ -509,17 +510,17 @@ async fn transcribe_recording(
 async fn read_transcript(file_path: String) -> Result<String, String> {
     use std::path::Path;
 
-    log::info!("Reading transcript from: {}", file_path);
+    tracing::info!("Reading transcript from: {}", file_path);
 
     let path = Path::new(&file_path);
     if !path.exists() {
-        log::error!("Transcript file not found: {}", file_path);
+        tracing::error!("Transcript file not found: {}", file_path);
         return Err(format!("Transcript file not found: {}", file_path));
     }
 
     std::fs::read_to_string(path)
         .map_err(|e| {
-            log::error!("Failed to read transcript file: {}", e);
+            tracing::error!("Failed to read transcript file: {}", e);
             format!("Failed to read transcript: {}", e)
         })
 }
@@ -658,41 +659,29 @@ fn main() {
     let user_data_folder = std::env::temp_dir().join("audio-recorder-webview2");
     std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", user_data_folder);
 
-    // Initialize logger to write to file in application folder
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
+    // Initialize dual-output logging (file + terminal in debug builds)
+    let enable_terminal = cfg!(debug_assertions);
+    if let Err(e) = logging::init_tauri_logging(None, enable_terminal) {
+        eprintln!("Warning: Failed to initialize logging: {}", e);
+    }
 
-    let log_path = exe_dir.join("tauri_app.log");
-
-    let log_file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .expect("Failed to open log file");
-
-    env_logger::Builder::from_default_env()
-        .target(env_logger::Target::Pipe(Box::new(log_file)))
-        .filter_level(log::LevelFilter::Info)
-        .init();
-
-    log::info!("========================================");
-    log::info!("Tauri application starting...");
-    log::info!("Log file: {}", log_path.display());
-    log::info!("[TIMING] App start: {:?}", app_start.elapsed());
+    let log_dir = logging::get_log_dir();
+    tracing::info!("========================================");
+    tracing::info!("Tauri application starting...");
+    tracing::info!(log_dir = ?log_dir, "Logs directory");
+    tracing::info!(elapsed = ?app_start.elapsed(), "[TIMING] App start");
 
     // Create native splash screen (shows instantly, no WebView2 dependency)
     #[cfg(windows)]
     let splash = {
-        log::info!("[TIMING] Creating native splash screen: {:?}", app_start.elapsed());
+        tracing::info!("[TIMING] Creating native splash screen: {:?}", app_start.elapsed());
         match splash_screen::SplashScreen::new() {
             Ok(s) => {
-                log::info!("[TIMING] Native splash screen created and visible: {:?}", app_start.elapsed());
+                tracing::info!("[TIMING] Native splash screen created and visible: {:?}", app_start.elapsed());
                 Some(s)
             }
             Err(e) => {
-                log::warn!("Failed to create splash screen: {}", e);
+                tracing::warn!("Failed to create splash screen: {}", e);
                 None
             }
         }
@@ -700,53 +689,53 @@ fn main() {
     #[cfg(not(windows))]
     let splash: Option<()> = None;
 
-    log::info!("[TIMING] Creating Tauri builder: {:?}", app_start.elapsed());
+    tracing::info!("[TIMING] Creating Tauri builder: {:?}", app_start.elapsed());
     let builder = tauri::Builder::default();
 
-    log::info!("[TIMING] Initializing shell plugin: {:?}", app_start.elapsed());
+    tracing::info!("[TIMING] Initializing shell plugin: {:?}", app_start.elapsed());
     let builder = builder.plugin(tauri_plugin_shell::init());
 
-    log::info!("[TIMING] Initializing dialog plugin: {:?}", app_start.elapsed());
+    tracing::info!("[TIMING] Initializing dialog plugin: {:?}", app_start.elapsed());
     let builder = builder.plugin(tauri_plugin_dialog::init());
 
-    log::info!("[TIMING] Setting up app state: {:?}", app_start.elapsed());
+    tracing::info!("[TIMING] Setting up app state: {:?}", app_start.elapsed());
     let builder = builder.manage(AppState {
         active_sessions: Mutex::new(Vec::new()),
     });
 
-    log::info!("[TIMING] Configuring setup handler: {:?}", app_start.elapsed());
+    tracing::info!("[TIMING] Configuring setup handler: {:?}", app_start.elapsed());
     let builder = builder.setup({
         let app_start_clone = app_start.clone();
         let splash_opt = splash;
         move |app| {
-            log::info!("[TIMING] Setup handler executing: {:?}", app_start_clone.elapsed());
+            tracing::info!("[TIMING] Setup handler executing: {:?}", app_start_clone.elapsed());
 
             // Ensure storage directories exist
-            log::info!("[TIMING] Creating RecorderConfig: {:?}", app_start_clone.elapsed());
+            tracing::info!("[TIMING] Creating RecorderConfig: {:?}", app_start_clone.elapsed());
             let config = RecorderConfig::new();
 
-            log::info!("[TIMING] Ensuring directories exist: {:?}", app_start_clone.elapsed());
+            tracing::info!("[TIMING] Ensuring directories exist: {:?}", app_start_clone.elapsed());
             config.ensure_directories().expect("Failed to create storage directories");
 
             // Set up status file watcher
-            log::info!("[TIMING] Setting up status watcher: {:?}", app_start_clone.elapsed());
+            tracing::info!("[TIMING] Setting up status watcher: {:?}", app_start_clone.elapsed());
             setup_status_watcher(app.handle().clone());
 
-            log::info!("[TIMING] Setup handler complete: {:?}", app_start_clone.elapsed());
+            tracing::info!("[TIMING] Setup handler complete: {:?}", app_start_clone.elapsed());
 
             // Close splash screen now that main window is ready
             #[cfg(windows)]
             if let Some(s) = splash_opt {
-                log::info!("[TIMING] Closing splash screen: {:?}", app_start_clone.elapsed());
+                tracing::info!("[TIMING] Closing splash screen: {:?}", app_start_clone.elapsed());
                 s.close();
-                log::info!("[TIMING] Splash screen closed: {:?}", app_start_clone.elapsed());
+                tracing::info!("[TIMING] Splash screen closed: {:?}", app_start_clone.elapsed());
             }
 
             Ok(())
         }
     });
 
-    log::info!("[TIMING] Configuring invoke handler: {:?}", app_start.elapsed());
+    tracing::info!("[TIMING] Configuring invoke handler: {:?}", app_start.elapsed());
     let builder = builder.invoke_handler(tauri::generate_handler![
         start_recording,
         stop_recording,
@@ -769,10 +758,10 @@ fn main() {
         pick_folder,
     ]);
 
-    log::info!("[TIMING] Starting Tauri application run loop: {:?}", app_start.elapsed());
+    tracing::info!("[TIMING] Starting Tauri application run loop: {:?}", app_start.elapsed());
     builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 
-    log::info!("[TIMING] Application exited: {:?}", app_start.elapsed());
+    tracing::info!("[TIMING] Application exited: {:?}", app_start.elapsed());
 }

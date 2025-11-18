@@ -6,6 +6,7 @@ use crate::config::RecorderConfig;
 use crate::devices::DeviceManager;
 use crate::domain::{AudioFormat, RecordingDuration, RecordingSession};
 use crate::error::Result;
+use crate::output::UserOutput;
 #[cfg(not(windows))]
 use crate::recorder::AudioRecorder;
 use crate::recorder::{convert_wav_to_m4a, merge_audio_streams_smart, RecordingQuality};
@@ -20,7 +21,18 @@ pub async fn execute(
     quality: RecordingQuality,
     config: RecorderConfig,
 ) -> Result<()> {
-    // Note: env_logger::init() is called by the binary (CLI or Tauri), not here
+    execute_with_output(duration, audio_format, quality, config, UserOutput::new()).await
+}
+
+/// Execute the record command with custom output
+pub async fn execute_with_output(
+    duration: RecordingDuration,
+    audio_format: AudioFormat,
+    quality: RecordingQuality,
+    config: RecorderConfig,
+    output: UserOutput,
+) -> Result<()> {
+    // Note: Logging is initialized by the binary (CLI or Tauri), not here
 
     // Create recording session
     let session = RecordingSession::new(audio_format, quality.clone(), duration);
@@ -45,12 +57,12 @@ pub async fn execute(
     println!("{}", serde_json::to_string(&result)?);
 
     // Now do the actual recording (this blocks, keeping process alive)
-    record_worker(session, config).await?;
+    record_worker(session, config, output).await?;
 
     Ok(())
 }
 
-async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Result<()> {
+async fn record_worker(session: RecordingSession, config: RecorderConfig, output: UserOutput) -> Result<()> {
     let filepath = config.recordings_dir.join(session.temp_filename());
     let observer = JsonFileObserver::new(config.status_dir.clone());
 
@@ -59,7 +71,7 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
     // Use WASAPI dual-channel recording on Windows (loopback + microphone)
     #[cfg(windows)]
     {
-        log::info!(
+        tracing::info!(
             "Starting WASAPI dual-channel recording: {} ({} seconds)",
             session.temp_filename(),
             effective_duration
@@ -80,17 +92,17 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
 
         // Get loopback sample rate to match microphone
         let target_sample_rate = loopback_recorder.get_sample_rate();
-        log::info!("System audio sample rate: {} Hz - will match microphone to this", target_sample_rate);
+        tracing::info!("System audio sample rate: {} Hz - will match microphone to this", target_sample_rate);
 
         // Initialize microphone recorder with matched sample rate
         let mic_recorder = match WasapiMicrophoneRecorder::new(mic_temp.clone(), target_sample_rate) {
             Ok(recorder) => {
-                log::info!("Microphone recorder initialized successfully with matched sample rate");
+                tracing::info!("Microphone recorder initialized successfully with matched sample rate");
                 Some(recorder)
             }
             Err(e) => {
-                log::warn!("Failed to initialize microphone recorder: {}. Continuing with loopback only.", e);
-                eprintln!("[Warning] Microphone unavailable - recording system audio only");
+                tracing::warn!("Failed to initialize microphone recorder: {}. Continuing with loopback only.", e);
+                output.warning("Microphone unavailable - recording system audio only");
                 None
             }
         };
@@ -139,7 +151,7 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
                 .signals_dir
                 .join(format!("{}.stop", session.id.as_str()));
             if stop_signal.exists() {
-                log::info!("Stop signal received for session {}", session.id);
+                tracing::info!("Stop signal received for session {}", session.id);
                 let _ = std::fs::remove_file(stop_signal);
                 break;
             }
@@ -153,24 +165,30 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
 
             // Print progress to terminal (dual-channel format)
             if let Some(ref mic) = mic_recorder {
-                eprintln!(
-                    "[Recording] Progress: {}% | Elapsed: {}s / {}s | Loopback: {} frames ({}) | Mic: {} frames ({})",
-                    progress,
-                    elapsed,
-                    effective_duration,
-                    loopback_recorder.get_frames_captured(),
-                    if loopback_recorder.has_audio_detected() { "Audio" } else { "Silent" },
-                    mic.get_frames_captured(),
-                    if mic.has_audio_detected() { "Audio" } else { "Silent" }
+                output.prefixed(
+                    "Recording",
+                    &format!(
+                        "Progress: {}% | Elapsed: {}s / {}s | Loopback: {} frames ({}) | Mic: {} frames ({})",
+                        progress,
+                        elapsed,
+                        effective_duration,
+                        loopback_recorder.get_frames_captured(),
+                        if loopback_recorder.has_audio_detected() { "Audio" } else { "Silent" },
+                        mic.get_frames_captured(),
+                        if mic.has_audio_detected() { "Audio" } else { "Silent" }
+                    )
                 );
             } else {
-                eprintln!(
-                    "[Recording] Progress: {}% | Elapsed: {}s / {}s | Loopback: {} frames ({})",
-                    progress,
-                    elapsed,
-                    effective_duration,
-                    loopback_recorder.get_frames_captured(),
-                    if loopback_recorder.has_audio_detected() { "Audio" } else { "Silent" }
+                output.prefixed(
+                    "Recording",
+                    &format!(
+                        "Progress: {}% | Elapsed: {}s / {}s | Loopback: {} frames ({})",
+                        progress,
+                        elapsed,
+                        effective_duration,
+                        loopback_recorder.get_frames_captured(),
+                        if loopback_recorder.has_audio_detected() { "Audio" } else { "Silent" }
+                    )
                 );
             }
 
@@ -206,9 +224,9 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
             mic.stop()?;
         }
 
-        log::info!("Recording completed, starting merge process");
-        eprintln!("[Recording] Completed successfully!");
-        eprintln!("[Merging] Merging audio channels...");
+        tracing::info!("Recording completed, starting merge process");
+        output.success("Recording completed successfully!");
+        output.prefixed("Merging", "Merging audio channels...");
 
         // Write processing status
         let _ = observer.write_processing_status(
@@ -236,13 +254,13 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
         )
         .await?;
 
-        log::info!("Audio merge completed: {:?}", filepath);
-        eprintln!("[Merging] Successfully merged audio channels!");
+        tracing::info!("Audio merge completed: {:?}", filepath);
+        output.success("Successfully merged audio channels!");
 
         // Cleanup temporary files
         let _ = std::fs::remove_file(&loopback_temp);
         let _ = std::fs::remove_file(&mic_temp);
-        log::info!("Temporary files cleaned up");
+        tracing::info!("Temporary files cleaned up");
     }
 
     #[cfg(not(windows))]
@@ -272,7 +290,7 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
             )
             .await?;
 
-        log::info!(
+        tracing::info!(
             "Recording started: {} ({} seconds)",
             session.temp_filename(),
             effective_duration
@@ -291,14 +309,14 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
         }
 
         let _ = handle.stop().await?;
-        log::info!("Recording completed: {:?}", filepath);
+        tracing::info!("Recording completed: {:?}", filepath);
     }
 
     // Convert to M4A if requested
     let mut final_filepath = filepath.clone();
     if matches!(session.format, AudioFormat::M4a) {
-        log::info!("Converting WAV to M4A...");
-        eprintln!("[Converting] WAV to M4A format...");
+        tracing::info!("Converting WAV to M4A...");
+        output.prefixed("Converting", "WAV to M4A format...");
 
         // Write processing status
         let _ = observer.write_processing_status(
@@ -310,17 +328,17 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig) -> Res
 
         match convert_wav_to_m4a(&filepath, &m4a_path).await {
             Ok(_) => {
-                log::info!("Successfully converted to M4A: {:?}", m4a_path);
-                eprintln!("[Converting] Successfully converted to M4A format!");
+                tracing::info!("Successfully converted to M4A: {:?}", m4a_path);
+                output.success("Successfully converted to M4A format!");
                 // Delete temporary WAV file
                 if let Err(e) = std::fs::remove_file(&filepath) {
-                    log::warn!("Failed to delete temporary WAV file: {}", e);
+                    tracing::warn!("Failed to delete temporary WAV file: {}", e);
                 }
                 final_filepath = m4a_path;
             }
             Err(e) => {
-                log::error!("Failed to convert to M4A: {}. Keeping WAV file.", e);
-                eprintln!("[Converting] Failed to convert to M4A. Keeping WAV file.");
+                tracing::error!("Failed to convert to M4A: {}. Keeping WAV file.", e);
+                output.warning("Failed to convert to M4A. Keeping WAV file.");
             }
         }
     }
