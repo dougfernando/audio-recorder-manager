@@ -12,7 +12,7 @@
     "targets": "all",
     "windows": {
       "webviewInstallMode": {
-        "type": "embedBootstrapper"
+        "type": "skip"
       }
     }
   },
@@ -31,7 +31,7 @@
         "decorations": true,
         "transparent": false,
         "backgroundColor": "#F5F5F7",
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-extensions --disable-component-update --disable-background-networking --disable-sync --disable-translate --disable-background-timer-throttling --no-first-run --no-default-browser-check"
       }
     ],
     "security": {

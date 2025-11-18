@@ -653,6 +653,11 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
 fn main() {
     let app_start = std::time::Instant::now();
 
+    // Disable WebView2 network features to speed up initialization
+    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "--disable-background-networking --disable-sync --disable-translate --no-first-run");
+    std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", std::env::temp_dir().join("audio-recorder-webview2"));
+
     // Initialize logger to write to file in application folder
     let exe_dir = std::env::current_exe()
         .ok()
