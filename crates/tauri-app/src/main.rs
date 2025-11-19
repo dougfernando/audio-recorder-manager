@@ -371,6 +371,8 @@ async fn list_recordings() -> Result<Vec<RecordingFile>, String> {
     // Sort by created date (newest first)
     recordings.sort_by(|a, b| b.created.cmp(&a.created));
 
+    tracing::info!("Loaded {} recordings", recordings.len());
+
     Ok(recordings)
 }
 
@@ -825,14 +827,8 @@ fn main() {
 
     tracing::info!("[TIMING] Creating Tauri builder: {:?}", app_start.elapsed());
     let builder = tauri::Builder::default();
-
-    tracing::info!("[TIMING] Initializing shell plugin: {:?}", app_start.elapsed());
     let builder = builder.plugin(tauri_plugin_shell::init());
-
-    tracing::info!("[TIMING] Initializing dialog plugin: {:?}", app_start.elapsed());
     let builder = builder.plugin(tauri_plugin_dialog::init());
-
-    tracing::info!("[TIMING] Setting up app state: {:?}", app_start.elapsed());
     let builder = builder.manage(AppState {
         active_sessions: Mutex::new(Vec::new()),
     });
@@ -842,13 +838,10 @@ fn main() {
         let app_start_clone = app_start.clone();
         let splash_opt = splash;
         move |app| {
-            tracing::info!("[TIMING] Setup handler executing: {:?}", app_start_clone.elapsed());
 
             // Ensure storage directories exist
-            tracing::info!("[TIMING] Creating RecorderConfig: {:?}", app_start_clone.elapsed());
             let config = RecorderConfig::new();
 
-            tracing::info!("[TIMING] Ensuring directories exist: {:?}", app_start_clone.elapsed());
             if let Err(e) = config.ensure_directories() {
                 tracing::error!(error = %e, "Failed to create storage directories - application may not function correctly");
                 eprintln!("ERROR: Failed to create storage directories: {}", e);
@@ -857,24 +850,18 @@ fn main() {
             }
 
             // Set up status file watcher
-            tracing::info!("[TIMING] Setting up status watcher: {:?}", app_start_clone.elapsed());
             setup_status_watcher(app.handle().clone());
-
-            tracing::info!("[TIMING] Setup handler complete: {:?}", app_start_clone.elapsed());
 
             // Close splash screen now that main window is ready
             #[cfg(windows)]
             if let Some(s) = splash_opt {
-                tracing::info!("[TIMING] Closing splash screen: {:?}", app_start_clone.elapsed());
                 s.close();
-                tracing::info!("[TIMING] Splash screen closed: {:?}", app_start_clone.elapsed());
             }
 
             Ok(())
         }
     });
 
-    tracing::info!("[TIMING] Configuring invoke handler: {:?}", app_start.elapsed());
     let builder = builder.invoke_handler(tauri::generate_handler![
         start_recording,
         stop_recording,
