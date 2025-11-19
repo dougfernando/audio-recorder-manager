@@ -152,7 +152,7 @@ impl AudioRecorder {
         let has_audio = Arc::new(AtomicBool::new(false));
         let has_audio_clone = Arc::clone(&has_audio);
 
-        let err_fn = |err| log::error!("Stream error: {}", err);
+        let err_fn = |err| tracing::error!("Stream error: {}", err);
 
         // Build the stream based on the supported sample format
         let stream = match supported_config.sample_format() {
@@ -170,7 +170,7 @@ impl AudioRecorder {
                         let rms = calculate_rms_i16(data);
                         if rms > 100.0 {
                             has_audio_clone.store(true, Ordering::Relaxed);
-                            log::info!("Audio detected! Level: {:.2}", rms);
+                            tracing::info!("Audio detected! Level: {:.2}", rms);
                         }
                     }
 
@@ -198,7 +198,7 @@ impl AudioRecorder {
                         let rms = calculate_rms_f32(data);
                         if rms > 0.01 {
                             has_audio_clone.store(true, Ordering::Relaxed);
-                            log::info!("Audio detected! Level: {:.4}", rms);
+                            tracing::info!("Audio detected! Level: {:.4}", rms);
                         }
                     }
 
@@ -329,7 +329,7 @@ impl RecordingHandle {
         if let Some(signals_dir) = signals_dir {
             let stop_signal = signals_dir.join(format!("{}.stop", self.session_id));
             if stop_signal.exists() {
-                log::info!("Stop signal received for session {}", self.session_id);
+                tracing::info!("Stop signal received for session {}", self.session_id);
                 let _ = std::fs::remove_file(stop_signal);
                 return true;
             }
@@ -339,7 +339,7 @@ impl RecordingHandle {
     }
 
     pub async fn stop(self) -> Result<PathBuf> {
-        log::info!("Stopping recording...");
+        tracing::info!("Stopping recording...");
         self.is_recording.store(false, Ordering::Relaxed);
 
         // Get values before dropping stream
@@ -392,7 +392,7 @@ impl RecordingHandle {
         });
 
         std::fs::write(&status_file, serde_json::to_string_pretty(&status)?)?;
-        log::info!("Recording completed: {:?}", filepath);
+        tracing::info!("Recording completed: {:?}", filepath);
 
         Ok(filepath)
     }
@@ -402,7 +402,7 @@ impl RecordingHandle {
 pub async fn convert_wav_to_m4a(wav_path: &PathBuf, m4a_path: &PathBuf) -> Result<()> {
     use tokio::process::Command;
 
-    log::info!("Converting WAV to M4A: {:?} -> {:?}", wav_path, m4a_path);
+    tracing::info!("Converting WAV to M4A: {:?} -> {:?}", wav_path, m4a_path);
 
     // Check if FFmpeg is available
     let mut ffmpeg_check = Command::new("ffmpeg");
@@ -438,7 +438,7 @@ pub async fn convert_wav_to_m4a(wav_path: &PathBuf, m4a_path: &PathBuf) -> Resul
         anyhow::bail!("FFmpeg conversion failed: {}", stderr);
     }
 
-    log::info!("Successfully converted to M4A");
+    tracing::info!("Successfully converted to M4A");
     Ok(())
 }
 
@@ -455,7 +455,7 @@ pub async fn merge_audio_streams_smart(
 ) -> Result<()> {
     use tokio::process::Command;
 
-    log::info!(
+    tracing::info!(
         "Merging audio streams - Loopback: {}, Mic: {}",
         loopback_has_audio,
         mic_has_audio
@@ -493,7 +493,7 @@ pub async fn merge_audio_streams_smart(
     let output = if loopback_has_audio && mic_has_audio {
         // Scenario A: Both have audio - Create dual-mono stereo (L=loopback, R=mic)
         // Convert mic mono to stereo first, then merge with amerge
-        log::info!("Merging both channels (dual-mono stereo)");
+        tracing::info!("Merging both channels (dual-mono stereo)");
         setup_ffmpeg_command()
             .arg("-i").arg(loopback_wav)
             .arg("-i").arg(mic_wav)
@@ -507,7 +507,7 @@ pub async fn merge_audio_streams_smart(
             .await?
     } else if loopback_has_audio && !mic_has_audio {
         // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
-        log::info!("Using loopback only (microphone was silent)");
+        tracing::info!("Using loopback only (microphone was silent)");
         setup_ffmpeg_command()
             .arg("-i").arg(loopback_wav)
             .arg("-filter_complex")
@@ -520,7 +520,7 @@ pub async fn merge_audio_streams_smart(
             .await?
     } else if !loopback_has_audio && mic_has_audio {
         // Scenario C: Mic only - Convert mono to stereo (duplicate to both channels)
-        log::info!("Using microphone only (system audio was silent)");
+        tracing::info!("Using microphone only (system audio was silent)");
         setup_ffmpeg_command()
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
@@ -533,7 +533,7 @@ pub async fn merge_audio_streams_smart(
             .await?
     } else {
         // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
-        log::info!("Both channels were silent, creating silent stereo file");
+        tracing::info!("Both channels were silent, creating silent stereo file");
         setup_ffmpeg_command()
             .arg("-i").arg(loopback_wav)
             .arg("-filter_complex")
@@ -555,12 +555,12 @@ pub async fn merge_audio_streams_smart(
     let ffmpeg_stdout = String::from_utf8_lossy(&output.stdout);
     let ffmpeg_stderr = String::from_utf8_lossy(&output.stderr);
     if !ffmpeg_stdout.is_empty() {
-        log::debug!("FFmpeg stdout: {}", ffmpeg_stdout);
+        tracing::debug!("FFmpeg stdout: {}", ffmpeg_stdout);
     }
     if !ffmpeg_stderr.is_empty() {
-        log::debug!("FFmpeg stderr: {}", ffmpeg_stderr);
+        tracing::debug!("FFmpeg stderr: {}", ffmpeg_stderr);
     }
 
-    log::info!("Successfully merged audio streams");
+    tracing::info!("Successfully merged audio streams");
     Ok(())
 }

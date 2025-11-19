@@ -119,7 +119,7 @@ pub mod windows_loopback {
                     format_tag == 3  // WAVE_FORMAT_IEEE_FLOAT
                 };
 
-                log::info!(
+                tracing::info!(
                     "WASAPI format: {} Hz, {} channels, {} bits, format tag: 0x{:X}, float: {}",
                     sample_rate,
                     channels,
@@ -156,7 +156,7 @@ pub mod windows_loopback {
                 audio_client.Start()?;
 
                 let is_32bit = bits_per_sample == 32;
-                log::info!("Recording with: {} bit, {}", bits_per_sample, if is_float { "float" } else { "int" });
+                tracing::info!("Recording with: {} bit, {}", bits_per_sample, if is_float { "float" } else { "int" });
 
                 // Recording loop
                 while is_recording.load(Ordering::Relaxed) {
@@ -205,7 +205,7 @@ pub mod windows_loopback {
                                         let rms = calculate_rms_f32(samples);
                                         if rms > 0.01 {
                                             has_audio.store(true, Ordering::Relaxed);
-                                            log::info!("Audio detected! Level: {:.4}", rms);
+                                            tracing::info!("Audio detected! Level: {:.4}", rms);
                                         }
                                     }
 
@@ -228,7 +228,7 @@ pub mod windows_loopback {
                                         let rms = calculate_rms_i32(samples);
                                         if rms > 100000.0 {  // Adjusted threshold for 32-bit
                                             has_audio.store(true, Ordering::Relaxed);
-                                            log::info!("Audio detected! Level: {:.2}", rms);
+                                            tracing::info!("Audio detected! Level: {:.2}", rms);
                                         }
                                     }
 
@@ -255,7 +255,7 @@ pub mod windows_loopback {
                                         let rms = calculate_rms_i16(samples);
                                         if rms > 100.0 {
                                             has_audio.store(true, Ordering::Relaxed);
-                                            log::info!("Audio detected! Level: {:.2}", rms);
+                                            tracing::info!("Audio detected! Level: {:.2}", rms);
                                         }
                                     }
 
@@ -266,7 +266,7 @@ pub mod windows_loopback {
                                         }
                                     }
                                 } else {
-                                    log::warn!("Unsupported audio format: {} bits, float={}", bits_per_sample, is_float);
+                                    tracing::warn!("Unsupported audio format: {} bits, float={}", bits_per_sample, is_float);
                                 }
                             }
                         }
