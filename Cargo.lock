@@ -191,6 +191,7 @@ dependencies = [
 name = "audio-recorder-manager-tauri"
 version = "0.7.0"
 dependencies = [
+ "anyhow",
  "audio-recorder-manager-core",
  "chrono",
  "dirs 5.0.1",

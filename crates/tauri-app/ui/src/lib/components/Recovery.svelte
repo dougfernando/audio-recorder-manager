@@ -220,12 +220,10 @@
   .info-card {
     display: flex;
     gap: 16px;
-    background:
-      var(--bg-gradient-teal),
-      linear-gradient(135deg, #e6f7ff 0%, #f0fff4 100%);
-    border: 1px solid rgba(67, 233, 123, 0.3);
+    background: var(--card-background);
+    border: 1px solid var(--stroke-surface);
     margin-bottom: 20px;
-    box-shadow: 0 2px 8px rgba(67, 233, 123, 0.08);
+    box-shadow: var(--elevation-card);
   }
 
   .info-card svg {

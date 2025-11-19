@@ -1,0 +1,653 @@
+<script>
+  import { invoke } from '@tauri-apps/api/core';
+  import { ask } from '@tauri-apps/plugin-dialog';
+  import { formatFileSize, formatTime } from '../stores';
+  import TranscriptViewer from './TranscriptViewer.svelte';
+
+  export let recording;
+  export let onBack;
+
+  let isTranscribing = false;
+  let transcriptionProgress = null;
+  let transcriptPath = null;
+  let viewingTranscript = null;
+  let progressPollingInterval = null;
+  let transcriptPreview = null;
+
+  // Check for transcript on mount
+  $: if (recording) {
+    checkForTranscript();
+  }
+
+  async function checkForTranscript() {
+    if (!recording) return;
+
+    try {
+      // First, check if transcript exists
+      const exists = await invoke('check_transcript_exists', {
+        filePath: recording.path
+      });
+
+      console.log('[RecordingDetail] Transcript exists:', exists);
+
+      if (exists) {
+        // Get the transcript path
+        const result = await invoke('get_transcript_path', {
+          filePath: recording.path
+        });
+        console.log('[RecordingDetail] Transcript path result:', result);
+        transcriptPath = result;
+        await loadTranscriptPreview();
+      } else {
+        // No transcript exists
+        transcriptPath = null;
+        transcriptPreview = null;
+      }
+    } catch (error) {
+      console.log('[RecordingDetail] Error checking for transcript:', error);
+      // No transcript exists yet
+      transcriptPath = null;
+      transcriptPreview = null;
+    }
+  }
+
+  async function loadTranscriptPreview() {
+    if (!transcriptPath) return;
+
+    try {
+      const content = await invoke('read_transcript', { filePath: transcriptPath });
+      // Get first 300 characters as preview
+      transcriptPreview = content.substring(0, 300) + (content.length > 300 ? '...' : '');
+    } catch (error) {
+      console.error('Failed to load transcript preview:', error);
+      transcriptPreview = null;
+    }
+  }
+
+  async function openRecording() {
+    try {
+      await invoke('open_recording', { filePath: recording.path });
+    } catch (error) {
+      console.error('Failed to open recording:', error);
+      alert(`Failed to open recording: ${error}`);
+    }
+  }
+
+  async function openFolder() {
+    try {
+      await invoke('open_folder', { filePath: recording.path });
+    } catch (error) {
+      console.error('Failed to open folder:', error);
+      alert(`Failed to open folder: ${error}`);
+    }
+  }
+
+  async function transcribeRecording() {
+    // Check if transcript already exists and ask for confirmation
+    if (transcriptPath) {
+      const confirmed = await ask(
+        'A transcript already exists for this recording. Do you want to overwrite it?',
+        {
+          title: 'Overwrite Transcript',
+          type: 'warning'
+        }
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const sessionId = `transcribe_${Date.now()}`;
+
+    try {
+      isTranscribing = true;
+      startProgressPolling(sessionId);
+
+      const result = await invoke('transcribe_recording', {
+        filePath: recording.path,
+        sessionId: sessionId,
+      });
+
+      console.log('Transcription complete:', result);
+      transcriptPath = result;
+      await checkForTranscript();
+      await loadTranscriptPreview();
+    } catch (error) {
+      console.error('Failed to transcribe:', error);
+      alert(`Transcription failed: ${error}`);
+    } finally {
+      isTranscribing = false;
+      stopProgressPolling();
+    }
+  }
+
+  function startProgressPolling(sessionId) {
+    progressPollingInterval = setInterval(async () => {
+      try {
+        const progress = await invoke('get_transcription_progress', { sessionId });
+        if (progress) {
+          transcriptionProgress = progress;
+        }
+      } catch (error) {
+        console.error('Failed to get progress:', error);
+      }
+    }, 500);
+  }
+
+  function stopProgressPolling() {
+    if (progressPollingInterval) {
+      clearInterval(progressPollingInterval);
+      progressPollingInterval = null;
+    }
+    transcriptionProgress = null;
+  }
+
+  function viewTranscript() {
+    if (transcriptPath) {
+      viewingTranscript = {
+        path: transcriptPath,
+        name: recording.filename
+      };
+    }
+  }
+
+  function closeTranscriptViewer() {
+    viewingTranscript = null;
+  }
+
+  async function openInEditor() {
+    if (transcriptPath) {
+      try {
+        await invoke('open_recording', { filePath: transcriptPath });
+      } catch (error) {
+        console.error('Failed to open transcript in editor:', error);
+        alert(`Failed to open transcript: ${error}`);
+      }
+    }
+  }
+</script>
+
+<div class="recording-detail">
+  <!-- Header -->
+  <div class="detail-header">
+    <button class="back-btn" on:click={onBack}>
+      <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M11 2L5 8l6 6" stroke="currentColor" stroke-width="2" fill="none"/>
+      </svg>
+      Back
+    </button>
+  </div>
+
+  <!-- Title -->
+  <h1 class="recording-title">{recording.filename}</h1>
+  <div class="recording-meta">{new Date(recording.created).toLocaleString()}</div>
+
+  <!-- Audio Player Section -->
+  <div class="player-section card">
+    <div class="waveform-placeholder">
+      <svg width="100%" height="80" viewBox="0 0 800 80" fill="none">
+        {#each Array(100) as _, i}
+          <rect
+            x={i * 8}
+            y={40 - Math.random() * 30}
+            width="6"
+            height={Math.random() * 60}
+            fill="var(--text-tertiary)"
+            opacity="0.3"
+          />
+        {/each}
+      </svg>
+      <div class="play-button">
+        <button class="btn-play" on:click={openRecording}>
+          <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M4 2l10 6-10 6V2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="player-controls">
+      <span class="time-display">00:00</span>
+      <span class="time-display">{formatTime(Math.floor(recording.size / 44100))}</span>
+    </div>
+  </div>
+
+  <!-- Metadata Section -->
+  <div class="metadata-section">
+    <h3 class="section-title">METADATA</h3>
+    <div class="metadata-grid">
+      <div class="metadata-item">
+        <div class="metadata-label">Format</div>
+        <div class="metadata-value">{recording.format.toUpperCase()}</div>
+      </div>
+      <div class="metadata-item">
+        <div class="metadata-label">Size</div>
+        <div class="metadata-value">{formatFileSize(recording.size)}</div>
+      </div>
+      <div class="metadata-item">
+        <div class="metadata-label">Date & Time</div>
+        <div class="metadata-value">{new Date(recording.created).toLocaleString()}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Transcript Section -->
+  <div class="transcript-section">
+    <h3 class="section-title">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h8v2H2v-2z"/>
+      </svg>
+      Transcript
+    </h3>
+
+    {#if isTranscribing}
+      <!-- Transcription in progress -->
+      <div class="transcribing-state card">
+        <div class="spinner"></div>
+        <p>Transcribing...</p>
+        {#if transcriptionProgress}
+          <div class="progress-info">
+            <p class="progress-step">{transcriptionProgress.step}</p>
+            {#if transcriptionProgress.message}
+              <p class="progress-message">{transcriptionProgress.message}</p>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {:else if transcriptPath}
+      <!-- Transcript exists - show preview and actions -->
+      {#if transcriptPreview}
+        <!-- Show preview card with all actions -->
+        <div class="transcript-preview-card card">
+          <div class="transcript-preview-content">
+            <div class="transcript-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8" stroke="white" stroke-width="2" fill="none"/>
+                <line x1="16" y1="13" x2="8" y2="13" stroke="white" stroke-width="2"/>
+                <line x1="16" y1="17" x2="8" y2="17" stroke="white" stroke-width="2"/>
+                <line x1="10" y1="9" x2="8" y2="9" stroke="white" stroke-width="2"/>
+              </svg>
+            </div>
+            <div class="transcript-preview-text">
+              <div class="transcript-available-label">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm3.707 6.707a1 1 0 00-1.414-1.414L7 8.586 5.707 7.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
+                </svg>
+                Transcript Available
+              </div>
+              <p class="preview-text">{transcriptPreview}</p>
+            </div>
+          </div>
+          <div class="transcript-preview-actions">
+            <button class="btn btn-primary" on:click={viewTranscript}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              View Full Transcript
+            </button>
+            <button class="btn btn-secondary" on:click={openInEditor}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              Open in Editor
+            </button>
+            <button class="btn btn-secondary" on:click={transcribeRecording}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"/>
+              </svg>
+              Re-transcribe
+            </button>
+          </div>
+        </div>
+      {:else}
+        <!-- Transcript exists but preview failed to load -->
+        <div class="transcript-actions-row">
+          <button class="btn btn-primary" on:click={viewTranscript}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            View Transcript
+          </button>
+          <button class="btn btn-secondary" on:click={transcribeRecording}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"/>
+            </svg>
+            Re-transcribe
+          </button>
+        </div>
+      {/if}
+    {:else}
+      <!-- No transcript - show generate button -->
+      <button class="btn btn-primary" on:click={transcribeRecording}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h8v2H2v-2z"/>
+        </svg>
+        Generate Transcript
+      </button>
+    {/if}
+  </div>
+
+  <!-- Actions -->
+  <div class="actions-section">
+    <button class="btn btn-secondary" on:click={openFolder}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M2 3h5l2 2h5v8H2V3z"/>
+      </svg>
+      Open Folder
+    </button>
+    <button class="btn btn-secondary" on:click={openRecording}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm-1 9V5l5 3-5 3z"/>
+      </svg>
+      Play in Default App
+    </button>
+  </div>
+</div>
+
+{#if viewingTranscript}
+  <TranscriptViewer
+    transcriptPath={viewingTranscript.path}
+    recordingName={viewingTranscript.name}
+    onClose={closeTranscriptViewer}
+  />
+{/if}
+
+<style>
+  .recording-detail {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .detail-header {
+    margin-bottom: var(--spacing-xl);
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    border-radius: var(--corner-radius-small);
+    transition: all 0.08s ease;
+  }
+
+  .back-btn:hover {
+    background: var(--card-background);
+    color: var(--text-primary);
+  }
+
+  .recording-title {
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .recording-meta {
+    font-size: 14px;
+    color: var(--text-tertiary);
+    margin-bottom: var(--spacing-xxl);
+  }
+
+  .player-section {
+    margin-bottom: var(--spacing-xxl);
+  }
+
+  .waveform-placeholder {
+    position: relative;
+    background: var(--card-background-secondary);
+    border-radius: var(--corner-radius-medium);
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-md);
+  }
+
+  .play-button {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .btn-play {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--accent-default);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(255, 59, 48, 0.3);
+    transition: all 0.2s ease;
+  }
+
+  .btn-play:hover {
+    background: var(--accent-secondary);
+    box-shadow: 0 6px 20px rgba(255, 59, 48, 0.4);
+    transform: scale(1.05);
+  }
+
+  .player-controls {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+
+  .metadata-section {
+    margin-bottom: var(--spacing-xxl);
+  }
+
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--spacing-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-lg);
+  }
+
+  .metadata-item {
+    background: var(--card-background);
+    padding: var(--spacing-lg);
+    border-radius: var(--corner-radius-medium);
+    border: 1px solid var(--stroke-surface);
+  }
+
+  .metadata-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .metadata-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .transcript-section {
+    margin-bottom: var(--spacing-xxl);
+  }
+
+  .transcribing-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xxl);
+    text-align: center;
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--stroke-surface);
+    border-top-color: var(--accent-default);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: var(--spacing-md);
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .progress-info {
+    margin-top: var(--spacing-md);
+    font-size: 13px;
+  }
+
+  .progress-step {
+    color: var(--text-primary);
+    font-weight: 500;
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .progress-message {
+    color: var(--text-tertiary);
+  }
+
+  /* Transcript Preview Card */
+  .transcript-preview-card {
+    padding: var(--spacing-lg);
+    background: linear-gradient(135deg, rgba(0, 103, 192, 0.05) 0%, rgba(0, 103, 192, 0.02) 100%);
+    border: 2px solid rgba(0, 103, 192, 0.2);
+  }
+
+  .transcript-preview-content {
+    display: flex;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--stroke-surface);
+  }
+
+  .transcript-icon {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--corner-radius-medium);
+    background: linear-gradient(135deg, var(--accent-default) 0%, var(--accent-secondary) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 4px 12px rgba(0, 103, 192, 0.2);
+  }
+
+  .transcript-preview-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .transcript-available-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--success);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .transcript-available-label svg {
+    flex-shrink: 0;
+  }
+
+  .preview-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin: 0;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+  }
+
+  .transcript-preview-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+  }
+
+  .transcript-actions-row {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+  }
+
+  .actions-section {
+    display: flex;
+    gap: var(--spacing-md);
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 768px) {
+    .metadata-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .recording-title {
+      font-size: 24px;
+    }
+
+    .actions-section {
+      flex-direction: column;
+    }
+
+    .actions-section .btn {
+      width: 100%;
+    }
+
+    .transcript-preview-content {
+      flex-direction: column;
+      gap: var(--spacing-md);
+    }
+
+    .transcript-icon {
+      width: 48px;
+      height: 48px;
+    }
+
+    .transcript-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .transcript-preview-actions {
+      flex-direction: column;
+    }
+
+    .transcript-preview-actions .btn {
+      width: 100%;
+    }
+
+    .transcript-actions-row {
+      flex-direction: column;
+    }
+
+    .transcript-actions-row .btn {
+      width: 100%;
+    }
+  }
+</style>

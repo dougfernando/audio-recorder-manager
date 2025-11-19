@@ -10,6 +10,7 @@ license = "MIT"
 tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
+anyhow = { workspace = true }
 tauri = { version = "2.1", features = ["wry"] }
 tauri-plugin-dialog = "2.4"
 tauri-plugin-shell = "2.1"

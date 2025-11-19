@@ -148,16 +148,14 @@
 
 <style>
   .recording-card {
-    background:
-      var(--bg-gradient-purple),
-      linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
-    border: 1px solid rgba(102, 126, 234, 0.2);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(102, 126, 234, 0.1);
+    background: var(--card-background);
+    border: 1px solid var(--stroke-surface);
+    box-shadow: var(--elevation-card);
   }
 
   .recording-card:hover {
-    border-color: rgba(102, 126, 234, 0.3);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(102, 126, 234, 0.15);
+    border-color: var(--stroke-surface-flyout);
+    box-shadow: var(--elevation-flyout);
   }
 
   .error-message {
@@ -184,7 +182,7 @@
 
   .form-label svg {
     opacity: 0.9;
-    color: #667eea;
+    color: var(--accent-default);
   }
 
   .duration-grid {
@@ -196,15 +194,15 @@
 
   .duration-btn {
     padding: var(--spacing-lg);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(249, 249, 249, 0.85) 100%);
-    border: 2px solid rgba(0, 103, 192, 0.08);
+    background: var(--card-background-secondary);
+    border: 2px solid var(--stroke-surface);
     border-radius: var(--corner-radius-medium);
     font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
     transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--elevation-card);
     min-height: 56px;
     display: flex;
     align-items: center;
@@ -212,23 +210,23 @@
   }
 
   .duration-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(249, 249, 249, 0.95) 100%);
-    border-color: rgba(0, 103, 192, 0.2);
-    box-shadow: 0 4px 12px rgba(0, 103, 192, 0.1);
+    background: var(--card-background);
+    border-color: var(--stroke-surface-flyout);
+    box-shadow: var(--elevation-flyout);
     transform: translateY(-2px);
   }
 
   .duration-btn.active {
-    background: linear-gradient(135deg, #0067C0 0%, #0078D4 100%);
+    background: var(--accent-default);
     border-color: transparent;
     color: var(--text-on-accent);
-    box-shadow: 0 4px 16px rgba(0, 103, 192, 0.35), 0 0 0 1px rgba(0, 103, 192, 0.1);
+    box-shadow: 0 4px 16px rgba(255, 59, 48, 0.35);
     font-weight: 700;
   }
 
   .duration-btn.active:hover:not(:disabled) {
-    background: linear-gradient(135deg, #0078D4 0%, #4A9EFF 100%);
-    box-shadow: 0 6px 20px rgba(0, 103, 192, 0.45);
+    background: var(--accent-secondary);
+    box-shadow: 0 6px 20px rgba(255, 59, 48, 0.45);
   }
 
   .duration-value {
@@ -261,20 +259,20 @@
 
   .start-btn {
     width: 100%;
-    background: linear-gradient(135deg, #0067C0 0%, #0078D4 100%);
-    box-shadow: 0 4px 12px rgba(0, 103, 192, 0.3);
+    background: var(--accent-default);
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
     transition: all 0.2s ease;
   }
 
   .start-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #0078D4 0%, #4A9EFF 100%);
-    box-shadow: 0 6px 16px rgba(0, 103, 192, 0.4);
+    background: var(--accent-secondary);
+    box-shadow: 0 6px 16px rgba(255, 59, 48, 0.4);
     transform: translateY(-1px);
   }
 
   .start-btn:active:not(:disabled) {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(0, 103, 192, 0.3);
+    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.3);
   }
 
   /* Responsive Design */
@@ -338,19 +336,4 @@
     }
   }
 
-  /* Dark mode adjustments */
-  @media (prefers-color-scheme: dark) {
-    .recording-card {
-      background:
-        var(--bg-gradient-purple),
-        linear-gradient(135deg, rgba(42, 42, 42, 0.95) 0%, rgba(36, 36, 36, 0.85) 100%);
-      border: 1px solid rgba(102, 126, 234, 0.3);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(102, 126, 234, 0.15);
-    }
-
-    .recording-card:hover {
-      border-color: rgba(102, 126, 234, 0.4);
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38), 0 4px 8px rgba(102, 126, 234, 0.2);
-    }
-  }
 </style>

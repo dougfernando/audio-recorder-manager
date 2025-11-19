@@ -18,21 +18,21 @@ impl Default for TranscriptionConfig {
             model: "gemini-2.5-flash".to_string(),
             prompt: r#"Please process the attached audio file and provide the following two sections in markdown format:
 
-**1. Raw Transcription:**
-
-*   Detect the language spoken in the audio.
-*   Transcribe the audio verbatim in the detected language, word for word, exactly as spoken.
-*   Use appropriate punctuation.
-*   Indicate long pauses with [...].
-*   If there are multiple speakers, label them as "Speaker 1:", "Speaker 2:", etc.
-
-**2. Key Topics Discussed:**
+**1. Key Topics Discussed:**
 
 *   Analyze the raw transcription.
 *   Identify the main subjects, decisions, and action items.
 *   Organize these points into a summary with clear headings for each topic.
 *   Describe the key topics in the same language as identified in the raw transcription as long it is Spanish, Portuguese or English; otherwise, use English.
 *   Ensure no critical information is lost.
+
+**2. Raw Transcription:**
+
+*   Detect the language spoken in the audio.
+*   Transcribe the audio verbatim in the detected language, word for word, exactly as spoken.
+*   Use appropriate punctuation.
+*   Indicate long pauses with [...].
+*   If there are multiple speakers, label them as "Speaker 0:", "Speaker 2:", etc.
 
 Your entire response should be a single markdown document."#.to_string(),
             optimize_audio: false,

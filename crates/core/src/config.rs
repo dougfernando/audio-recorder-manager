@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use anyhow::{Result, Context};
 use std::fs;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RecorderConfig {
+    pub storage_dir: PathBuf,
     pub recordings_dir: PathBuf,
     pub transcriptions_dir: PathBuf,
     pub status_dir: PathBuf,
@@ -18,20 +19,17 @@ pub struct RecorderConfig {
     pub file_write_delay_ms: u64,
 }
 
+#[derive(Deserialize)]
+struct TempConfig {
+    storage_dir: Option<PathBuf>,
+    recordings_dir: Option<PathBuf>,
+}
+
+
 impl Default for RecorderConfig {
     fn default() -> Self {
-        // Get workspace root storage directory
         let storage_base = Self::get_workspace_storage_dir();
-
-        Self {
-            recordings_dir: storage_base.join("recordings"),
-            transcriptions_dir: storage_base.join("transcriptions"),
-            status_dir: storage_base.join("status"),
-            signals_dir: storage_base.join("signals"),
-            max_manual_duration_secs: 7200, // 2 hours
-            status_update_interval: Duration::from_secs(1),
-            file_write_delay_ms: 500,
-        }
+        Self::from_storage_dir(storage_base)
     }
 }
 
@@ -63,6 +61,20 @@ impl RecorderConfig {
         // Fallback to current directory
         current_dir.join("storage")
     }
+
+    pub fn from_storage_dir(storage_dir: PathBuf) -> Self {
+        Self {
+            recordings_dir: storage_dir.join("recordings"),
+            transcriptions_dir: storage_dir.join("transcriptions"),
+            status_dir: storage_dir.join("status"),
+            signals_dir: storage_dir.join("signals"),
+            storage_dir,
+            max_manual_duration_secs: 7200,
+            status_update_interval: Duration::from_secs(1),
+            file_write_delay_ms: 500,
+        }
+    }
+
 
     pub fn new() -> Self {
         // Try to load from config file, otherwise use default
@@ -98,8 +110,15 @@ impl RecorderConfig {
         let content = fs::read_to_string(&config_path)
             .context("Failed to read config file")?;
 
-        let mut config: RecorderConfig = serde_json::from_str(&content)
+        let temp_config: TempConfig = serde_json::from_str(&content)
             .context("Failed to parse config file")?;
+
+        let storage_dir = temp_config.storage_dir.or_else(|| {
+            temp_config.recordings_dir.and_then(|p| p.parent().map(|path| path.to_path_buf()))
+        }).unwrap_or_else(Self::get_workspace_storage_dir);
+        
+        let mut config = Self::from_storage_dir(storage_dir);
+
 
         // Set non-serialized fields
         config.max_manual_duration_secs = 7200;
@@ -110,8 +129,17 @@ impl RecorderConfig {
     }
 
     pub fn save(&self) -> Result<()> {
+        #[derive(Serialize)]
+        struct ConfigToSave<'a> {
+            storage_dir: &'a PathBuf,
+        }
+
+        let to_save = ConfigToSave {
+            storage_dir: &self.storage_dir,
+        };
+
         let config_path = Self::get_config_file_path()?;
-        let content = serde_json::to_string_pretty(self)
+        let content = serde_json::to_string_pretty(&to_save)
             .context("Failed to serialize config")?;
         fs::write(&config_path, content)
             .context("Failed to write config file")?;

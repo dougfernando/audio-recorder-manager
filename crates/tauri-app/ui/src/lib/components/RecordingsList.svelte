@@ -3,6 +3,10 @@
   import { ask } from '@tauri-apps/plugin-dialog';
   import { recordings, formatFileSize } from '../stores';
   import TranscriptViewer from './TranscriptViewer.svelte';
+  import RecordingDetail from './RecordingDetail.svelte';
+
+  // Optional callback for when a recording is clicked (for parent navigation)
+  export let onRecordingClick = null;
 
   let isLoading = false;
   let isDeleting = {};
@@ -11,6 +15,7 @@
   let transcriptionProgress = {}; // { filename: { step, progress, message } }
   let viewingTranscript = null; // { path: string, name: string }
   let progressPollingIntervals = {};
+  let selectedRecording = null; // Recording object for detail view
 
   // Check for transcripts whenever recordings change
   $: if ($recordings.length > 0) {
@@ -188,45 +193,78 @@
       transcriptionProgress = transcriptionProgress; // Trigger reactivity
     }
   }
+
+  function showRecordingDetail(recording) {
+    console.log('Showing recording detail for:', recording);
+
+    // If parent wants to handle navigation, use the callback
+    if (onRecordingClick) {
+      onRecordingClick(recording);
+    } else {
+      // Otherwise, use internal state (backward compatibility)
+      selectedRecording = recording;
+      console.log('selectedRecording set to:', selectedRecording);
+    }
+  }
+
+  function closeRecordingDetail() {
+    selectedRecording = null;
+  }
+
+  // Debug: log when selectedRecording changes
+  $: console.log('[RecordingsList] selectedRecording changed:', selectedRecording);
 </script>
 
-<div class="recordings-container">
-  <div class="header">
-    <h2>Recordings</h2>
-    <button class="btn btn-secondary" on:click={loadRecordings} disabled={isLoading}>
-      {#if isLoading}
-        <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 11-6.219-8.56"/>
-        </svg>
-        Loading...
-      {:else}
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"/>
-        </svg>
-        Refresh
-      {/if}
-    </button>
-  </div>
+{#if selectedRecording}
+  <!-- Showing RecordingDetail -->
+  <RecordingDetail
+    recording={selectedRecording}
+    onBack={closeRecordingDetail}
+  />
+{:else}
+  <div class="recordings-container">
+    <div class="header">
+      <h2>Recordings</h2>
+      <button class="btn btn-secondary" on:click={loadRecordings} disabled={isLoading}>
+        {#if isLoading}
+          <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+          </svg>
+          Loading...
+        {:else}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"/>
+          </svg>
+          Refresh
+        {/if}
+      </button>
+    </div>
 
-  {#if $recordings && $recordings.length > 0}
-    <div class="recordings-grid">
-      {#each $recordings as recording}
-        <div class="recording-card card">
-          <div class="recording-header">
-            <div class="recording-icon {recording.format === 'wav' ? 'wav' : 'm4a'}">
-              {#if recording.format === 'wav'}
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                </svg>
-              {:else}
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                  <path d="M20 6v2h-2V6h2z" opacity="0.5"/>
-                </svg>
-              {/if}
+    {#if $recordings && $recordings.length > 0}
+      <div class="recordings-grid">
+        {#each $recordings as recording (recording.path)}
+          <div
+            class="recording-card card"
+            on:click={() => showRecordingDetail(recording)}
+            on:keydown={(e) => e.key === 'Enter' && showRecordingDetail(recording)}
+            role="button"
+            tabindex="0"
+          >
+            <div class="recording-header">
+              <div class="recording-icon {recording.format === 'wav' ? 'wav' : 'm4a'}">
+                {#if recording.format === 'wav'}
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                  </svg>
+                {:else}
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                    <path d="M20 6v2h-2V6h2z" opacity="0.5"/>
+                  </svg>
+                {/if}
+              </div>
+              <div class="format-badge {recording.format}">{recording.format.toUpperCase()}</div>
             </div>
-            <div class="format-badge {recording.format}">{recording.format.toUpperCase()}</div>
-          </div>
 
           <div class="recording-info">
             <div class="recording-name" title={recording.filename}>
@@ -242,7 +280,7 @@
           <div class="recording-actions">
             <button
               class="btn btn-primary btn-sm"
-              on:click={() => openRecording(recording.path)}
+              on:click|stopPropagation={() => openRecording(recording.path)}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"/>
@@ -251,7 +289,7 @@
             </button>
             <button
               class="btn btn-success btn-sm"
-              on:click={() => transcribeRecording(recording)}
+              on:click|stopPropagation={() => transcribeRecording(recording)}
               disabled={isTranscribing[recording.filename]}
             >
               {#if isTranscribing[recording.filename]}
@@ -272,7 +310,7 @@
             </button>
             <button
               class="btn btn-info btn-sm"
-              on:click={() => viewTranscript(recording)}
+              on:click|stopPropagation={() => viewTranscript(recording)}
               disabled={!transcriptPath[recording.filename]}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -283,7 +321,7 @@
             </button>
             <button
               class="btn btn-danger btn-sm"
-              on:click={() => deleteRecording(recording)}
+              on:click|stopPropagation={() => deleteRecording(recording)}
               disabled={isDeleting[recording.filename]}
             >
               {#if isDeleting[recording.filename]}
@@ -312,39 +350,40 @@
         </div>
       {/each}
     </div>
-  {:else if $recordings.length === 0 && isLoading}
-    <!-- Skeleton loading UI -->
-    <div class="recordings-grid">
-      {#each Array(3) as _, i}
-        <div class="recording-card card skeleton">
-          <div class="skeleton-header">
-            <div class="skeleton-icon"></div>
-            <div class="skeleton-badge"></div>
+    {:else if $recordings.length === 0 && isLoading}
+      <!-- Skeleton loading UI -->
+      <div class="recordings-grid">
+        {#each Array(3) as _, i}
+          <div class="recording-card card skeleton">
+            <div class="skeleton-header">
+              <div class="skeleton-icon"></div>
+              <div class="skeleton-badge"></div>
+            </div>
+            <div class="skeleton-info">
+              <div class="skeleton-title"></div>
+              <div class="skeleton-meta"></div>
+            </div>
+            <div class="skeleton-actions">
+              <div class="skeleton-btn"></div>
+              <div class="skeleton-btn"></div>
+            </div>
           </div>
-          <div class="skeleton-info">
-            <div class="skeleton-title"></div>
-            <div class="skeleton-meta"></div>
-          </div>
-          <div class="skeleton-actions">
-            <div class="skeleton-btn"></div>
-            <div class="skeleton-btn"></div>
-          </div>
-        </div>
-      {/each}
-    </div>
-  {:else if $recordings.length === 0}
-    <!-- Empty state when no recordings and not loading -->
-    <div class="empty-state">
-      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M9 18V5l12-2v13"/>
-        <circle cx="6" cy="18" r="3"/>
-        <circle cx="18" cy="16" r="3"/>
-      </svg>
-      <p>No recordings found</p>
-      <small>Start a recording to see it appear here</small>
-    </div>
-  {/if}
-</div>
+        {/each}
+      </div>
+    {:else if $recordings.length === 0}
+      <!-- Empty state when no recordings and not loading -->
+      <div class="empty-state">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M9 18V5l12-2v13"/>
+          <circle cx="6" cy="18" r="3"/>
+          <circle cx="18" cy="16" r="3"/>
+        </svg>
+        <p>No recordings found</p>
+        <small>Start a recording to see it appear here</small>
+      </div>
+    {/if}
+  </div>
+{/if}
 
 {#if viewingTranscript}
   <TranscriptViewer
@@ -397,11 +436,13 @@
     flex-direction: column;
     padding: var(--spacing-lg);
     transition: all 0.2s ease;
+    cursor: pointer;
   }
 
   .recording-card:hover {
     box-shadow: var(--elevation-flyout);
     transform: translateY(-2px);
+    border-color: var(--accent-default);
   }
 
   .recording-header {

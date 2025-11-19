@@ -9,8 +9,7 @@
   let optimizeAudio = false;
 
   // Storage paths
-  let recordingsDir = '';
-  let transcriptionsDir = '';
+  let storageDir = '';
 
   let isSaving = false;
   let isLoading = true;
@@ -54,15 +53,13 @@ Your entire response should be a single markdown document.`;
 
       // Load recorder config (storage paths)
       const recorderConfig = await invoke('load_recorder_config');
-      recordingsDir = recorderConfig.recordings_dir || 'storage/recordings';
-      transcriptionsDir = recorderConfig.transcriptions_dir || 'storage/transcriptions';
+      storageDir = recorderConfig.storage_dir || 'storage';
     } catch (error) {
       console.error('Failed to load config:', error);
       errorMessage = `Failed to load configuration: ${error}`;
       // Set defaults
       prompt = defaultPrompt;
-      recordingsDir = 'storage/recordings';
-      transcriptionsDir = 'storage/transcriptions';
+      storageDir = 'storage';
     } finally {
       isLoading = false;
     }
@@ -86,8 +83,7 @@ Your entire response should be a single markdown document.`;
 
       // Save recorder config (storage paths)
       await invoke('save_recorder_config', {
-        recordingsDir: recordingsDir,
-        transcriptionsDir: transcriptionsDir,
+        storageDir: storageDir,
       });
 
       saveMessage = 'Settings saved successfully!';
@@ -102,27 +98,13 @@ Your entire response should be a single markdown document.`;
     }
   }
 
-  async function pickRecordingsFolder() {
+  async function pickStorageFolder() {
     try {
       const result = await invoke('pick_folder', {
-        defaultPath: recordingsDir || null,
+        defaultPath: storageDir || null,
       });
       if (result) {
-        recordingsDir = result;
-      }
-    } catch (error) {
-      console.error('Failed to pick folder:', error);
-      errorMessage = `Failed to select folder: ${error}`;
-    }
-  }
-
-  async function pickTranscriptionsFolder() {
-    try {
-      const result = await invoke('pick_folder', {
-        defaultPath: transcriptionsDir || null,
-      });
-      if (result) {
-        transcriptionsDir = result;
+        storageDir = result;
       }
     } catch (error) {
       console.error('Failed to pick folder:', error);
@@ -149,56 +131,30 @@ Your entire response should be a single markdown document.`;
     {:else}
       <form on:submit|preventDefault={saveConfig} class="settings-form">
         <div class="settings-content">
-          <h3 class="section-title">Storage Paths</h3>
+          <h3 class="section-title">Storage Path</h3>
 
         <div class="form-group">
-          <label class="form-label" for="recordings-dir">
+          <label class="form-label" for="storage-dir">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
-            Recordings Folder
+            Storage Folder
           </label>
           <div class="path-input-group">
             <input
-              id="recordings-dir"
+              id="storage-dir"
               type="text"
               class="form-input"
-              bind:value={recordingsDir}
-              placeholder="storage/recordings"
+              bind:value={storageDir}
+              placeholder="storage"
               required
             />
-            <button type="button" class="btn btn-secondary btn-sm" on:click={pickRecordingsFolder}>
+            <button type="button" class="btn btn-secondary btn-sm" on:click={pickStorageFolder}>
               Browse
             </button>
           </div>
           <small class="form-hint">
-            Location where audio recordings will be saved
-          </small>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="transcriptions-dir">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-            Transcriptions Folder
-          </label>
-          <div class="path-input-group">
-            <input
-              id="transcriptions-dir"
-              type="text"
-              class="form-input"
-              bind:value={transcriptionsDir}
-              placeholder="storage/transcriptions"
-              required
-            />
-            <button type="button" class="btn btn-secondary btn-sm" on:click={pickTranscriptionsFolder}>
-              Browse
-            </button>
-          </div>
-          <small class="form-hint">
-            Location where transcription files will be saved
+            Base location for recordings, transcriptions, and status files.
           </small>
         </div>
 
@@ -226,7 +182,7 @@ Your entire response should be a single markdown document.`;
           </small>
         </div>
 
-        <div class="form-group">
+        <div class="form-.group">
           <label class="form-label" for="model">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
@@ -328,11 +284,9 @@ Your entire response should be a single markdown document.`;
   }
 
   .settings-card {
-    background:
-      var(--bg-gradient-blue),
-      linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
-    border: 1px solid rgba(79, 172, 254, 0.2);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(79, 172, 254, 0.1);
+    background: var(--card-background);
+    border: 1px solid var(--stroke-surface);
+    box-shadow: var(--elevation-card);
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -363,7 +317,7 @@ Your entire response should be a single markdown document.`;
     flex-shrink: 0;
     padding: var(--spacing-lg);
     border-top: 1px solid var(--stroke-surface);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.5) 100%);
+    background: var(--layer-fill-alt);
   }
 
   .error-message {

@@ -163,9 +163,9 @@
   }
 
   .transcript-viewer {
-    background: white;
+    background: var(--card-background);
     border-radius: var(--corner-radius-large);
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--elevation-flyout);
     max-width: 1200px;
     width: 100%;
     max-height: 90vh;
@@ -180,7 +180,7 @@
     align-items: center;
     padding: var(--spacing-lg) var(--spacing-xl);
     border-bottom: 1px solid var(--stroke-surface);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 1) 0%, rgba(249, 249, 249, 1) 100%);
+    background: var(--layer-fill-alt);
   }
 
   .header-info h2 {
@@ -225,9 +225,9 @@
   }
 
   .toggle-btn.active {
-    background: white;
+    background: var(--card-background);
     color: var(--accent-default);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--elevation-card);
   }
 
   .toggle-btn:hover:not(.active) {

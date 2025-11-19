@@ -92,8 +92,14 @@ struct PartResponse {
 }
 
 /// Write transcription status to file for UI monitoring
-fn write_status(session_id: &str, step: i32, total_steps: i32, step_name: &str, message: &str) -> Result<()> {
-    let status_dir = get_status_dir()?;
+fn write_status(
+    status_dir: &Path,
+    session_id: &str,
+    step: i32,
+    total_steps: i32,
+    step_name: &str,
+    message: &str,
+) -> Result<()> {
     let status_file = status_dir.join(format!("{}.json", session_id));
 
     let progress = (step * 100) / total_steps;
@@ -110,17 +116,13 @@ fn write_status(session_id: &str, step: i32, total_steps: i32, step_name: &str, 
     Ok(())
 }
 
-fn get_status_dir() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir()?;
-    let status_dir = current_dir.join("storage").join("status");
-    fs::create_dir_all(&status_dir)?;
-    Ok(status_dir)
-}
+
 
 /// Transcribe an audio file using the Gemini API
 pub async fn transcribe_audio(
     audio_file_path: &Path,
     transcriptions_dir: &Path,
+    status_dir: &Path,
     api_key: &str,
     model: &str,
     prompt: &str,
@@ -160,7 +162,7 @@ pub async fn transcribe_audio(
         .build()?;
 
     // Step 1: Read and encode audio file
-    write_status(session_id, 1, 4, "reading", "Reading audio file...")?;
+    write_status(status_dir, session_id, 1, 4, "reading", "Reading audio file...")?;
     tracing::info!("[1/4] Reading audio file...");
 
     let audio_data = fs::read(audio_file_path)
@@ -169,7 +171,7 @@ pub async fn transcribe_audio(
     tracing::info!("File size: {:.2} MB", file_size_mb);
 
     // Step 2: Upload file to Gemini API
-    write_status(session_id, 2, 4, "uploading", "Uploading file to Gemini API...")?;
+    write_status(status_dir, session_id, 2, 4, "uploading", "Uploading file to Gemini API...")?;
     tracing::info!("[2/4] Uploading to Gemini API...");
 
     let upload_url = format!(
@@ -245,7 +247,7 @@ pub async fn transcribe_audio(
     tracing::info!("File uploaded successfully: {} (state: {})", upload_result.file.uri, upload_result.file.state);
 
     // Step 3: Wait for file processing (if needed)
-    write_status(session_id, 3, 4, "processing", "Waiting for file processing...")?;
+    write_status(status_dir, session_id, 3, 4, "processing", "Waiting for file processing...")?;
     tracing::info!("[3/4] Waiting for file processing...");
 
     let mut file_info = upload_result.file;
@@ -287,7 +289,7 @@ pub async fn transcribe_audio(
     tracing::info!("File processing completed in {:.2}s, state: {}", processing_duration.as_secs_f64(), file_info.state);
 
     // Step 4: Generate transcription
-    write_status(session_id, 4, 4, "transcribing", "Generating transcription...")?;
+    write_status(status_dir, session_id, 4, 4, "transcribing", "Generating transcription...")?;
     tracing::info!("[4/4] Generating transcription...");
 
     let generate_url = format!(
@@ -372,8 +374,10 @@ pub async fn transcribe_audio(
 }
 
 /// Read transcription status from status file
-pub fn read_transcription_status(session_id: &str) -> Result<Option<TranscriptionStatus>> {
-    let status_dir = get_status_dir()?;
+pub fn read_transcription_status(
+    status_dir: &Path,
+    session_id: &str,
+) -> Result<Option<TranscriptionStatus>> {
     let status_file = status_dir.join(format!("{}.json", session_id));
 
     if !status_file.exists() {

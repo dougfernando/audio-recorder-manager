@@ -1,32 +1,32 @@
 :root {
-  /* Windows 11 Color System - Light Mode */
-  --accent-default: #005FB8;
-  --accent-secondary: #0078D4;
-  --accent-tertiary: #62A0DA;
-  --accent-disabled: #C8C8C8;
+  /* Dark Minimal Theme - Mockup Inspired */
+  --accent-default: #FF3B30;
+  --accent-secondary: #FF5247;
+  --accent-tertiary: #FF6B61;
+  --accent-disabled: #666;
 
-  /* Backgrounds - Mica-inspired */
-  --layer-fill-default: #F3F3F3;
-  --layer-fill-alt: #EBEBEB;
-  --layer-on-mica: rgba(255, 255, 255, 0.5);
-  --card-background: rgba(255, 255, 255, 0.7);
-  --card-background-secondary: rgba(249, 249, 249, 0.9);
+  /* Backgrounds - Pure Dark */
+  --layer-fill-default: #0a0a0a;
+  --layer-fill-alt: #0f0f0f;
+  --layer-on-mica: rgba(15, 15, 15, 0.5);
+  --card-background: rgba(26, 26, 26, 0.7);
+  --card-background-secondary: rgba(20, 20, 20, 0.9);
 
   /* Text Colors */
-  --text-primary: #1C1C1C;
-  --text-secondary: #605E5C;
-  --text-tertiary: #8A8886;
-  --text-disabled: #C8C8C8;
+  --text-primary: #e5e5e5;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #737373;
+  --text-disabled: #525252;
   --text-on-accent: #FFFFFF;
 
   /* Stroke/Border Colors */
-  --stroke-surface: rgba(0, 0, 0, 0.0578);
-  --stroke-surface-flyout: rgba(0, 0, 0, 0.0805);
-  --divider-stroke: rgba(0, 0, 0, 0.0805);
+  --stroke-surface: rgba(255, 255, 255, 0.06);
+  --stroke-surface-flyout: rgba(255, 255, 255, 0.1);
+  --divider-stroke: rgba(255, 255, 255, 0.08);
 
-  /* Elevation - Windows 11 Shadows */
-  --elevation-card: 0 2px 4px rgba(0, 0, 0, 0.04), 0 0 2px rgba(0, 0, 0, 0.02);
-  --elevation-flyout: 0 8px 16px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12);
+  /* Elevation - Subtle Dark Shadows */
+  --elevation-card: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 1px rgba(255, 255, 255, 0.05);
+  --elevation-flyout: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 2px rgba(255, 255, 255, 0.08);
 
   /* Corner Radius - Windows 11 Standard */
   --corner-radius-small: 4px;
@@ -43,14 +43,14 @@
   --spacing-xxxl: 32px;
 
   /* Status Colors */
-  --success: #107C10;
-  --success-bg: #DFF6DD;
-  --warning: #F7630C;
-  --warning-bg: #FFF4CE;
-  --danger: #D13438;
-  --danger-bg: #FDE7E9;
-  --info: #005FB8;
-  --info-bg: #F0F6FF;
+  --success: #10B981;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --warning: #F59E0B;
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --danger: #EF4444;
+  --danger-bg: rgba(239, 68, 68, 0.1);
+  --info: #3B82F6;
+  --info-bg: rgba(59, 130, 246, 0.1);
 
   /* Modern Gradient Colors */
   --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

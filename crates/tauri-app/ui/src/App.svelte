@@ -1,23 +1,15 @@
 <script>
-  console.log('[TIMING] App.svelte script starting to execute');
   const componentStart = performance.now();
 
   import { onMount, afterUpdate, tick } from 'svelte';
-  console.log('[TIMING] Imported lifecycle functions:', performance.now() - componentStart, 'ms');
-
   import { listen } from '@tauri-apps/api/event';
-  console.log('[TIMING] Imported @tauri-apps/api/event:', performance.now() - componentStart, 'ms');
-
   import { invoke } from '@tauri-apps/api/core';
-  console.log('[TIMING] Imported @tauri-apps/api/core:', performance.now() - componentStart, 'ms');
-
-  console.log('[TIMING] Importing components...');
   import RecordingPanel from './lib/components/RecordingPanel.svelte';
   import ActiveRecording from './lib/components/ActiveRecording.svelte';
   import RecordingsList from './lib/components/RecordingsList.svelte';
+  import RecordingDetail from './lib/components/RecordingDetail.svelte';
   import Recovery from './lib/components/Recovery.svelte';
   import Settings from './lib/components/Settings.svelte';
-  console.log('[TIMING] All components imported:', performance.now() - componentStart, 'ms');
 
   import {
     isRecording,
@@ -25,34 +17,28 @@
     recordingStatus,
     recordings,
   } from './lib/stores';
-  console.log('[TIMING] Stores imported:', performance.now() - componentStart, 'ms');
 
   let activeTab = 'record';
   let hasLoadedRecordings = false;
   let firstRenderComplete = false;
+  let selectedRecording = null; // Track which recording to show in detail view
 
-  console.log('[TIMING] App.svelte script setup complete:', performance.now() - componentStart, 'ms');
+  // Debug: log recordings data
+  $: console.log('[App] recordings store:', $recordings);
+  $: console.log('[App] selectedRecording:', selectedRecording);
 
   // Track first render completion
   afterUpdate(() => {
     if (!firstRenderComplete) {
       firstRenderComplete = true;
       console.log('[TIMING] First render complete (afterUpdate):', performance.now() - componentStart, 'ms');
-
-      // Schedule next frame check to confirm visual rendering
-      requestAnimationFrame(() => {
-        console.log('[TIMING] First frame painted:', performance.now() - componentStart, 'ms');
-        console.log('[TIMING] === UI IS NOW VISIBLE ===');
-      });
     }
   });
 
   onMount(async () => {
-    console.log('[TIMING] App.svelte onMount started:', performance.now() - componentStart, 'ms');
     const mountStart = performance.now();
 
     // Listen for recording status updates from backend
-    console.log('[TIMING] Setting up event listener...');
     const unlisten = await listen('recording-status-update', (event) => {
       recordingStatus.set(event.payload);
 
@@ -63,15 +49,14 @@
       } else if (event.payload.status === 'completed' || event.payload.status === 'stopped') {
         isRecording.set(false);
         currentSession.set(null);
-        // Reload recordings list if already loaded
-        if (hasLoadedRecordings) {
-          loadRecordings();
-        }
+        // Reload recordings list
+        loadRecordings();
       }
     });
-    console.log('[TIMING] Event listener setup complete:', performance.now() - mountStart, 'ms');
 
-    console.log('[TIMING] App.svelte onMount complete:', performance.now() - componentStart, 'ms');
+    // Load recordings for sidebar on mount
+    await loadRecordings();
+
     console.log('[TIMING] Component fully mounted and ready');
 
     // Cleanup on unmount
@@ -90,8 +75,18 @@
     }
   }
 
-  function switchTab(tab) {
-    activeTab = tab;
+  function switchTab(tab, recording = null) {
+    // If a recording is provided, show the detail view
+    if (recording) {
+      selectedRecording = recording;
+      activeTab = 'recording-detail';
+    } else {
+      activeTab = tab;
+      // Clear selected recording when switching away from detail view
+      if (tab !== 'recording-detail') {
+        selectedRecording = null;
+      }
+    }
 
     // Lazy load recordings when user first visits the recordings tab
     if (tab === 'recordings' && !hasLoadedRecordings) {
@@ -101,57 +96,88 @@
 </script>
 
 <main>
-  <!-- Windows 11 Style Tab Navigation (No redundant title) -->
-  <nav class="tab-nav">
-    <div class="app-icon">
-      <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="16" cy="16" r="14" fill="currentColor" opacity="0.8"/>
-        <circle cx="16" cy="16" r="8" fill="white"/>
-        <circle cx="16" cy="16" r="4" fill="currentColor"/>
-      </svg>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <!-- Sidebar Header -->
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" fill="currentColor" opacity="0.8"/>
+            <circle cx="16" cy="16" r="8" fill="white"/>
+            <circle cx="16" cy="16" r="4" fill="currentColor"/>
+          </svg>
+        </div>
+        <span class="brand-text">Audio Recorder Manager</span>
+      </div>
+      <button class="icon-btn" on:click={() => switchTab('settings')} title="Settings">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+          <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/>
+        </svg>
+      </button>
     </div>
-    <button
-      class="nav-tab {activeTab === 'record' ? 'active' : ''}"
-      on:click={() => switchTab('record')}
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+
+    <!-- Record New Button -->
+    <button class="record-new-btn" on:click={() => switchTab('record')}>
+      <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
         <circle cx="8" cy="8" r="6"/>
       </svg>
-      Record
+      Record New
     </button>
-    <button
-      class="nav-tab {activeTab === 'recordings' ? 'active' : ''}"
-      on:click={() => switchTab('recordings')}
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h12v2H2v-2z"/>
-      </svg>
-      Recordings
-    </button>
-    <button
-      class="nav-tab {activeTab === 'recovery' ? 'active' : ''}"
-      on:click={() => switchTab('recovery')}
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 1.5a4.5 4.5 0 110 9 4.5 4.5 0 010-9z"/>
-        <path d="M8 5v4l3 1.5"/>
-      </svg>
-      Recovery
-    </button>
-    <button
-      class="nav-tab {activeTab === 'settings' ? 'active' : ''}"
-      on:click={() => switchTab('settings')}
-    >
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
-        <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/>
-      </svg>
-      Settings
-    </button>
-  </nav>
+
+    <!-- Recordings List -->
+    <div class="sidebar-section">
+      <div class="section-header">
+        <span class="section-title">Recent Recordings</span>
+        <button class="text-btn" on:click={() => switchTab('recordings')}>View All</button>
+      </div>
+      <div class="recordings-list-sidebar">
+        {#if hasLoadedRecordings}
+          {#if $recordings.length > 0}
+            {#each $recordings.slice(0, 8) as recording (recording.path)}
+              <button class="recording-item" on:click={() => switchTab('recordings', recording)}>
+                <div class="recording-icon">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <circle cx="8" cy="8" r="3"/>
+                  </svg>
+                </div>
+                <div class="recording-info">
+                  <div class="recording-name">{recording.filename || 'Untitled'}</div>
+                  <div class="recording-date">{new Date(recording.created).toLocaleDateString()}</div>
+                </div>
+              </button>
+            {/each}
+          {:else}
+            <div class="empty-state">
+              <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor" opacity="0.3">
+                <circle cx="8" cy="8" r="6"/>
+              </svg>
+              <p>No recordings yet</p>
+            </div>
+          {/if}
+        {:else}
+          <div class="empty-state">
+            <p>Click "Record New" to start</p>
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Additional Navigation -->
+    <div class="sidebar-footer">
+      <button class="footer-btn {activeTab === 'recovery' ? 'active' : ''}" on:click={() => switchTab('recovery')}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm0 1.5a4.5 4.5 0 110 9 4.5 4.5 0 010-9z"/>
+          <path d="M8 5v4l3 1.5"/>
+        </svg>
+        Recovery
+      </button>
+    </div>
+  </aside>
 
   <!-- Main Content Area -->
-  <div class="content-wrapper">
+  <div class="main-content">
     <div class="content fade-in">
       {#if activeTab === 'record'}
         <!-- State-aware Recording View -->
@@ -167,7 +193,12 @@
           </div>
         {/if}
       {:else if activeTab === 'recordings'}
-        <RecordingsList />
+        <RecordingsList onRecordingClick={(recording) => switchTab('recording-detail', recording)} />
+      {:else if activeTab === 'recording-detail' && selectedRecording}
+        <RecordingDetail
+          recording={selectedRecording}
+          onBack={() => switchTab('recordings')}
+        />
       {:else if activeTab === 'recovery'}
         <Recovery />
       {:else if activeTab === 'settings'}
@@ -182,72 +213,239 @@
     width: 100%;
     height: 100vh;
     display: flex;
-    flex-direction: column;
-    background: linear-gradient(135deg, #F5F5F7 0%, #E8EDF2 100%);
+    flex-direction: row;
+    background: var(--layer-fill-default);
   }
 
-  /* Windows 11 Style Navigation Tabs */
-  .tab-nav {
+  /* Sidebar */
+  .sidebar {
+    width: 256px;
+    height: 100vh;
+    background: var(--layer-fill-alt);
+    border-right: 1px solid var(--stroke-surface);
     display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-xxl);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
-    backdrop-filter: blur(40px) saturate(180%);
-    border-bottom: 1px solid rgba(0, 95, 192, 0.1);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    flex-direction: column;
     flex-shrink: 0;
   }
 
-  .app-icon {
-    width: 20px;
-    height: 20px;
+  /* Sidebar Header */
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--stroke-surface);
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+  }
+
+  .brand-icon {
+    width: 24px;
+    height: 24px;
     color: var(--accent-default);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-right: var(--spacing-md);
   }
 
-  .nav-tab {
-    position: relative;
-    padding: var(--spacing-sm) var(--spacing-lg);
-    background-color: transparent;
+  .brand-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    background: transparent;
     color: var(--text-secondary);
+    border-radius: var(--corner-radius-small);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.08s ease;
+  }
+
+  .icon-btn:hover {
+    background: var(--card-background);
+    color: var(--text-primary);
+  }
+
+  /* Record New Button */
+  .record-new-btn {
+    margin: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: var(--accent-default);
+    color: var(--text-on-accent);
+    border-radius: var(--corner-radius-small);
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    transition: all 0.08s ease;
+  }
+
+  .record-new-btn:hover:not(:disabled) {
+    background: var(--accent-secondary);
+  }
+
+  .record-new-btn:active:not(:disabled) {
+    background: var(--accent-tertiary);
+  }
+
+  /* Sidebar Section */
+  .sidebar-section {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .text-btn {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: transparent;
+    padding: 4px 8px;
+    border-radius: var(--corner-radius-small);
+    transition: all 0.08s ease;
+  }
+
+  .text-btn:hover {
+    color: var(--accent-default);
+    background: var(--card-background);
+  }
+
+  /* Recordings List in Sidebar */
+  .recordings-list-sidebar {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 var(--spacing-sm);
+  }
+
+  .recording-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-xs);
+    background: transparent;
+    color: var(--text-primary);
+    border-radius: var(--corner-radius-small);
+    transition: all 0.08s ease;
+    text-align: left;
+  }
+
+  .recording-item:hover {
+    background: var(--card-background);
+  }
+
+  .recording-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--card-background);
+    border-radius: var(--corner-radius-small);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-default);
+    flex-shrink: 0;
+  }
+
+  .recording-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .recording-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .recording-date {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xxl) var(--spacing-lg);
+    text-align: center;
+    color: var(--text-tertiary);
+  }
+
+  .empty-state svg {
+    margin-bottom: var(--spacing-md);
+  }
+
+  .empty-state p {
+    font-size: 13px;
+  }
+
+  /* Sidebar Footer */
+  .sidebar-footer {
+    padding: var(--spacing-lg);
+    border-top: 1px solid var(--stroke-surface);
+  }
+
+  .footer-btn {
+    width: 100%;
+    padding: var(--spacing-md);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--corner-radius-small);
     font-size: 14px;
     font-weight: 400;
-    border: none;
-    border-radius: var(--corner-radius-small);
-    cursor: pointer;
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
     transition: all 0.08s ease;
-    min-height: 32px;
   }
 
-  .nav-tab:hover {
-    background-color: var(--layer-fill-alt);
+  .footer-btn:hover {
+    background: var(--card-background);
     color: var(--text-primary);
   }
 
-  .nav-tab.active {
-    background: linear-gradient(135deg, #0067C0 0%, #0078D4 100%);
-    color: var(--text-on-accent);
+  .footer-btn.active {
+    background: var(--card-background);
+    color: var(--accent-default);
     font-weight: 500;
-    box-shadow: 0 2px 8px rgba(0, 103, 192, 0.3), 0 0 0 1px rgba(0, 103, 192, 0.1);
   }
 
-  .nav-tab svg {
-    opacity: 0.85;
-  }
-
-  .nav-tab.active svg {
-    opacity: 1;
-  }
-
-  /* Content Area */
-  .content-wrapper {
+  /* Main Content Area */
+  .main-content {
     flex: 1;
     overflow: hidden;
     position: relative;
@@ -283,33 +481,26 @@
       padding: var(--spacing-lg);
     }
 
-    .tab-nav {
-      padding: var(--spacing-sm) var(--spacing-lg);
-    }
-
-    .nav-tab {
-      font-size: 13px;
-      padding: var(--spacing-sm) var(--spacing-md);
-    }
-
-    .nav-tab svg {
-      width: 14px;
-      height: 14px;
+    .sidebar {
+      width: 220px;
     }
   }
 
-  @media (max-width: 640px) {
-    .app-icon {
-      margin-right: var(--spacing-sm);
+  @media (max-width: 768px) {
+    .sidebar {
+      width: 180px;
     }
 
-    .nav-tab {
-      font-size: 0; /* Hide text on very small screens */
-      padding: var(--spacing-sm);
+    .brand-text {
+      display: none;
     }
 
-    .nav-tab svg {
-      margin: 0;
+    .section-title {
+      font-size: 10px;
+    }
+
+    .recording-name {
+      font-size: 12px;
     }
   }
 
@@ -318,20 +509,4 @@
     animation: fadeIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
-  /* Dark mode adjustments */
-  @media (prefers-color-scheme: dark) {
-    main {
-      background: linear-gradient(135deg, #1C1C1C 0%, #2A2A2A 100%);
-    }
-
-    .tab-nav {
-      background: linear-gradient(180deg, rgba(42, 42, 42, 0.95) 0%, rgba(36, 36, 36, 0.85) 100%);
-      border-bottom: 1px solid rgba(96, 205, 255, 0.15);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-    }
-
-    .nav-tab:hover {
-      background-color: var(--layer-fill-default);
-    }
-  }
 </style>

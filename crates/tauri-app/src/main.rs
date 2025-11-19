@@ -144,8 +144,13 @@ async fn start_recording(
 
     // Add to active sessions
     {
-        let mut sessions = state.active_sessions.lock().unwrap();
-        sessions.push(session_id.clone());
+        match state.active_sessions.lock() {
+            Ok(mut sessions) => sessions.push(session_id.clone()),
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to lock active_sessions mutex (poisoned)");
+                return Err(format!("Internal error: Failed to track recording session: {}", e));
+            }
+        }
     }
 
     // Spawn recording task
@@ -182,12 +187,18 @@ async fn stop_recording(
         .map_err(|e| e.to_string())?;
 
     // Remove from active sessions
-    if let Some(sid) = &session_id {
-        let mut sessions = state.active_sessions.lock().unwrap();
-        sessions.retain(|s| s != sid);
-    } else {
-        let mut sessions = state.active_sessions.lock().unwrap();
-        sessions.clear();
+    match state.active_sessions.lock() {
+        Ok(mut sessions) => {
+            if let Some(sid) = &session_id {
+                sessions.retain(|s| s != sid);
+            } else {
+                sessions.clear();
+            }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to lock active_sessions mutex in stop_recording");
+            // Continue anyway since stop command already executed
+        }
     }
 
     Ok(RecordingResponse {
@@ -342,17 +353,17 @@ async fn list_recordings() -> Result<Vec<RecordingFile>, String> {
                     })
                     .unwrap_or_else(|| "Unknown".to_string());
 
-                recordings.push(RecordingFile {
-                    filename: path
-                        .file_name()
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_string(),
-                    path: path.to_string_lossy().to_string(),
-                    size: metadata.len(),
-                    created,
-                    format: ext_str,
-                });
+                if let Some(filename) = path.file_name() {
+                    recordings.push(RecordingFile {
+                        filename: filename.to_string_lossy().to_string(),
+                        path: path.to_string_lossy().to_string(),
+                        size: metadata.len(),
+                        created,
+                        format: ext_str,
+                    });
+                } else {
+                    tracing::warn!(path = ?path, "Skipping file with invalid filename");
+                }
             }
         }
     }
@@ -363,11 +374,69 @@ async fn list_recordings() -> Result<Vec<RecordingFile>, String> {
     Ok(recordings)
 }
 
+/// Get a specific recording by path
+#[tauri::command]
+async fn get_recording(file_path: String) -> Result<RecordingFile, String> {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+
+    if !path.exists() {
+        return Err(format!("Recording not found: {}", file_path));
+    }
+
+    // Get file metadata
+    let metadata = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+
+    // Get file extension
+    let ext = path
+        .extension()
+        .ok_or_else(|| "Invalid file format".to_string())?
+        .to_string_lossy()
+        .to_lowercase();
+
+    // Verify it's an audio file
+    if ext != "wav" && ext != "m4a" {
+        return Err("Invalid audio file format".to_string());
+    }
+
+    // Get creation date
+    let created = metadata
+        .created()
+        .ok()
+        .and_then(|time| {
+            chrono::DateTime::<chrono::Local>::from(time)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+                .into()
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let filename = path
+        .file_name()
+        .ok_or_else(|| "Invalid file path: no filename".to_string())?
+        .to_string_lossy()
+        .to_string();
+
+    Ok(RecordingFile {
+        filename,
+        path: path.to_string_lossy().to_string(),
+        size: metadata.len(),
+        created,
+        format: ext,
+    })
+}
+
 /// Get list of active recording sessions
 #[tauri::command]
 async fn get_active_sessions(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    let sessions = state.active_sessions.lock().unwrap();
-    Ok(sessions.clone())
+    match state.active_sessions.lock() {
+        Ok(sessions) => Ok(sessions.clone()),
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to lock active_sessions mutex in get_active_sessions");
+            Err(format!("Internal error: Failed to get active sessions: {}", e))
+        }
+    }
 }
 
 /// Open a recording file with the default application
@@ -474,7 +543,10 @@ async fn transcribe_recording(
         use std::time::{SystemTime, UNIX_EPOCH};
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_else(|_| {
+                tracing::warn!("Failed to get system time, using fallback");
+                std::time::Duration::from_secs(0)
+            })
             .as_secs();
         format!("transcribe_{}", timestamp)
     });
@@ -493,14 +565,27 @@ async fn transcribe_recording(
     let optimize = config.optimize_audio;
     let session_id_clone = session_id.clone();
 
-    transcribe_audio(&path_clone, &transcriptions_dir, &api_key, &model, &prompt, optimize, &session_id_clone)
+    transcribe_audio(
+        &path_clone,
+        &transcriptions_dir,
+        &recorder_config.status_dir,
+        &api_key,
+        &model,
+        &prompt,
+        optimize,
+        &session_id_clone,
+    )
         .await
-        .map(|result| {
+        .and_then(|result| {
             tracing::info!("Transcription completed successfully");
-            serde_json::to_value(result).unwrap()
+            serde_json::to_value(result)
+                .map_err(|e| {
+                    tracing::error!(error = %e, "Failed to serialize transcription result");
+                    anyhow::anyhow!("Failed to serialize transcription result: {}", e)
+                })
         })
         .map_err(|e| {
-            tracing::error!("Transcription failed: {}", e);
+            tracing::error!(error = %e, "Transcription failed");
             e.to_string()
         })
 }
@@ -564,9 +649,22 @@ async fn get_transcript_path(file_path: String) -> Result<String, String> {
 async fn get_transcription_status(session_id: String) -> Result<Option<serde_json::Value>, String> {
     use audio_recorder_manager_core::transcription::read_transcription_status;
 
-    read_transcription_status(&session_id)
-        .map(|status| status.map(|s| serde_json::to_value(s).unwrap()))
-        .map_err(|e| e.to_string())
+    let recorder_config = RecorderConfig::new();
+
+    read_transcription_status(&recorder_config.status_dir, &session_id)
+        .and_then(|status| {
+            status.map(|s| {
+                serde_json::to_value(s).map_err(|e| {
+                    tracing::error!(error = %e, session_id = %session_id, "Failed to serialize transcription status");
+                    anyhow::anyhow!("Failed to serialize status: {}", e)
+                })
+            })
+            .transpose()
+        })
+        .map_err(|e| {
+            tracing::error!(error = %e, session_id = %session_id, "Failed to read transcription status");
+            e.to_string()
+        })
 }
 
 /// Load recorder configuration (paths for recordings and transcriptions)
@@ -577,15 +675,10 @@ async fn load_recorder_config() -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Failed to serialize config: {}", e))
 }
 
-/// Save recorder configuration (paths for recordings and transcriptions)
+/// Save recorder configuration (storage path)
 #[tauri::command]
-async fn save_recorder_config(
-    recordings_dir: String,
-    transcriptions_dir: String,
-) -> Result<(), String> {
-    let mut config = RecorderConfig::new();
-    config.recordings_dir = std::path::PathBuf::from(recordings_dir);
-    config.transcriptions_dir = std::path::PathBuf::from(transcriptions_dir);
+async fn save_recorder_config(storage_dir: String) -> Result<(), String> {
+    let config = RecorderConfig::from_storage_dir(std::path::PathBuf::from(storage_dir));
 
     config.ensure_directories()
         .map_err(|e| format!("Failed to create directories: {}", e))?;
@@ -620,12 +713,20 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
     std::thread::spawn(move || {
         let (tx, rx) = std::sync::mpsc::channel();
 
-        let mut watcher = RecommendedWatcher::new(tx, Config::default())
-            .expect("Failed to create file watcher");
+        let mut watcher = match RecommendedWatcher::new(tx, Config::default()) {
+            Ok(w) => w,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to create file watcher for status directory");
+                eprintln!("ERROR: Failed to create file watcher: {}", e);
+                return;
+            }
+        };
 
-        watcher
-            .watch(&status_dir, RecursiveMode::NonRecursive)
-            .expect("Failed to watch status directory");
+        if let Err(e) = watcher.watch(&status_dir, RecursiveMode::NonRecursive) {
+            tracing::error!(error = %e, status_dir = ?status_dir, "Failed to watch status directory");
+            eprintln!("ERROR: Failed to watch status directory: {}", e);
+            return;
+        }
 
         for result in rx {
             match result {
@@ -664,6 +765,39 @@ fn main() {
     if let Err(e) = logging::init_tauri_logging(None, enable_terminal) {
         eprintln!("Warning: Failed to initialize logging: {}", e);
     }
+
+    // Set up panic hook to log panics with full backtrace before crashing
+    std::panic::set_hook(Box::new(|panic_info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+
+        let payload = panic_info.payload();
+        let message = if let Some(s) = payload.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = payload.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Unknown panic payload".to_string()
+        };
+
+        let location = if let Some(loc) = panic_info.location() {
+            format!("{}:{}:{}", loc.file(), loc.line(), loc.column())
+        } else {
+            "Unknown location".to_string()
+        };
+
+        // Log to both tracing (file) and stderr (terminal)
+        tracing::error!(
+            message = %message,
+            location = %location,
+            backtrace = %backtrace,
+            "APPLICATION PANIC - The application has crashed"
+        );
+        eprintln!("\n!!! APPLICATION PANIC !!!");
+        eprintln!("Message: {}", message);
+        eprintln!("Location: {}", location);
+        eprintln!("\nBacktrace:\n{}", backtrace);
+        eprintln!("\nCheck log files at: {:?}", logging::get_log_dir());
+    }));
 
     let log_dir = logging::get_log_dir();
     tracing::info!("========================================");
@@ -715,7 +849,12 @@ fn main() {
             let config = RecorderConfig::new();
 
             tracing::info!("[TIMING] Ensuring directories exist: {:?}", app_start_clone.elapsed());
-            config.ensure_directories().expect("Failed to create storage directories");
+            if let Err(e) = config.ensure_directories() {
+                tracing::error!(error = %e, "Failed to create storage directories - application may not function correctly");
+                eprintln!("ERROR: Failed to create storage directories: {}", e);
+                eprintln!("Check log files at: {:?}", logging::get_log_dir());
+                return Err(Box::new(e) as Box<dyn std::error::Error>);
+            }
 
             // Set up status file watcher
             tracing::info!("[TIMING] Setting up status watcher: {:?}", app_start_clone.elapsed());
@@ -743,6 +882,7 @@ fn main() {
         recover_recordings,
         get_recording_status,
         list_recordings,
+        get_recording,
         get_active_sessions,
         open_recording,
         delete_recording,
