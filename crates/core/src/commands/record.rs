@@ -1,5 +1,6 @@
 use serde_json::json;
 use std::time::Duration;
+use tracing::Instrument;
 
 use crate::config::RecorderConfig;
 #[cfg(not(windows))]
@@ -63,18 +64,15 @@ pub async fn execute_with_output(
 }
 
 async fn record_worker(session: RecordingSession, config: RecorderConfig, output: UserOutput) -> Result<()> {
-    let filepath = config.recordings_dir.join(session.temp_filename());
-    let observer = JsonFileObserver::new(config.status_dir.clone());
-    let effective_duration = session.duration.effective_duration();
+    // Capture values for the span before moving session
+    let session_id = session.id.clone();
+    let format = session.format;
+    let duration_secs = session.duration.effective_duration();
 
-    // Create a tracing span for this recording session (all logs below get this context)
-    let _span = tracing::info_span!(
-        "recording_session",
-        session_id = %session.id,
-        format = ?session.format,
-        duration_secs = effective_duration
-    )
-    .entered();
+    async move {
+        let filepath = config.recordings_dir.join(session.temp_filename());
+        let observer = JsonFileObserver::new(config.status_dir.clone());
+        let effective_duration = session.duration.effective_duration();
 
     // Use WASAPI dual-channel recording on Windows (loopback + microphone)
     #[cfg(windows)]
@@ -237,43 +235,48 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig, output
 
         // Merge audio channels in a span for better tracing
         {
-            let _merge_span = tracing::info_span!(
+            let loopback_has_audio_flag = loopback_recorder.has_audio_detected();
+            let mic_has_audio_flag = mic_recorder.as_ref().map(|m| m.has_audio_detected()).unwrap_or(false);
+
+            async {
+                output.prefixed("Merging", "Merging audio channels...");
+
+                // Write processing status
+                let _ = observer.write_processing_status(
+                    session.id.as_str(),
+                    "Merging audio channels..."
+                );
+
+                // Wait a moment for files to be fully written
+                tokio::time::sleep(Duration::from_millis(config.file_write_delay_ms)).await;
+
+                // Get audio detection flags
+                let loopback_has_audio = loopback_recorder.has_audio_detected();
+                let mic_has_audio = mic_recorder.as_ref()
+                    .map(|m| m.has_audio_detected())
+                    .unwrap_or(false);
+
+                // Merge audio streams using FFmpeg
+                merge_audio_streams_smart(
+                    &loopback_temp,
+                    &mic_temp,
+                    &filepath,
+                    loopback_has_audio,
+                    mic_has_audio,
+                    &session.quality,
+                )
+                .await?;
+
+                tracing::info!("Audio merge completed: {:?}", filepath);
+                output.success("Successfully merged audio channels!");
+                Ok::<(), crate::error::RecorderError>(())
+            }
+            .instrument(tracing::info_span!(
                 "merge_audio",
-                loopback_has_audio = loopback_recorder.has_audio_detected(),
-                mic_has_audio = mic_recorder.as_ref().map(|m| m.has_audio_detected()).unwrap_or(false)
-            )
-            .entered();
-
-            output.prefixed("Merging", "Merging audio channels...");
-
-            // Write processing status
-            let _ = observer.write_processing_status(
-                session.id.as_str(),
-                "Merging audio channels..."
-            );
-
-            // Wait a moment for files to be fully written
-            tokio::time::sleep(Duration::from_millis(config.file_write_delay_ms)).await;
-
-            // Get audio detection flags
-            let loopback_has_audio = loopback_recorder.has_audio_detected();
-            let mic_has_audio = mic_recorder.as_ref()
-                .map(|m| m.has_audio_detected())
-                .unwrap_or(false);
-
-            // Merge audio streams using FFmpeg
-            merge_audio_streams_smart(
-                &loopback_temp,
-                &mic_temp,
-                &filepath,
-                loopback_has_audio,
-                mic_has_audio,
-                &session.quality,
-            )
+                loopback_has_audio = loopback_has_audio_flag,
+                mic_has_audio = mic_has_audio_flag
+            ))
             .await?;
-
-            tracing::info!("Audio merge completed: {:?}", filepath);
-            output.success("Successfully merged audio channels!");
         }
 
         // Cleanup temporary files
@@ -389,5 +392,13 @@ async fn record_worker(session: RecordingSession, config: RecorderConfig, output
         },
     })?;
 
-    Ok(())
+        Ok(())
+    }
+    .instrument(tracing::info_span!(
+        "recording_session",
+        session_id = %session_id,
+        format = ?format,
+        duration_secs = duration_secs
+    ))
+    .await
 }
