@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use crate::config::RecorderConfig;
 use crate::domain::AudioFormat;
 use crate::error::Result;
+use crate::output::UserOutput;
 use crate::recorder::{convert_wav_to_m4a, merge_audio_streams_smart, RecordingQuality};
 
 /// Execute the recover command to finish interrupted recordings
@@ -13,6 +14,16 @@ pub async fn execute(
     session_id: Option<String>,
     target_format: Option<AudioFormat>,
     config: RecorderConfig,
+) -> Result<()> {
+    execute_with_output(session_id, target_format, config, UserOutput::new()).await
+}
+
+/// Execute the recover command with custom output
+pub async fn execute_with_output(
+    session_id: Option<String>,
+    target_format: Option<AudioFormat>,
+    config: RecorderConfig,
+    output: UserOutput,
 ) -> Result<()> {
     config.ensure_directories()?;
 
@@ -54,9 +65,9 @@ pub async fn execute(
     let mut errors = Vec::new();
 
     for recording in to_recover {
-        eprintln!("[Recovery] Processing session: {}", recording.session_id);
+        output.prefixed("Recovery", &format!("Processing session: {}", recording.session_id));
 
-        match recover_recording(&recording, target_format, &config).await {
+        match recover_recording(&recording, target_format, &config, &output).await {
             Ok(output_path) => {
                 let file_name = output_path
                     .file_name()
@@ -64,7 +75,7 @@ pub async fn execute(
                     .unwrap_or("unknown")
                     .to_string();
 
-                eprintln!("[Recovery] Successfully recovered: {}", file_name);
+                output.success(&format!("Successfully recovered: {}", file_name));
                 recovered.push(json!({
                     "session_id": recording.session_id,
                     "output_file": file_name,
@@ -72,7 +83,7 @@ pub async fn execute(
                 }));
             }
             Err(e) => {
-                eprintln!("[Recovery] Failed to recover {}: {}", recording.session_id, e);
+                output.error(&format!("Failed to recover {}: {}", recording.session_id, e));
                 errors.push(json!({
                     "session_id": recording.session_id,
                     "error": e.to_string()
@@ -178,6 +189,7 @@ async fn recover_recording(
     recording: &IncompleteRecording,
     target_format: Option<AudioFormat>,
     config: &RecorderConfig,
+    output: &UserOutput,
 ) -> Result<PathBuf> {
     // Determine output format (default to WAV if not specified)
     let format = target_format.unwrap_or(AudioFormat::Wav);
@@ -210,7 +222,7 @@ async fn recover_recording(
         .clone()
         .unwrap_or_else(|| config.recordings_dir.join(format!("{}_mic.wav", recording.session_id)));
 
-    eprintln!("[Merging] Merging audio channels...");
+    output.prefixed("Merging", "Merging audio channels...");
 
     // Merge audio streams
     merge_audio_streams_smart(
@@ -224,23 +236,23 @@ async fn recover_recording(
     .await
     .context("Failed to merge audio streams")?;
 
-    eprintln!("[Merging] Successfully merged audio channels!");
+    output.success("Successfully merged audio channels!");
 
     // Convert to M4A if requested
     let mut final_path = output_path.clone();
     if matches!(format, AudioFormat::M4a) {
-        eprintln!("[Converting] WAV to M4A format...");
+        output.prefixed("Converting", "WAV to M4A format...");
         let m4a_path = output_path.with_extension("m4a");
 
         convert_wav_to_m4a(&output_path, &m4a_path)
             .await
             .context("Failed to convert to M4A")?;
 
-        eprintln!("[Converting] Successfully converted to M4A format!");
+        output.success("Successfully converted to M4A format!");
 
         // Delete temporary WAV file
         if let Err(e) = std::fs::remove_file(&output_path) {
-            log::warn!("Failed to delete temporary WAV file: {}", e);
+            tracing::warn!("Failed to delete temporary WAV file: {}", e);
         }
 
         final_path = m4a_path;
@@ -254,7 +266,7 @@ async fn recover_recording(
         let _ = std::fs::remove_file(mic);
     }
 
-    eprintln!("[Recovery] Temporary files cleaned up");
+    output.info("Temporary files cleaned up");
 
     Ok(final_path)
 }

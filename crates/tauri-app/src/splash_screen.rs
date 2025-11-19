@@ -25,7 +25,7 @@ impl SplashScreen {
         // Create splash window on a separate thread
         std::thread::spawn(move || {
             if let Err(e) = create_splash_window(is_closed_clone) {
-                log::error!("Failed to create splash window: {}", e);
+                tracing::error!("Failed to create splash window: {}", e);
             }
         });
 

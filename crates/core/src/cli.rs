@@ -4,9 +4,12 @@ use crate::commands;
 use crate::config::RecorderConfig;
 use crate::domain::{AudioFormat, RecordingDuration};
 use crate::error::Result;
+use crate::output::UserOutput;
 use crate::recorder::RecordingQuality;
 
 pub async fn run(args: Vec<String>) -> Result<()> {
+    let output = UserOutput::new();
+
     if args.len() <= 1 {
         print_usage();
         return Ok(());
@@ -15,19 +18,19 @@ pub async fn run(args: Vec<String>) -> Result<()> {
     let command = &args[1];
 
     match command.as_str() {
-        "record" => handle_record_command(&args).await,
+        "record" => handle_record_command(&args, &output).await,
         "status" => commands::status::execute().await,
-        "stop" => handle_stop_command(&args).await,
-        "recover" => handle_recover_command(&args).await,
+        "stop" => handle_stop_command(&args, &output).await,
+        "recover" => handle_recover_command(&args, &output).await,
         _ => {
-            eprintln!("Unknown command: {}", command);
+            output.error(&format!("Unknown command: {}", command));
             print_usage();
             std::process::exit(1);
         }
     }
 }
 
-async fn handle_record_command(args: &[String]) -> Result<()> {
+async fn handle_record_command(args: &[String], output: &UserOutput) -> Result<()> {
     let config = RecorderConfig::new();
 
     // Parse duration
@@ -35,14 +38,14 @@ async fn handle_record_command(args: &[String]) -> Result<()> {
         match args[2].parse::<i64>() {
             Ok(d) if d == -1 || d > 0 => d,
             Ok(d) => {
-                eprintln!(
-                    "Error: Duration must be -1 (manual mode) or a positive number, got: {}",
+                output.error(&format!(
+                    "Duration must be -1 (manual mode) or a positive number, got: {}",
                     d
-                );
+                ));
                 std::process::exit(1);
             }
             Err(_) => {
-                eprintln!("Error: Invalid duration '{}'. Must be a number.", args[2]);
+                output.error(&format!("Invalid duration '{}'. Must be a number.", args[2]));
                 std::process::exit(1);
             }
         }
@@ -54,7 +57,7 @@ async fn handle_record_command(args: &[String]) -> Result<()> {
     {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            output.error(&e.to_string());
             std::process::exit(1);
         }
     };
@@ -64,7 +67,7 @@ async fn handle_record_command(args: &[String]) -> Result<()> {
         match AudioFormat::from_str(&args[3]) {
             Ok(fmt) => fmt,
             Err(e) => {
-                eprintln!("Error: {}", e);
+                output.error(&e.to_string());
                 std::process::exit(1);
             }
         }
@@ -81,10 +84,10 @@ async fn handle_record_command(args: &[String]) -> Result<()> {
             "professional" => RecordingQuality::professional(),
             "high" => RecordingQuality::high(),
             _ => {
-                eprintln!(
-                    "Error: Invalid quality '{}'. Options: quick, standard, professional, high",
+                output.error(&format!(
+                    "Invalid quality '{}'. Options: quick, standard, professional, high",
                     args[4]
-                );
+                ));
                 std::process::exit(1);
             }
         }
@@ -92,10 +95,10 @@ async fn handle_record_command(args: &[String]) -> Result<()> {
         RecordingQuality::professional()
     };
 
-    commands::record::execute(duration, audio_format, quality, config).await
+    commands::record::execute_with_output(duration, audio_format, quality, config, output.clone()).await
 }
 
-async fn handle_stop_command(args: &[String]) -> Result<()> {
+async fn handle_stop_command(args: &[String], _output: &UserOutput) -> Result<()> {
     let config = RecorderConfig::new();
     let session_id = if args.len() > 2 {
         Some(args[2].clone())
@@ -106,7 +109,7 @@ async fn handle_stop_command(args: &[String]) -> Result<()> {
     commands::stop::execute(session_id, config).await
 }
 
-async fn handle_recover_command(args: &[String]) -> Result<()> {
+async fn handle_recover_command(args: &[String], output: &UserOutput) -> Result<()> {
     let config = RecorderConfig::new();
 
     // Parse optional session_id
@@ -121,7 +124,7 @@ async fn handle_recover_command(args: &[String]) -> Result<()> {
         match AudioFormat::from_str(&args[3]) {
             Ok(fmt) => Some(fmt),
             Err(e) => {
-                eprintln!("Error: {}", e);
+                output.error(&e.to_string());
                 std::process::exit(1);
             }
         }
@@ -132,7 +135,7 @@ async fn handle_recover_command(args: &[String]) -> Result<()> {
         None
     };
 
-    commands::recover::execute(session_id, target_format, config).await
+    commands::recover::execute_with_output(session_id, target_format, config, output.clone()).await
 }
 
 fn print_usage() {

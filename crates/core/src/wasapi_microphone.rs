@@ -36,8 +36,8 @@ pub mod windows_microphone {
                     frames_captured_clone,
                     has_audio_clone,
                 ) {
-                    log::error!("Microphone recording thread error: {}", e);
-                    log::error!("Error chain: {:?}", e);
+                    tracing::error!("Microphone recording thread error: {}", e);
+                    tracing::error!("Error chain: {:?}", e);
                 }
             });
 
@@ -84,7 +84,7 @@ pub mod windows_microphone {
                 let bits_per_sample = native_wf.wBitsPerSample;
                 let format_tag = native_wf.wFormatTag;
 
-                log::info!(
+                tracing::info!(
                     "WASAPI Microphone native format: {} Hz, {} channels, {} bits, tag: {}",
                     native_sample_rate,
                     channels,
@@ -94,13 +94,13 @@ pub mod windows_microphone {
 
                 // IMPORTANT: Use native format to avoid AUDCLNT_E_UNSUPPORTED_FORMAT errors.
                 // FFmpeg will handle resampling during the merge to match system audio.
-                log::info!(
+                tracing::info!(
                     "Using native microphone format - FFmpeg will resample to {} Hz during merge",
                     target_sample_rate
                 );
 
                 // Initialize audio client with native format
-                log::info!("Initializing audio client with native format...");
+                tracing::info!("Initializing audio client with native format...");
                 audio_client.Initialize(
                     AUDCLNT_SHAREMODE_SHARED,
                     0, // No loopback flag for microphone capture
@@ -109,7 +109,7 @@ pub mod windows_microphone {
                     native_format,
                     None,
                 )?;
-                log::info!("Audio client initialized successfully");
+                tracing::info!("Audio client initialized successfully");
 
                 // Free native format (we're done with it after Initialize)
                 CoTaskMemFree(Some(native_format as *const _ as *const _));
@@ -122,12 +122,12 @@ pub mod windows_microphone {
                 let is_float = format_tag == 3 || (format_tag == 0xFFFE && bits_per_sample == 32);
 
                 // Get capture client
-                log::info!("Getting capture client service...");
+                tracing::info!("Getting capture client service...");
                 let capture_client: IAudioCaptureClient = audio_client.GetService()?;
-                log::info!("Capture client obtained successfully");
+                tracing::info!("Capture client obtained successfully");
 
                 // Create WAV writer - always use 16-bit PCM for compatibility
-                log::info!("Creating WAV writer for microphone...");
+                tracing::info!("Creating WAV writer for microphone...");
                 let spec = WavSpec {
                     channels,
                     sample_rate,
@@ -137,21 +137,21 @@ pub mod windows_microphone {
 
                 let writer = WavWriter::create(&filepath, spec)?;
                 let mut writer = Some(writer);
-                log::info!("WAV writer created successfully");
+                tracing::info!("WAV writer created successfully");
 
                 // Start audio client
-                log::info!("Starting microphone audio client...");
+                tracing::info!("Starting microphone audio client...");
                 audio_client.Start()?;
-                log::info!("Audio client started successfully");
+                tracing::info!("Audio client started successfully");
 
-                log::info!(
+                tracing::info!(
                     "Recording microphone: {} Hz, {} channels, {} bits, {} format",
                     sample_rate,
                     channels,
                     bits_per_sample,
                     if is_float { "float" } else { "int" }
                 );
-                log::info!("Microphone audio client started, entering recording loop...");
+                tracing::info!("Microphone audio client started, entering recording loop...");
 
                 // Recording loop
                 let mut loop_count = 0u64;
@@ -164,7 +164,7 @@ pub mod windows_microphone {
 
                     // Log every 100 iterations (~1 second) to track packet availability
                     if loop_count % 100 == 0 {
-                        log::debug!(
+                        tracing::debug!(
                             "Mic loop #{}: packet_length={}, total_packets={}",
                             loop_count,
                             packet_length,
@@ -175,7 +175,7 @@ pub mod windows_microphone {
 
                     if packet_length > 0 {
                         total_packets_received += 1;
-                        log::debug!("Mic packet available: {} frames", packet_length);
+                        tracing::debug!("Mic packet available: {} frames", packet_length);
                         let mut buffer: *mut u8 = std::ptr::null_mut();
                         let mut num_frames = 0u32;
                         let mut flags = 0u32;
@@ -215,7 +215,7 @@ pub mod windows_microphone {
                                         let rms = calculate_rms_f32(samples);
                                         if rms > 0.01 {
                                             has_audio.store(true, Ordering::Relaxed);
-                                            log::info!("Microphone audio detected! Level: {:.4}", rms);
+                                            tracing::info!("Microphone audio detected! Level: {:.4}", rms);
                                         }
                                     }
 
@@ -238,7 +238,7 @@ pub mod windows_microphone {
                                         let rms = calculate_rms_i16(samples);
                                         if rms > 327.0 { // 0.01 * 32767
                                             has_audio.store(true, Ordering::Relaxed);
-                                            log::info!("Microphone audio detected! Level: {:.4}", rms / 32767.0);
+                                            tracing::info!("Microphone audio detected! Level: {:.4}", rms / 32767.0);
                                         }
                                     }
 
@@ -250,7 +250,7 @@ pub mod windows_microphone {
                                     }
                                 } else {
                                     // Unsupported format - write silence
-                                    log::warn!("Unsupported audio format: {} bits, writing silence", bits_per_sample);
+                                    tracing::warn!("Unsupported audio format: {} bits, writing silence", bits_per_sample);
                                     if let Some(writer) = writer.as_mut() {
                                         for _ in 0..(num_frames * channels as u32) {
                                             let _ = writer.write_sample(0i16);
@@ -265,7 +265,7 @@ pub mod windows_microphone {
                 }
 
                 // Stop and cleanup
-                log::info!(
+                tracing::info!(
                     "Microphone recording loop finished: {} iterations, {} packets received, {} frames captured",
                     loop_count,
                     total_packets_received,
