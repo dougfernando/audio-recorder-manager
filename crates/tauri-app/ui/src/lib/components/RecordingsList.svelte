@@ -16,6 +16,9 @@
   let viewingTranscript = null; // { path: string, name: string }
   let progressPollingIntervals = {};
   let selectedRecording = null; // Recording object for detail view
+  let renamingRecording = null; // filename of recording being renamed
+  let newName = '';
+  let renameError = null;
 
   // Check for transcripts whenever recordings change
   $: if ($recordings.length > 0) {
@@ -33,6 +36,52 @@
       console.error('Failed to load recordings:', error);
     } finally {
       isLoading = false;
+    }
+  }
+
+  function getFileNameWithoutExtension(filename) {
+    return filename.replace(/\.[^/.]+$/, "");
+  }
+
+  function startRename(recording, event) {
+    event.stopPropagation();
+    renamingRecording = recording.filename;
+    newName = getFileNameWithoutExtension(recording.filename);
+    renameError = null;
+  }
+
+  function cancelRename() {
+    renamingRecording = null;
+    newName = '';
+    renameError = null;
+  }
+
+  async function saveRename(recording, event) {
+    event.stopPropagation();
+
+    if (!newName || newName.trim() === '') {
+      renameError = 'Filename cannot be empty.';
+      return;
+    }
+
+    if (newName === getFileNameWithoutExtension(recording.filename)) {
+      cancelRename();
+      return;
+    }
+
+    renameError = null;
+    try {
+      await invoke('rename_recording', {
+        oldPath: recording.path,
+        newFilename: newName.trim(),
+      });
+
+      // Reload recordings to show updated name
+      await loadRecordings();
+      cancelRename();
+    } catch (error) {
+      console.error('Failed to rename recording:', error);
+      renameError = error;
     }
   }
 
@@ -259,20 +308,53 @@
                   </svg>
                 </div>
                 <div class="recording-info">
-                  <div class="recording-name" title={recording.filename}>
-                    {recording.filename}
-                  </div>
-                  <div class="recording-meta">
-                    <span class="format-badge {recording.format}">{recording.format.toUpperCase()}</span>
-                    <span class="meta-separator">•</span>
-                    <span>{formatFileSize(recording.size)}</span>
-                    <span class="meta-separator">•</span>
-                    <span>{recording.created}</span>
-                  </div>
+                  {#if renamingRecording === recording.filename}
+                    <!-- Rename input -->
+                    <div class="rename-container" on:click|stopPropagation>
+                      <input
+                        type="text"
+                        bind:value={newName}
+                        class="rename-input"
+                        on:keydown={(e) => {
+                          if (e.key === 'Enter') saveRename(recording, e);
+                          if (e.key === 'Escape') cancelRename();
+                        }}
+                        on:click|stopPropagation
+                        aria-label="New recording name"
+                        autofocus
+                      />
+                      <button class="btn-rename-save" on:click={(e) => saveRename(recording, e)} title="Save">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      </button>
+                      <button class="btn-rename-cancel" on:click|stopPropagation={cancelRename} title="Cancel">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                    {#if renameError}
+                      <div class="rename-error">{renameError}</div>
+                    {/if}
+                  {:else}
+                    <div class="recording-name" title={recording.filename}>
+                      {recording.filename}
+                    </div>
+                    <div class="recording-meta">
+                      <span class="format-badge {recording.format}">{recording.format.toUpperCase()}</span>
+                      <span class="meta-separator">•</span>
+                      <span>{formatFileSize(recording.size)}</span>
+                      <span class="meta-separator">•</span>
+                      <span>{recording.created}</span>
+                    </div>
+                  {/if}
                 </div>
               </div>
 
               <!-- Actions -->
+              {#if renamingRecording !== recording.filename}
               <div class="recording-actions">
                 <button
                   class="action-btn"
@@ -321,6 +403,18 @@
                 </button>
 
                 <button
+                  class="action-btn"
+                  on:click={(e) => startRename(recording, e)}
+                  title="Rename recording"
+                  aria-label="Rename recording"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+
+                <button
                   class="action-btn danger"
                   on:click|stopPropagation={() => deleteRecording(recording)}
                   disabled={isDeleting[recording.filename]}
@@ -338,6 +432,7 @@
                   {/if}
                 </button>
               </div>
+              {/if}
             </div>
 
             {#if transcriptionProgress[recording.filename]}
@@ -609,6 +704,70 @@
 
   .action-btn.loading {
     cursor: not-allowed;
+  }
+
+  .rename-container {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    width: 100%;
+  }
+
+  .rename-input {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border: 1px solid var(--accent-default);
+    border-radius: var(--corner-radius-small);
+    background: var(--card-background);
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .rename-input:focus {
+    border-color: var(--accent-secondary);
+    box-shadow: 0 0 0 2px rgba(0, 103, 192, 0.1);
+  }
+
+  .btn-rename-save,
+  .btn-rename-cancel {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--corner-radius-small);
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .btn-rename-save {
+    color: var(--success);
+  }
+
+  .btn-rename-save:hover {
+    background: var(--success);
+    color: white;
+  }
+
+  .btn-rename-cancel {
+    color: var(--text-secondary);
+  }
+
+  .btn-rename-cancel:hover {
+    background: var(--danger);
+    color: white;
+  }
+
+  .rename-error {
+    color: var(--danger);
+    font-size: 11px;
+    margin-top: 4px;
   }
 
   .empty-state {
