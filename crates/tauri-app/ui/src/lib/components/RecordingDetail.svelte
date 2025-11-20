@@ -27,11 +27,15 @@
   let volume = 1.0;
   let isSeeking = false;
   let audioSrc = '';
+  let waveformData = [];
+  let isLoadingWaveform = false;
+  let waveformError = null;
 
   // Check for transcript on mount
   $: if (recording) {
     checkForTranscript();
     initializeAudioSrc();
+    loadWaveform();
   }
 
   // Initialize audio source when recording changes
@@ -42,6 +46,29 @@
       isPlaying = false;
       currentTime = 0;
       duration = 0;
+    }
+  }
+
+  // Load waveform data using ffmpeg
+  async function loadWaveform() {
+    if (!recording || !recording.path) return;
+
+    isLoadingWaveform = true;
+    waveformError = null;
+
+    try {
+      const data = await invoke('generate_waveform', {
+        filePath: recording.path,
+        samples: 100
+      });
+      waveformData = data;
+    } catch (error) {
+      console.error('Failed to load waveform:', error);
+      waveformError = error;
+      // Fallback to empty waveform
+      waveformData = Array(100).fill(0.3);
+    } finally {
+      isLoadingWaveform = false;
     }
   }
 
@@ -383,44 +410,54 @@
     <!-- Waveform and seek bar -->
     <div class="waveform-container">
       <div class="waveform-placeholder">
-        <svg width="100%" height="60" viewBox="0 0 800 60" preserveAspectRatio="none">
-          {#each Array(100) as _, i}
-            {@const progress = duration > 0 ? (currentTime / duration) : 0}
-            {@const isPast = (i / 100) <= progress}
-            <rect
-              x={i * 8}
-              y={30 - Math.random() * 25}
-              width="6"
-              height={Math.random() * 50}
-              fill={isPast ? 'var(--accent-default)' : 'var(--text-tertiary)'}
-              opacity={isPast ? '0.8' : '0.3'}
-            />
-          {/each}
-        </svg>
+        {#if isLoadingWaveform}
+          <div class="waveform-loading">
+            <div class="spinner-small"></div>
+            <span>Analyzing audio...</span>
+          </div>
+        {:else}
+          <svg width="100%" height="60" viewBox="0 0 800 60" preserveAspectRatio="none">
+            {#each waveformData as barHeight, i}
+              {@const progress = duration > 0 ? (currentTime / duration) : 0}
+              {@const isPast = (i / waveformData.length) <= progress}
+              {@const height = Math.max(2, barHeight * 50)}
+              <rect
+                x={i * 8}
+                y={30 - height / 2}
+                width="6"
+                height={height}
+                fill={isPast ? 'var(--accent-default)' : 'var(--text-tertiary)'}
+                opacity={isPast ? '0.8' : '0.3'}
+              />
+            {/each}
+          </svg>
+        {/if}
       </div>
 
       <!-- Seek bar overlay -->
-      <div
-        class="seek-overlay"
-        on:click={handleSeek}
-        on:mousedown={handleSeekStart}
-        on:mouseup={handleSeekEnd}
-        on:keydown={(e) => {
-          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-            e.preventDefault();
-            const delta = e.key === 'ArrowLeft' ? -5 : 5;
-            if (audioElement) {
-              audioElement.currentTime = Math.max(0, Math.min(duration, currentTime + delta));
+      {#if !isLoadingWaveform}
+        <div
+          class="seek-overlay"
+          on:click={handleSeek}
+          on:mousedown={handleSeekStart}
+          on:mouseup={handleSeekEnd}
+          on:keydown={(e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              e.preventDefault();
+              const delta = e.key === 'ArrowLeft' ? -5 : 5;
+              if (audioElement) {
+                audioElement.currentTime = Math.max(0, Math.min(duration, currentTime + delta));
+              }
             }
-          }
-        }}
-        role="slider"
-        tabindex="0"
-        aria-label="Audio seek bar"
-        aria-valuemin="0"
-        aria-valuemax={duration}
-        aria-valuenow={currentTime}
-      ></div>
+          }}
+          role="slider"
+          tabindex="0"
+          aria-label="Audio seek bar"
+          aria-valuemin="0"
+          aria-valuemax={duration}
+          aria-valuenow={currentTime}
+        ></div>
+      {/if}
     </div>
 
     <!-- Player controls -->
@@ -677,6 +714,27 @@
     border-radius: var(--corner-radius-medium);
     padding: var(--spacing-md) var(--spacing-lg);
     overflow: hidden;
+    min-height: 60px;
+  }
+
+  .waveform-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 60px;
+    gap: var(--spacing-sm);
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+
+  .spinner-small {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--stroke-surface);
+    border-top-color: var(--accent-default);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 
   .seek-overlay {

@@ -760,6 +760,98 @@ async fn pick_folder(app: tauri::AppHandle, default_path: Option<String>) -> Res
     Ok(dialog.blocking_pick_folder().map(|p| p.to_string()))
 }
 
+/// Generate waveform data from an audio file using ffmpeg
+#[tauri::command]
+async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<Vec<f32>, String> {
+    use std::path::Path;
+    use tokio::process::Command;
+
+    let path = Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // Default to 100 samples for the waveform
+    let num_samples = samples.unwrap_or(100);
+
+    tracing::info!("Generating waveform for: {} with {} samples", file_path, num_samples);
+
+    // Use ffmpeg to extract audio data and calculate peak values
+    // We'll use ffmpeg to decode audio and output raw PCM data, then calculate peaks
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-i")
+        .arg(&file_path)
+        .arg("-ac")
+        .arg("1") // Convert to mono
+        .arg("-f")
+        .arg("f32le") // Output as 32-bit float PCM
+        .arg("-ar")
+        .arg("8000") // Downsample to 8kHz for faster processing
+        .arg("-");
+
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let output = cmd.output().await.map_err(|e| {
+        tracing::error!("Failed to run ffmpeg: {}", e);
+        format!("Failed to run ffmpeg: {}. Make sure ffmpeg is installed and in PATH.", e)
+    })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!("ffmpeg failed: {}", stderr);
+        return Err(format!("ffmpeg failed: {}", stderr));
+    }
+
+    // Parse the raw PCM data (f32 little-endian)
+    let raw_data = output.stdout;
+    let sample_count = raw_data.len() / 4; // 4 bytes per f32
+
+    if sample_count == 0 {
+        return Err("No audio data found in file".to_string());
+    }
+
+    // Convert bytes to f32 samples
+    let mut audio_samples: Vec<f32> = Vec::with_capacity(sample_count);
+    for chunk in raw_data.chunks_exact(4) {
+        let sample = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        audio_samples.push(sample.abs()); // Use absolute value for waveform
+    }
+
+    // Calculate peak values for visualization
+    let samples_per_bar = (sample_count as f32 / num_samples as f32).ceil() as usize;
+    let mut waveform: Vec<f32> = Vec::with_capacity(num_samples);
+
+    for i in 0..num_samples {
+        let start = i * samples_per_bar;
+        let end = ((i + 1) * samples_per_bar).min(sample_count);
+
+        if start >= sample_count {
+            waveform.push(0.0);
+            continue;
+        }
+
+        // Calculate peak (max) value in this chunk
+        let peak = audio_samples[start..end]
+            .iter()
+            .fold(0.0f32, |max, &sample| max.max(sample));
+
+        waveform.push(peak);
+    }
+
+    // Normalize waveform to 0.0-1.0 range
+    let max_peak = waveform.iter().fold(0.0f32, |max, &val| max.max(val));
+    if max_peak > 0.0 {
+        for val in &mut waveform {
+            *val /= max_peak;
+        }
+    }
+
+    tracing::info!("Waveform generated successfully with {} bars", waveform.len());
+
+    Ok(waveform)
+}
+
 /// Set up file watcher for status directory
 fn setup_status_watcher(app_handle: tauri::AppHandle) {
     let config = RecorderConfig::new();
@@ -937,6 +1029,7 @@ fn main() {
         load_recorder_config,
         save_recorder_config,
         pick_folder,
+        generate_waveform,
     ]);
 
     tracing::info!("[TIMING] Starting Tauri application run loop: {:?}", app_start.elapsed());
