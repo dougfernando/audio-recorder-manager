@@ -1,9 +1,10 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
+  import { convertFileSrc } from '@tauri-apps/api/core';
   import { ask } from '@tauri-apps/plugin-dialog';
   import { formatFileSize, formatTime } from '../stores';
   import TranscriptViewer from './TranscriptViewer.svelte';
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
   export let recording;
   export let onBack;
@@ -18,10 +19,96 @@
   let progressPollingInterval = null;
   let transcriptPreview = null;
 
+  // Audio player state
+  let audioElement = null;
+  let isPlaying = false;
+  let currentTime = 0;
+  let duration = 0;
+  let volume = 1.0;
+  let isSeeking = false;
+  let audioSrc = '';
+
   // Check for transcript on mount
   $: if (recording) {
     checkForTranscript();
+    initializeAudioSrc();
   }
+
+  // Initialize audio source when recording changes
+  function initializeAudioSrc() {
+    if (recording && recording.path) {
+      audioSrc = convertFileSrc(recording.path);
+      // Reset player state
+      isPlaying = false;
+      currentTime = 0;
+      duration = 0;
+    }
+  }
+
+  // Audio player functions
+  function togglePlayPause() {
+    if (!audioElement) return;
+
+    if (isPlaying) {
+      audioElement.pause();
+    } else {
+      audioElement.play();
+    }
+  }
+
+  function handlePlayPause() {
+    isPlaying = !audioElement.paused;
+  }
+
+  function handleTimeUpdate() {
+    if (!isSeeking && audioElement) {
+      currentTime = audioElement.currentTime;
+    }
+  }
+
+  function handleLoadedMetadata() {
+    if (audioElement) {
+      duration = audioElement.duration;
+    }
+  }
+
+  function handleEnded() {
+    isPlaying = false;
+    currentTime = 0;
+  }
+
+  function handleSeek(event) {
+    if (!audioElement) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const percentage = x / rect.width;
+    const newTime = percentage * duration;
+    audioElement.currentTime = newTime;
+    currentTime = newTime;
+  }
+
+  function handleSeekStart() {
+    isSeeking = true;
+  }
+
+  function handleSeekEnd() {
+    isSeeking = false;
+  }
+
+  function handleVolumeChange(event) {
+    if (audioElement) {
+      audioElement.volume = event.target.value;
+      volume = event.target.value;
+    }
+  }
+
+  // Cleanup on unmount
+  onDestroy(() => {
+    if (audioElement) {
+      audioElement.pause();
+      audioElement.src = '';
+    }
+  });
 
   async function deleteRecording() {
     try {
@@ -281,31 +368,96 @@
 
   <!-- Audio Player Section -->
   <div class="player-section card">
-    <div class="waveform-placeholder">
-      <svg width="100%" height="50" viewBox="0 0 800 50" fill="none">
-        {#each Array(100) as _, i}
-          <rect
-            x={i * 8}
-            y={25 - Math.random() * 20}
-            width="6"
-            height={Math.random() * 40}
-            fill="var(--text-tertiary)"
-            opacity="0.3"
-          />
-        {/each}
-      </svg>
-      <div class="play-button">
-        <button class="btn-play" on:click={openRecording}>
-          <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M4 2l10 6-10 6V2z"/>
-          </svg>
-        </button>
+    <!-- Hidden audio element -->
+    <audio
+      bind:this={audioElement}
+      src={audioSrc}
+      on:play={handlePlayPause}
+      on:pause={handlePlayPause}
+      on:timeupdate={handleTimeUpdate}
+      on:loadedmetadata={handleLoadedMetadata}
+      on:ended={handleEnded}
+      preload="metadata"
+    ></audio>
+
+    <!-- Waveform and seek bar -->
+    <div class="waveform-container">
+      <div class="waveform-placeholder">
+        <svg width="100%" height="60" viewBox="0 0 800 60" preserveAspectRatio="none">
+          {#each Array(100) as _, i}
+            {@const progress = duration > 0 ? (currentTime / duration) : 0}
+            {@const isPast = (i / 100) <= progress}
+            <rect
+              x={i * 8}
+              y={30 - Math.random() * 25}
+              width="6"
+              height={Math.random() * 50}
+              fill={isPast ? 'var(--accent-default)' : 'var(--text-tertiary)'}
+              opacity={isPast ? '0.8' : '0.3'}
+            />
+          {/each}
+        </svg>
       </div>
+
+      <!-- Seek bar overlay -->
+      <div
+        class="seek-overlay"
+        on:click={handleSeek}
+        on:mousedown={handleSeekStart}
+        on:mouseup={handleSeekEnd}
+        on:keydown={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const delta = e.key === 'ArrowLeft' ? -5 : 5;
+            if (audioElement) {
+              audioElement.currentTime = Math.max(0, Math.min(duration, currentTime + delta));
+            }
+          }
+        }}
+        role="slider"
+        tabindex="0"
+        aria-label="Audio seek bar"
+        aria-valuemin="0"
+        aria-valuemax={duration}
+        aria-valuenow={currentTime}
+      ></div>
     </div>
 
+    <!-- Player controls -->
     <div class="player-controls">
-      <span class="time-display">00:00</span>
-      <span class="time-display">{formatTime(Math.floor(recording.size / 44100))}</span>
+      <div class="control-row">
+        <button class="btn-play" on:click={togglePlayPause} aria-label={isPlaying ? 'Pause' : 'Play'}>
+          {#if isPlaying}
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3 2h3v12H3V2zm7 0h3v12h-3V2z"/>
+            </svg>
+          {:else}
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M4 2l10 6-10 6V2z"/>
+            </svg>
+          {/if}
+        </button>
+
+        <span class="time-display">{formatTime(Math.floor(currentTime))}</span>
+        <span class="time-separator">/</span>
+        <span class="time-display">{formatTime(Math.floor(duration || 0))}</span>
+
+        <div class="volume-control">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 3L4 7H1v2h3l4 4V3zm3 1v8a4 4 0 000-8z"/>
+          </svg>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={volume}
+            on:input={handleVolumeChange}
+            class="volume-slider"
+            aria-label="Volume"
+          />
+        </div>
+      </div>
     </div>
   </div>
 
@@ -514,45 +666,124 @@
     margin-bottom: var(--spacing-xxl);
   }
 
+  .waveform-container {
+    position: relative;
+    margin-bottom: var(--spacing-md);
+  }
+
   .waveform-placeholder {
     position: relative;
     background: var(--card-background-secondary);
     border-radius: var(--corner-radius-medium);
-    padding: var(--spacing-lg);
-    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    overflow: hidden;
   }
 
-  .play-button {
+  .seek-overlay {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  .player-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
   }
 
   .btn-play {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     background: var(--accent-default);
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 16px rgba(255, 59, 48, 0.3);
+    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.3);
     transition: all 0.2s ease;
+    flex-shrink: 0;
   }
 
   .btn-play:hover {
     background: var(--accent-secondary);
-    box-shadow: 0 6px 20px rgba(255, 59, 48, 0.4);
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4);
     transform: scale(1.05);
   }
 
-  .player-controls {
-    display: flex;
-    justify-content: space-between;
-    color: var(--text-tertiary);
+  .btn-play:active {
+    transform: scale(0.95);
+  }
+
+  .time-display {
     font-size: 13px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    min-width: 45px;
+  }
+
+  .time-separator {
+    color: var(--text-tertiary);
+    margin: 0 var(--spacing-xs);
+  }
+
+  .volume-control {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-left: auto;
+    color: var(--text-tertiary);
+  }
+
+  .volume-slider {
+    width: 80px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--stroke-surface);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  .volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent-default);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .volume-slider::-webkit-slider-thumb:hover {
+    background: var(--accent-secondary);
+    transform: scale(1.2);
+  }
+
+  .volume-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent-default);
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+  }
+
+  .volume-slider::-moz-range-thumb:hover {
+    background: var(--accent-secondary);
+    transform: scale(1.2);
   }
 
   .metadata-section {
