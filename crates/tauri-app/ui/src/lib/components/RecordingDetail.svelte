@@ -3,10 +3,14 @@
   import { ask } from '@tauri-apps/plugin-dialog';
   import { formatFileSize, formatTime } from '../stores';
   import TranscriptViewer from './TranscriptViewer.svelte';
+  import { createEventDispatcher } from 'svelte';
 
   export let recording;
   export let onBack;
 
+  const dispatch = createEventDispatcher();
+
+  let isDeleting = false;
   let isTranscribing = false;
   let transcriptionProgress = null;
   let transcriptPath = null;
@@ -17,6 +21,75 @@
   // Check for transcript on mount
   $: if (recording) {
     checkForTranscript();
+  }
+
+  async function deleteRecording() {
+    try {
+      const confirmed = await ask(
+        `Are you sure you want to delete "${recording.filename}"? This action cannot be undone.`,
+        { title: 'Confirm Deletion', type: 'warning' }
+      );
+      if (!confirmed) return;
+
+      isDeleting = true;
+      await invoke('delete_recording', { filePath: recording.path });
+      
+      // Notify parent that deletion was successful
+      dispatch('deleted');
+      
+      // The parent will handle closing this view
+    } catch (error) {
+      console.error('Failed to delete recording:', error);
+      alert(`Failed to delete recording: ${error}`);
+    } finally {
+      isDeleting = false;
+    }
+  }
+
+  let isRenaming = false;
+  let newName = '';
+  let renameError = null;
+
+  function getFileNameWithoutExtension(filename) {
+    return filename.replace(/\.[^/.]+$/, "");
+  }
+
+  function startRename() {
+    isRenaming = true;
+    newName = getFileNameWithoutExtension(recording.filename);
+    renameError = null;
+  }
+
+  function cancelRename() {
+    isRenaming = false;
+    renameError = null;
+  }
+
+  async function saveRename() {
+    if (!newName || newName.trim() === '') {
+      renameError = 'Filename cannot be empty.';
+      return;
+    }
+
+    if (newName === getFileNameWithoutExtension(recording.filename)) {
+        cancelRename();
+        return;
+    }
+
+    renameError = null;
+    try {
+      const updatedRecording = await invoke('rename_recording', {
+        oldPath: recording.path,
+        newFilename: newName.trim(),
+      });
+      
+      dispatch('renamed', updatedRecording);
+      isRenaming = false;
+
+    } catch (error) {
+      console.error('Failed to rename recording:', error);
+      renameError = error;
+    }
   }
 
   async function checkForTranscript() {
@@ -180,19 +253,42 @@
   </div>
 
   <!-- Title -->
-  <h1 class="recording-title">{recording.filename}</h1>
+  <div class="title-container">
+    {#if isRenaming}
+      <div class="rename-form">
+        <input
+          type="text"
+          bind:value={newName}
+          class="rename-input"
+          on:keydown={(e) => {
+            if (e.key === 'Enter') saveRename();
+            if (e.key === 'Escape') cancelRename();
+          }}
+          aria-label="New recording name"
+        />
+        <button class="btn btn-primary btn-sm" on:click={saveRename}>Save</button>
+        <button class="btn btn-secondary btn-sm" on:click={cancelRename}>Cancel</button>
+      </div>
+      {#if renameError}
+        <div class="rename-error">{renameError}</div>
+      {/if}
+    {:else}
+      <h1 class="recording-title">{recording.filename}</h1>
+    {/if}
+  </div>
+
   <div class="recording-meta">{new Date(recording.created).toLocaleString()}</div>
 
   <!-- Audio Player Section -->
   <div class="player-section card">
     <div class="waveform-placeholder">
-      <svg width="100%" height="80" viewBox="0 0 800 80" fill="none">
+      <svg width="100%" height="50" viewBox="0 0 800 50" fill="none">
         {#each Array(100) as _, i}
           <rect
             x={i * 8}
-            y={40 - Math.random() * 30}
+            y={25 - Math.random() * 20}
             width="6"
-            height={Math.random() * 60}
+            height={Math.random() * 40}
             fill="var(--text-tertiary)"
             opacity="0.3"
           />
@@ -200,7 +296,7 @@
       </svg>
       <div class="play-button">
         <button class="btn-play" on:click={openRecording}>
-          <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
+          <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor">
             <path d="M4 2l10 6-10 6V2z"/>
           </svg>
         </button>
@@ -335,6 +431,12 @@
 
   <!-- Actions -->
   <div class="actions-section">
+    <button class="btn btn-secondary" on:click={startRename}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M12.7 4.7a1 1 0 0 0-1.4-1.4L2.5 12.1V13.5h1.4L12.7 4.7z M14.1 3.3l-1.4-1.4a1 1 0 0 0-1.4 0L10 3.3l2.8 2.8 1.3-1.3a1 1 0 0 0 0-1.4z"/>
+      </svg>
+      Rename
+    </button>
     <button class="btn btn-secondary" on:click={openFolder}>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
         <path d="M2 3h5l2 2h5v8H2V3z"/>
@@ -346,6 +448,16 @@
         <path d="M8 2a6 6 0 100 12A6 6 0 008 2zm-1 9V5l5 3-5 3z"/>
       </svg>
       Play in Default App
+    </button>
+    <button class="btn btn-danger" on:click={deleteRecording} disabled={isDeleting}>
+      {#if isDeleting}
+        Deleting...
+      {:else}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        Delete Recording
+      {/if}
     </button>
   </div>
 </div>
@@ -365,7 +477,7 @@
   }
 
   .detail-header {
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: var(--spacing-md);
   }
 
   .back-btn {
@@ -386,16 +498,16 @@
   }
 
   .recording-title {
-    font-size: 32px;
+    font-size: 24px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-xs);
   }
 
   .recording-meta {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-tertiary);
-    margin-bottom: var(--spacing-xxl);
+    margin-bottom: var(--spacing-lg);
   }
 
   .player-section {
@@ -406,7 +518,7 @@
     position: relative;
     background: var(--card-background-secondary);
     border-radius: var(--corner-radius-medium);
-    padding: var(--spacing-xl);
+    padding: var(--spacing-lg);
     margin-bottom: var(--spacing-md);
   }
 
@@ -418,8 +530,8 @@
   }
 
   .btn-play {
-    width: 64px;
-    height: 64px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background: var(--accent-default);
     color: white;
@@ -444,7 +556,7 @@
   }
 
   .metadata-section {
-    margin-bottom: var(--spacing-xxl);
+    margin-bottom: var(--spacing-lg);
   }
 
   .section-title {
@@ -453,7 +565,7 @@
     color: var(--text-tertiary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
@@ -462,24 +574,24 @@
   .metadata-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: var(--spacing-lg);
+    gap: var(--spacing-sm);
   }
 
   .metadata-item {
     background: var(--card-background);
-    padding: var(--spacing-lg);
+    padding: var(--spacing-sm);
     border-radius: var(--corner-radius-medium);
     border: 1px solid var(--stroke-surface);
   }
 
   .metadata-label {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-tertiary);
     margin-bottom: var(--spacing-xs);
   }
 
   .metadata-value {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
   }
@@ -600,6 +712,37 @@
     display: flex;
     gap: var(--spacing-md);
     flex-wrap: wrap;
+  }
+
+  .title-container {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .rename-form {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+    width: 100%;
+  }
+
+  .rename-input {
+    flex-grow: 1;
+    font-size: 20px;
+    padding: var(--spacing-sm);
+    border-radius: var(--corner-radius-small);
+    border: 1px solid var(--stroke-surface);
+    background: var(--card-background);
+    color: var(--text-primary);
+  }
+
+  .rename-error {
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: var(--spacing-sm);
+    width: 100%; /* Ensure it appears below the form */
   }
 
   @media (max-width: 768px) {

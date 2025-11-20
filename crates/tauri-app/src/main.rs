@@ -502,6 +502,59 @@ async fn delete_recording(file_path: String) -> Result<String, String> {
     Ok(format!("Successfully deleted: {}", file_path))
 }
 
+/// Rename a recording file
+#[tauri::command]
+async fn rename_recording(old_path: String, new_filename: String) -> Result<RecordingFile, String> {
+    use std::path::{Path, PathBuf};
+
+    let old_path = Path::new(&old_path);
+    
+    // 1. Validate new filename
+    if new_filename.is_empty() || new_filename.contains('/') || new_filename.contains('\\') {
+        return Err("Invalid new filename".to_string());
+    }
+
+    // 2. Check if old file exists
+    if !old_path.exists() {
+        return Err(format!("File not found: {}", old_path.display()));
+    }
+
+    // 3. Construct new path
+    let parent_dir = old_path.parent().ok_or("Could not determine parent directory")?;
+    let old_extension = old_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let new_path = parent_dir.join(&new_filename).with_extension(old_extension);
+
+    // 4. Check if new path already exists
+    if new_path.exists() {
+        return Err(format!("A file named '{}' already exists.", new_path.display()));
+    }
+
+    // 5. Rename the audio file
+    std::fs::rename(old_path, &new_path)
+        .map_err(|e| format!("Failed to rename audio file: {}", e))?;
+
+    // 6. Rename the transcript file
+    let config = RecorderConfig::new();
+    let old_file_stem = old_path.file_stem().ok_or("Could not get file stem")?;
+    let new_file_stem = Path::new(&new_filename).file_stem().ok_or("Could not get file stem from new filename")?;
+    let old_transcript_path = config.transcriptions_dir.join(old_file_stem).with_extension("md");
+    
+    if old_transcript_path.exists() {
+        let new_transcript_path = config.transcriptions_dir.join(new_file_stem).with_extension("md");
+        std::fs::rename(&old_transcript_path, &new_transcript_path)
+            .map_err(|e| {
+                // Try to roll back the audio file rename on transcript rename failure
+                if let Err(rollback_err) = std::fs::rename(&new_path, old_path) {
+                    tracing::error!("Failed to rollback audio file rename: {}", rollback_err);
+                }
+                format!("Failed to rename transcript file: {}", e)
+            })?;
+    }
+
+    // 7. Return the new RecordingFile object
+    get_recording(new_path.to_string_lossy().to_string()).await
+}
+
 /// Load transcription configuration
 #[tauri::command]
 async fn load_transcription_config() -> Result<TranscriptionConfig, String> {
@@ -873,6 +926,7 @@ fn main() {
         get_active_sessions,
         open_recording,
         delete_recording,
+        rename_recording,
         load_transcription_config,
         save_transcription_config,
         transcribe_recording,

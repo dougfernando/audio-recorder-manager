@@ -75,6 +75,26 @@
     }
   }
 
+  async function handleRecordingDeleted() {
+    // First, reload the recordings to update the underlying data
+    await loadRecordings();
+    // Then, switch the view back to the main recordings list
+    switchTab('recordings');
+  }
+
+  function handleRecordingRenamed(event) {
+    const updatedRecording = event.detail;
+    
+    // Update the selected recording to the new one
+    selectedRecording = updatedRecording;
+
+    // Find and update the recording in the main list using the creation date as a key
+    const updatedRecordings = $recordings.map(r => 
+      r.created === updatedRecording.created ? updatedRecording : r
+    );
+    recordings.set(updatedRecordings);
+  }
+
   function switchTab(tab, recording = null) {
     // If a recording is provided, show the detail view
     if (recording) {
@@ -198,6 +218,8 @@
         <RecordingDetail
           recording={selectedRecording}
           onBack={() => switchTab('recordings')}
+          on:deleted={handleRecordingDeleted}
+          on:renamed={handleRecordingRenamed}
         />
       {:else if activeTab === 'recovery'}
         <Recovery />
