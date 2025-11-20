@@ -214,89 +214,138 @@
     height: 100vh;
     display: flex;
     flex-direction: row;
-    background: var(--layer-fill-default);
+    background: var(--bg-base);
+    position: relative;
   }
 
-  /* Sidebar */
+  /* Sidebar - Asymmetric Command Panel */
   .sidebar {
-    width: 256px;
+    width: 280px;
     height: 100vh;
-    background: var(--layer-fill-alt);
-    border-right: 1px solid var(--stroke-surface);
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border-subtle);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    position: relative;
+    z-index: 10;
   }
 
-  /* Sidebar Header */
+  .sidebar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      var(--accent-cyan) 20%,
+      var(--accent-cyan) 80%,
+      transparent 100%
+    );
+    opacity: 0.3;
+  }
+
+  /* Sidebar Header - Bold & Diagonal */
   .sidebar-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--spacing-lg);
-    border-bottom: 1px solid var(--stroke-surface);
+    padding: var(--spacing-xl) var(--spacing-lg);
+    border-bottom: 2px solid var(--border-subtle);
+    position: relative;
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.05) 0%, transparent 100%);
   }
 
   .sidebar-brand {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
   }
 
   .brand-icon {
-    width: 24px;
-    height: 24px;
-    color: var(--accent-default);
+    width: 32px;
+    height: 32px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
+    color: var(--text-on-accent);
+    box-shadow: var(--shadow-glow-cyan);
   }
 
   .brand-text {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
     color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
   }
 
   .icon-btn {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     background: transparent;
     color: var(--text-secondary);
-    border-radius: var(--corner-radius-small);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.08s ease;
+    transition: all 0.2s ease;
   }
 
   .icon-btn:hover {
-    background: var(--card-background);
-    color: var(--text-primary);
+    background: var(--bg-surface);
+    color: var(--accent-cyan);
+    border-color: var(--accent-cyan);
+    transform: rotate(90deg);
   }
 
-  /* Record New Button */
+  /* Record New Button - Explosive CTA */
   .record-new-btn {
     margin: var(--spacing-lg);
-    padding: var(--spacing-md);
-    background: var(--accent-default);
-    color: var(--text-on-accent);
-    border-radius: var(--corner-radius-small);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--gradient-recording);
+    color: #FFFFFF;
+    border-radius: var(--radius-sm);
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: var(--spacing-sm);
-    transition: all 0.08s ease;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    box-shadow: var(--shadow-md), var(--shadow-glow-magenta);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .record-new-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
   }
 
   .record-new-btn:hover:not(:disabled) {
-    background: var(--accent-secondary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg), var(--shadow-glow-magenta);
+  }
+
+  .record-new-btn:hover:not(:disabled)::before {
+    opacity: 1;
   }
 
   .record-new-btn:active:not(:disabled) {
-    background: var(--accent-tertiary);
+    transform: translateY(0);
   }
 
   /* Sidebar Section */
@@ -311,33 +360,38 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--spacing-sm) var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-lg);
     margin-bottom: var(--spacing-sm);
   }
 
   .section-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-tertiary);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-accent);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.12em;
   }
 
   .text-btn {
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 700;
     color: var(--text-secondary);
     background: transparent;
-    padding: 4px 8px;
-    border-radius: var(--corner-radius-small);
-    transition: all 0.08s ease;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid transparent;
   }
 
   .text-btn:hover {
-    color: var(--accent-default);
-    background: var(--card-background);
+    color: var(--accent-cyan);
+    background: var(--bg-surface);
+    border-color: var(--accent-cyan);
   }
 
-  /* Recordings List in Sidebar */
+  /* Recordings List in Sidebar - Geometric Cards */
   .recordings-list-sidebar {
     flex: 1;
     overflow-y: auto;
@@ -349,29 +403,50 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
     margin-bottom: var(--spacing-xs);
-    background: transparent;
+    background: var(--bg-surface);
     color: var(--text-primary);
-    border-radius: var(--corner-radius-small);
-    transition: all 0.08s ease;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    transition: all 0.2s ease;
     text-align: left;
+    position: relative;
+  }
+
+  .recording-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--gradient-primary);
+    opacity: 0;
+    transition: opacity 0.2s;
   }
 
   .recording-item:hover {
-    background: var(--card-background);
+    background: var(--bg-elevated);
+    border-color: var(--accent-cyan);
+    transform: translateX(4px);
+  }
+
+  .recording-item:hover::before {
+    opacity: 1;
   }
 
   .recording-icon {
-    width: 32px;
-    height: 32px;
-    background: var(--card-background);
-    border-radius: var(--corner-radius-small);
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.1), rgba(255, 0, 110, 0.1));
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--accent-default);
+    color: var(--accent-cyan);
     flex-shrink: 0;
   }
 
@@ -381,16 +456,18 @@
   }
 
   .recording-name {
-    font-size: 13px;
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 600;
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    letter-spacing: -0.01em;
   }
 
   .recording-date {
-    font-size: 11px;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
     color: var(--text-tertiary);
     margin-top: 2px;
   }
@@ -407,16 +484,19 @@
 
   .empty-state svg {
     margin-bottom: var(--spacing-md);
+    opacity: 0.3;
   }
 
   .empty-state p {
-    font-size: 13px;
+    font-size: 12px;
+    font-weight: 500;
   }
 
-  /* Sidebar Footer */
+  /* Sidebar Footer - Minimal Accent */
   .sidebar-footer {
     padding: var(--spacing-lg);
-    border-top: 1px solid var(--stroke-surface);
+    border-top: 2px solid var(--border-subtle);
+    background: linear-gradient(180deg, transparent, rgba(0, 229, 255, 0.03));
   }
 
   .footer-btn {
@@ -424,50 +504,72 @@
     padding: var(--spacing-md);
     background: transparent;
     color: var(--text-secondary);
-    border-radius: var(--corner-radius-small);
-    font-size: 14px;
-    font-weight: 400;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    font-size: 13px;
+    font-weight: 600;
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
-    transition: all 0.08s ease;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
   }
 
   .footer-btn:hover {
-    background: var(--card-background);
+    background: var(--bg-surface);
     color: var(--text-primary);
+    border-color: var(--border-strong);
   }
 
   .footer-btn.active {
-    background: var(--card-background);
-    color: var(--accent-default);
-    font-weight: 500;
+    background: linear-gradient(135deg, rgba(0, 229, 255, 0.15), rgba(255, 0, 110, 0.15));
+    color: var(--accent-cyan);
+    font-weight: 700;
+    border-color: var(--accent-cyan);
   }
 
-  /* Main Content Area */
+  /* Main Content Area - Spacious & Bold */
   .main-content {
     flex: 1;
     overflow: hidden;
     position: relative;
   }
 
+  .main-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+      var(--accent-cyan) 0%,
+      transparent 20%,
+      transparent 80%,
+      var(--accent-magenta) 100%
+    );
+  }
+
   .content {
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: var(--spacing-xxl);
+    padding: var(--spacing-xxxl);
   }
 
   /* Recording Active View - Full width, prominent */
   .recording-active-view {
-    max-width: 900px;
+    max-width: 1000px;
     margin: 0 auto;
+    animation: slideInRight 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Recording Idle View - Single column centered layout */
   .recording-idle-view {
-    max-width: 600px;
+    max-width: 700px;
     margin: 0 auto;
+    animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   /* Responsive - Stack on smaller screens */

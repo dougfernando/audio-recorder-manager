@@ -1,109 +1,94 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
 :root {
-  /* Dark Minimal Theme - Mockup Inspired */
-  --accent-default: #FF3B30;
-  --accent-secondary: #FF5247;
-  --accent-tertiary: #FF6B61;
-  --accent-disabled: #666;
+  /* Studio Command Center - Bold Brutalist Design System */
 
-  /* Backgrounds - Pure Dark */
-  --layer-fill-default: #0a0a0a;
-  --layer-fill-alt: #0f0f0f;
-  --layer-on-mica: rgba(15, 15, 15, 0.5);
-  --card-background: rgba(26, 26, 26, 0.7);
-  --card-background-secondary: rgba(20, 20, 20, 0.9);
+  /* Primary Accents - Electric & Bold */
+  --accent-cyan: #00E5FF;
+  --accent-cyan-glow: rgba(0, 229, 255, 0.4);
+  --accent-magenta: #FF006E;
+  --accent-magenta-glow: rgba(255, 0, 110, 0.4);
+  --accent-yellow: #FFE600;
 
-  /* Text Colors */
-  --text-primary: #e5e5e5;
-  --text-secondary: #a3a3a3;
-  --text-tertiary: #737373;
-  --text-disabled: #525252;
-  --text-on-accent: #FFFFFF;
+  /* Recording State Colors */
+  --rec-active: #FF006E;
+  --rec-processing: #FFE600;
+  --rec-complete: #00FF9F;
 
-  /* Stroke/Border Colors */
-  --stroke-surface: rgba(255, 255, 255, 0.06);
-  --stroke-surface-flyout: rgba(255, 255, 255, 0.1);
-  --divider-stroke: rgba(255, 255, 255, 0.08);
+  /* Base Backgrounds - Deep Charcoal */
+  --bg-base: #0B0B0F;
+  --bg-elevated: #14141A;
+  --bg-surface: #1C1C24;
+  --bg-overlay: rgba(28, 28, 36, 0.95);
 
-  /* Elevation - Subtle Dark Shadows */
-  --elevation-card: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 1px rgba(255, 255, 255, 0.05);
-  --elevation-flyout: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 2px rgba(255, 255, 255, 0.08);
+  /* Text Hierarchy */
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0B0;
+  --text-tertiary: #6B6B7A;
+  --text-accent: var(--accent-cyan);
+  --text-on-accent: #0B0B0F;
 
-  /* Corner Radius - Windows 11 Standard */
-  --corner-radius-small: 4px;
-  --corner-radius-medium: 8px;
-  --corner-radius-large: 12px;
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-accent: var(--accent-cyan);
+  --divider: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.3), transparent);
 
-  /* Spacing - 4px Base Unit */
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 12px;
-  --spacing-lg: 16px;
-  --spacing-xl: 20px;
-  --spacing-xxl: 24px;
-  --spacing-xxxl: 32px;
+  /* Shadows & Depth */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow-cyan: 0 0 24px var(--accent-cyan-glow);
+  --shadow-glow-magenta: 0 0 24px var(--accent-magenta-glow);
 
-  /* Status Colors */
-  --success: #10B981;
-  --success-bg: rgba(16, 185, 129, 0.1);
-  --warning: #F59E0B;
-  --warning-bg: rgba(245, 158, 11, 0.1);
-  --danger: #EF4444;
-  --danger-bg: rgba(239, 68, 68, 0.1);
-  --info: #3B82F6;
-  --info-bg: rgba(59, 130, 246, 0.1);
+  /* Border Radius - Sharp & Geometric */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 
-  /* Modern Gradient Colors */
-  --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --gradient-blue: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  --gradient-pink: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  --gradient-orange: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-  --gradient-teal: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  /* Spacing - 8px Base Unit for Stronger Rhythm */
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --spacing-xxxl: 64px;
 
-  /* Subtle Background Gradients (for cards) */
-  --bg-gradient-purple: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
-  --bg-gradient-blue: linear-gradient(135deg, rgba(79, 172, 254, 0.08) 0%, rgba(0, 242, 254, 0.08) 100%);
-  --bg-gradient-pink: linear-gradient(135deg, rgba(240, 147, 251, 0.08) 0%, rgba(245, 87, 108, 0.08) 100%);
-  --bg-gradient-orange: linear-gradient(135deg, rgba(250, 112, 154, 0.08) 0%, rgba(254, 225, 64, 0.08) 100%);
-  --bg-gradient-teal: linear-gradient(135deg, rgba(67, 233, 123, 0.08) 0%, rgba(56, 249, 215, 0.08) 100%);
+  /* Status Variants */
+  --success: #00FF9F;
+  --success-bg: rgba(0, 255, 159, 0.12);
+  --warning: #FFE600;
+  --warning-bg: rgba(255, 230, 0, 0.12);
+  --danger: #FF006E;
+  --danger-bg: rgba(255, 0, 110, 0.12);
+  --info: #00E5FF;
+  --info-bg: rgba(0, 229, 255, 0.12);
+
+  /* Gradients - Diagonal & Bold */
+  --gradient-primary: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-magenta) 100%);
+  --gradient-recording: linear-gradient(135deg, #FF006E 0%, #FF4D00 100%);
+  --gradient-surface: linear-gradient(145deg, #1C1C24 0%, #14141A 100%);
+  --gradient-overlay: linear-gradient(180deg, rgba(0, 229, 255, 0.05) 0%, transparent 100%);
 }
 
-/* Dark Mode Support */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --accent-default: #60CDFF;
-    --accent-secondary: #4CC2FF;
-    --accent-tertiary: #89D7FF;
-
-    --layer-fill-default: #202020;
-    --layer-fill-alt: #1C1C1C;
-    --layer-on-mica: rgba(32, 32, 32, 0.5);
-    --card-background: rgba(42, 42, 42, 0.7);
-    --card-background-secondary: rgba(36, 36, 36, 0.9);
-
-    --text-primary: #FFFFFF;
-    --text-secondary: #C8C8C8;
-    --text-tertiary: #8A8886;
-    --text-disabled: #605E5C;
-
-    --stroke-surface: rgba(255, 255, 255, 0.0578);
-    --stroke-surface-flyout: rgba(255, 255, 255, 0.0805);
-    --divider-stroke: rgba(255, 255, 255, 0.0805);
-
-    --elevation-card: 0 2px 4px rgba(0, 0, 0, 0.28), 0 0 2px rgba(0, 0, 0, 0.24);
-    --elevation-flyout: 0 8px 16px rgba(0, 0, 0, 0.48), 0 0 2px rgba(0, 0, 0, 0.44);
-
-    --success-bg: #1A3A1A;
-    --warning-bg: #3D2C1A;
-    --danger-bg: #3D1F20;
-    --info-bg: #1A2A3D;
-
-    /* Dark Mode Gradients - slightly more vibrant */
-    --bg-gradient-purple: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-    --bg-gradient-blue: linear-gradient(135deg, rgba(79, 172, 254, 0.15) 0%, rgba(0, 242, 254, 0.15) 100%);
-    --bg-gradient-pink: linear-gradient(135deg, rgba(240, 147, 251, 0.15) 0%, rgba(245, 87, 108, 0.15) 100%);
-    --bg-gradient-orange: linear-gradient(135deg, rgba(250, 112, 154, 0.15) 0%, rgba(254, 225, 64, 0.15) 100%);
-    --bg-gradient-teal: linear-gradient(135deg, rgba(67, 233, 123, 0.15) 0%, rgba(56, 249, 215, 0.15) 100%);
-  }
+/* Legacy variable mappings for compatibility */
+:root {
+  --accent-default: var(--accent-cyan);
+  --accent-secondary: var(--accent-magenta);
+  --accent-tertiary: var(--accent-yellow);
+  --layer-fill-default: var(--bg-base);
+  --layer-fill-alt: var(--bg-elevated);
+  --card-background: var(--bg-surface);
+  --card-background-secondary: var(--bg-elevated);
+  --stroke-surface: var(--border-subtle);
+  --stroke-surface-flyout: var(--border-strong);
+  --elevation-card: var(--shadow-md);
+  --elevation-flyout: var(--shadow-lg);
+  --corner-radius-small: var(--radius-sm);
+  --corner-radius-medium: var(--radius-md);
+  --corner-radius-large: var(--radius-lg);
 }
 
 * {
@@ -113,16 +98,31 @@
 }
 
 body {
-  /* Windows 11 Typography - Segoe UI Variable */
-  font-family: 'Segoe UI Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont,
-    'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif;
+  /* Studio Command Center Typography */
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--layer-fill-default);
+  background: var(--bg-base);
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(0, 229, 255, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(255, 0, 110, 0.03) 0%, transparent 50%);
+  background-attachment: fixed;
   color: var(--text-primary);
-  line-height: 1.5;
-  font-size: 14px;
+  line-height: 1.6;
+  font-size: 15px;
   font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Monospace Typography */
+.mono, code, pre,
+input[type="number"],
+.recording-id,
+.session-id,
+.file-path,
+.time-display {
+  font-family: 'IBM Plex Mono', 'Consolas', 'Monaco', monospace;
+  font-feature-settings: 'zero', 'cv11';
 }
 
 #app {
@@ -131,24 +131,32 @@ body {
   overflow: hidden;
 }
 
-/* Windows 11 Button Styles */
+/* Command Center Button Styles */
 button {
-  font-family: inherit;
+  font-family: 'DM Sans', sans-serif;
   cursor: pointer;
   border: none;
   outline: none;
-  transition: all 0.08s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 14px;
-  font-weight: 400;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 13px;
 }
 
 button:disabled {
-  opacity: 0.4;
+  opacity: 0.3;
   cursor: not-allowed;
+  filter: grayscale(0.8);
 }
 
 button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: translateY(1px) scale(0.99);
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.1);
 }
 
 input, select, textarea {
@@ -157,97 +165,150 @@ input, select, textarea {
   font-size: 14px;
 }
 
-/* Utility Classes - Windows 11 Style */
+/* Utility Classes - Command Center Style */
 .btn {
   padding: var(--spacing-sm) var(--spacing-lg);
-  border-radius: var(--corner-radius-small);
-  font-size: 14px;
-  font-weight: 400;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-sm);
-  min-height: 32px;
-  border: 1px solid transparent;
+  gap: var(--spacing-xs);
+  min-height: 40px;
+  border: 2px solid transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.btn:hover:not(:disabled)::before {
+  opacity: 1;
 }
 
 .btn-primary {
-  background-color: var(--accent-default);
+  background: var(--gradient-primary);
   color: var(--text-on-accent);
-  border-color: var(--accent-default);
+  box-shadow: var(--shadow-md), var(--shadow-glow-cyan);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: var(--accent-secondary);
-  border-color: var(--accent-secondary);
-}
-
-.btn-primary:active:not(:disabled) {
-  background-color: var(--accent-tertiary);
+  box-shadow: var(--shadow-lg), var(--shadow-glow-cyan);
+  transform: translateY(-2px);
 }
 
 .btn-success {
-  background-color: var(--success);
+  background: var(--success);
   color: var(--text-on-accent);
+  box-shadow: var(--shadow-md), 0 0 24px rgba(0, 255, 159, 0.3);
 }
 
 .btn-success:hover:not(:disabled) {
-  background-color: #0E6B0E;
+  box-shadow: var(--shadow-lg), 0 0 32px rgba(0, 255, 159, 0.4);
+  transform: translateY(-2px);
 }
 
 .btn-danger {
-  background-color: var(--danger);
-  color: var(--text-on-accent);
+  background: var(--gradient-recording);
+  color: #FFFFFF;
+  box-shadow: var(--shadow-md), var(--shadow-glow-magenta);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background-color: #B62F33;
+  box-shadow: var(--shadow-lg), var(--shadow-glow-magenta);
+  transform: translateY(-2px);
 }
 
 .btn-secondary {
-  background-color: var(--layer-fill-alt);
+  background: var(--bg-elevated);
   color: var(--text-primary);
-  border: 1px solid var(--stroke-surface);
+  border: 2px solid var(--border-strong);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background-color: var(--card-background);
-  border-color: var(--stroke-surface-flyout);
+  background: var(--bg-surface);
+  border-color: var(--accent-cyan);
+}
+
+.btn-info {
+  background: var(--info);
+  color: var(--text-on-accent);
+  box-shadow: var(--shadow-md), var(--shadow-glow-cyan);
+}
+
+.btn-info:hover:not(:disabled) {
+  box-shadow: var(--shadow-lg), var(--shadow-glow-cyan);
+  transform: translateY(-2px);
 }
 
 .btn-lg {
-  padding: var(--spacing-md) var(--spacing-xxl);
+  padding: var(--spacing-md) var(--spacing-xl);
   font-size: 15px;
-  font-weight: 500;
-  min-height: 40px;
+  font-weight: 700;
+  min-height: 56px;
+  letter-spacing: 0.05em;
 }
 
-/* Windows 11 Card Style */
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 11px;
+  min-height: 32px;
+}
+
+/* Command Center Card Style */
 .card {
-  background-color: var(--card-background);
-  backdrop-filter: blur(40px);
-  border-radius: var(--corner-radius-medium);
-  border: 1px solid var(--stroke-surface);
-  box-shadow: var(--elevation-card);
+  background: var(--gradient-surface);
+  backdrop-filter: blur(20px);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md);
   padding: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
-  transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gradient-primary);
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
 .card:hover {
-  box-shadow: var(--elevation-flyout);
-  border-color: var(--stroke-surface-flyout);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.card:hover::before {
+  opacity: 1;
 }
 
 .card-title {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
   margin-bottom: var(--spacing-lg);
   color: var(--text-primary);
-  line-height: 24px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
 }
 
-/* Form Controls - Windows 11 Style */
+/* Form Controls - Command Center Style */
 .form-group {
   margin-bottom: var(--spacing-lg);
 }
@@ -255,66 +316,79 @@ input, select, textarea {
 .form-label {
   display: block;
   margin-bottom: var(--spacing-sm);
-  font-weight: 500;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 20px;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--text-accent);
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .form-input,
 .form-select {
   width: 100%;
   padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--stroke-surface);
-  border-radius: var(--corner-radius-small);
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   font-size: 14px;
-  background-color: var(--card-background-secondary);
+  background: var(--bg-elevated);
   color: var(--text-primary);
-  transition: all 0.08s ease;
-  min-height: 32px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 44px;
 }
 
 .form-input:hover,
 .form-select:hover {
-  border-color: var(--stroke-surface-flyout);
+  border-color: var(--border-strong);
 }
 
 .form-input:focus,
 .form-select:focus {
-  border-color: var(--accent-default);
-  box-shadow: 0 0 0 1px var(--accent-default);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.1);
+  background: var(--bg-surface);
 }
 
-/* Status Badges - Windows 11 Style */
+/* Status Badges - Command Center Style */
 .status-badge {
   display: inline-flex;
   align-items: center;
-  padding: var(--spacing-xs) var(--spacing-md);
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
 }
 
 .status-recording {
-  background-color: var(--danger-bg);
-  color: var(--danger);
+  background: var(--danger-bg);
+  color: var(--rec-active);
+  animation: recordingPulse 2s ease-in-out infinite;
+}
+
+@keyframes recordingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .status-completed {
-  background-color: var(--success-bg);
-  color: var(--success);
+  background: var(--success-bg);
+  color: var(--rec-complete);
 }
 
 .status-idle {
-  background-color: var(--layer-fill-alt);
+  background: var(--bg-elevated);
   color: var(--text-tertiary);
+  border-color: var(--border-subtle);
 }
 
-/* Scrollbar - Windows 11 Style */
+/* Scrollbar - Command Center Style */
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -322,34 +396,42 @@ input, select, textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--stroke-surface-flyout);
-  border-radius: 10px;
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background: var(--border-strong);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-  background-clip: content-box;
+  background: var(--accent-cyan);
 }
 
 /* Divider */
 .divider {
   height: 1px;
-  background-color: var(--divider-stroke);
+  background: var(--divider);
   margin: var(--spacing-lg) 0;
   border: none;
 }
 
-/* Windows 11 Animations */
+/* Command Center Animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -362,6 +444,23 @@ input, select, textarea {
   }
 }
 
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: var(--shadow-glow-cyan);
+  }
+  50% {
+    box-shadow: 0 0 40px var(--accent-cyan-glow);
+  }
+}
+
 .fade-in {
-  animation: fadeIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.slide-in-right {
+  animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
 }

@@ -292,47 +292,92 @@
 {/if}
 
 <style>
-  /* Recording Header */
+  /* Recording Header - Explosive & Animated */
   .recording-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--spacing-lg);
-    background: linear-gradient(135deg, var(--danger) 0%, #E02020 100%);
-    border-radius: var(--corner-radius-medium) var(--corner-radius-medium) 0 0;
-    margin: calc(var(--spacing-lg) * -1) calc(var(--spacing-lg) * -1) var(--spacing-lg);
+    padding: var(--spacing-xl);
+    background: var(--gradient-recording);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    margin: calc(var(--spacing-lg) * -1) calc(var(--spacing-lg) * -1) var(--spacing-xl);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .recording-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 200%;
+    height: 100%;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      transparent 100%
+    );
+    animation: shimmer 3s linear infinite;
+  }
+
+  @keyframes shimmer {
+    to {
+      left: 100%;
+    }
   }
 
   .recording-indicator {
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
+    position: relative;
+    z-index: 1;
   }
 
   .pulse-dot {
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     background-color: white;
     border-radius: 50%;
-    animation: pulse 1.5s ease-in-out infinite;
+    position: relative;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
   }
 
-  @keyframes pulse {
-    0%, 100% {
+  .pulse-dot::before,
+  .pulse-dot::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border: 2px solid white;
+    border-radius: 50%;
+    opacity: 0;
+  }
+
+  .pulse-dot::before {
+    animation: pulseRing 2s ease-out infinite;
+  }
+
+  .pulse-dot::after {
+    animation: pulseRing 2s ease-out infinite 1s;
+  }
+
+  @keyframes pulseRing {
+    0% {
       opacity: 1;
-      transform: scale(1);
+      transform: scale(0.5);
     }
-    50% {
-      opacity: 0.3;
-      transform: scale(0.8);
+    100% {
+      opacity: 0;
+      transform: scale(1.5);
     }
   }
 
   .recording-text {
     color: white;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: 1px;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   }
 
   .live-badge {
@@ -373,33 +418,55 @@
     font-family: 'Consolas', 'Monaco', monospace;
   }
 
-  /* Timer Card */
+  /* Timer Card - Large & Monospace */
   .timer-card {
-    background-color: var(--card-background-secondary);
-    border-radius: var(--corner-radius-medium);
-    padding: var(--spacing-xxl);
-    margin-bottom: var(--spacing-lg);
+    background: var(--bg-surface);
+    border: 2px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xxxl);
+    margin-bottom: var(--spacing-xl);
     text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .timer-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--gradient-recording);
   }
 
   .time-display {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--spacing-md);
-    font-size: 48px;
+    gap: var(--spacing-lg);
+    font-size: 72px;
     font-weight: 700;
-    margin-bottom: var(--spacing-lg);
-    font-family: 'Consolas', 'Monaco', monospace;
+    margin-bottom: var(--spacing-xl);
+    font-family: 'IBM Plex Mono', monospace;
+    line-height: 1;
   }
 
   .elapsed {
-    color: var(--accent-default);
+    color: var(--rec-active);
+    text-shadow: 0 0 24px var(--accent-magenta-glow);
+    animation: numberPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes numberPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
   }
 
   .separator {
     color: var(--text-tertiary);
-    font-weight: 400;
+    font-weight: 300;
+    opacity: 0.5;
   }
 
   .total {
@@ -419,35 +486,42 @@
   }
 
   .progress-bar {
-    height: 12px;
-    background-color: var(--layer-fill-alt);
-    border-radius: 6px;
+    height: 8px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
     overflow: hidden;
-    margin-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
     position: relative;
+    border: 1px solid var(--border-subtle);
   }
 
   .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, var(--accent-default), var(--accent-secondary));
-    transition: width 0.5s ease;
+    background: var(--gradient-recording);
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+    box-shadow: 0 0 12px var(--accent-magenta-glow);
   }
 
-  .progress-shine {
+  .progress-fill::before {
+    content: '';
     position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-    animation: shine 2s infinite;
+    inset: 0;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.3) 50%,
+      transparent 100%
+    );
+    animation: shine 2s linear infinite;
   }
 
   @keyframes shine {
+    from {
+      transform: translateX(-100%);
+    }
     to {
-      left: 100%;
+      transform: translateX(200%);
     }
   }
 
@@ -457,48 +531,68 @@
     font-weight: 500;
   }
 
-  /* Channels Grid */
+  /* Channels Grid - Elevated Cards */
   .channels-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-lg);
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-xl);
   }
 
   .channel-card {
-    background-color: var(--card-background-secondary);
-    border-radius: var(--corner-radius-medium);
-    padding: var(--spacing-lg);
-    border: 2px solid var(--stroke-surface);
-    transition: all 0.2s ease;
+    background: var(--gradient-surface);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-xl);
+    border: 2px solid var(--border-subtle);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .channel-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--success);
+    opacity: 0;
+    transition: opacity 0.3s;
   }
 
   .channel-card.active {
     border-color: var(--success);
-    box-shadow: 0 0 0 1px var(--success), var(--elevation-card);
+    box-shadow: var(--shadow-md), 0 0 24px rgba(0, 255, 159, 0.2);
+    transform: translateY(-2px);
+  }
+
+  .channel-card.active::before {
+    opacity: 1;
   }
 
   .channel-card.silent {
-    opacity: 0.6;
+    opacity: 0.5;
   }
 
   .channel-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: var(--corner-radius-medium);
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
   }
 
   .channel-icon.system {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-magenta) 100%);
+    color: var(--text-on-accent);
   }
 
   .channel-icon.mic {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: linear-gradient(135deg, var(--accent-magenta) 0%, var(--rec-active) 100%);
     color: white;
   }
 

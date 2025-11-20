@@ -57,7 +57,8 @@
       "Bash(dir:*)",
       "Bash(crates/tauri-app/ui/src/lib/components/RecordingView.svelte)",
       "Bash(npm uninstall:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Skill(frontend-design)"
     ],
     "deny": [],
     "ask": []

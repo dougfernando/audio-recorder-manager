@@ -427,22 +427,40 @@
 
   .recordings-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: var(--spacing-xl);
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: var(--spacing-lg);
   }
 
   .recording-card {
     display: flex;
     flex-direction: column;
-    padding: var(--spacing-lg);
-    transition: all 0.2s ease;
+    padding: var(--spacing-xl);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
+    position: relative;
+    background: var(--gradient-surface);
+  }
+
+  .recording-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-primary);
+    opacity: 0;
+    transition: opacity 0.3s;
   }
 
   .recording-card:hover {
-    box-shadow: var(--elevation-flyout);
-    transform: translateY(-2px);
-    border-color: var(--accent-default);
+    box-shadow: var(--shadow-lg), var(--shadow-glow-cyan);
+    transform: translateY(-4px) scale(1.01);
+    border-color: var(--accent-cyan);
+  }
+
+  .recording-card:hover::before {
+    opacity: 1;
   }
 
   .recording-header {
@@ -456,35 +474,43 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 64px;
-    height: 64px;
-    border-radius: var(--corner-radius-large);
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-lg);
     color: white;
+    box-shadow: var(--shadow-md);
+    transition: transform 0.3s;
+  }
+
+  .recording-card:hover .recording-icon {
+    transform: scale(1.1) rotate(5deg);
   }
 
   .recording-icon.wav {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-magenta) 100%);
   }
 
   .recording-icon.m4a {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    background: linear-gradient(135deg, var(--accent-magenta) 0%, var(--rec-active) 100%);
   }
 
   .format-badge {
-    padding: 4px var(--spacing-sm);
-    border-radius: 10px;
-    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
   }
 
   .format-badge.wav {
-    background-color: var(--info-bg);
+    background: var(--info-bg);
     color: var(--info);
   }
 
   .format-badge.m4a {
-    background-color: var(--success-bg);
+    background: var(--success-bg);
     color: var(--success);
   }
 
@@ -494,21 +520,23 @@
   }
 
   .recording-name {
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    letter-spacing: -0.01em;
   }
 
   .recording-meta {
     font-size: 12px;
     color: var(--text-secondary);
     display: flex;
-    gap: 6px;
-    font-family: 'Consolas', 'Monaco', monospace;
+    gap: 8px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 500;
   }
 
   .recording-actions {
@@ -519,7 +547,8 @@
 
   .btn-sm {
     padding: var(--spacing-sm) var(--spacing-md);
-    font-size: 13px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
   }
 
   .empty-state {
