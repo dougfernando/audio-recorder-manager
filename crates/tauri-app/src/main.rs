@@ -150,7 +150,10 @@ async fn start_recording(
             Ok(mut sessions) => sessions.push(session_id.clone()),
             Err(e) => {
                 tracing::error!(error = %e, "Failed to lock active_sessions mutex (poisoned)");
-                return Err(format!("Internal error: Failed to track recording session: {}", e));
+                return Err(format!(
+                    "Internal error: Failed to track recording session: {}",
+                    e
+                ));
             }
         }
     }
@@ -294,7 +297,10 @@ async fn get_recording_status(session_id: String) -> Result<RecordingStatusInfo,
         serde_json::from_str(&content).map_err(|e| e.to_string())?;
 
     Ok(RecordingStatusInfo {
-        status: status_data["status"].as_str().unwrap_or("unknown").to_string(),
+        status: status_data["status"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string(),
         session_id: status_data["session_id"].as_str().map(|s| s.to_string()),
         filename: status_data["filename"].as_str().map(|s| s.to_string()),
         duration: status_data["duration"].as_u64(),
@@ -334,7 +340,10 @@ async fn list_recordings() -> Result<Vec<RecordingFile>, String> {
         // Skip temporary files and status files
         if let Some(filename) = path.file_name() {
             let filename_str = filename.to_string_lossy();
-            if filename_str.contains("_loopback") || filename_str.contains("_mic") || filename_str.ends_with(".json") {
+            if filename_str.contains("_loopback")
+                || filename_str.contains("_mic")
+                || filename_str.ends_with(".json")
+            {
                 continue;
             }
         }
@@ -438,7 +447,10 @@ async fn get_active_sessions(state: State<'_, AppState>) -> Result<Vec<String>, 
         Ok(sessions) => Ok(sessions.clone()),
         Err(e) => {
             tracing::error!(error = %e, "Failed to lock active_sessions mutex in get_active_sessions");
-            Err(format!("Internal error: Failed to get active sessions: {}", e))
+            Err(format!(
+                "Internal error: Failed to get active sessions: {}",
+                e
+            ))
         }
     }
 }
@@ -486,13 +498,15 @@ async fn delete_recording(file_path: String) -> Result<String, String> {
     }
 
     // Delete the audio file
-    std::fs::remove_file(path)
-        .map_err(|e| format!("Failed to delete file: {}", e))?;
+    std::fs::remove_file(path).map_err(|e| format!("Failed to delete file: {}", e))?;
 
     // Also delete the transcript if it exists (in transcriptions directory)
     let config = RecorderConfig::new();
     if let Some(file_stem) = path.file_stem() {
-        let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+        let transcript_path = config
+            .transcriptions_dir
+            .join(file_stem)
+            .with_extension("md");
         if transcript_path.exists() {
             tracing::info!("Deleting associated transcript: {:?}", transcript_path);
             std::fs::remove_file(&transcript_path)
@@ -510,7 +524,7 @@ async fn rename_recording(old_path: String, new_filename: String) -> Result<Reco
     use std::path::{Path, PathBuf};
 
     let old_path = Path::new(&old_path);
-    
+
     // 1. Validate new filename
     if new_filename.is_empty() || new_filename.contains('/') || new_filename.contains('\\') {
         return Err("Invalid new filename".to_string());
@@ -522,13 +536,18 @@ async fn rename_recording(old_path: String, new_filename: String) -> Result<Reco
     }
 
     // 3. Construct new path
-    let parent_dir = old_path.parent().ok_or("Could not determine parent directory")?;
+    let parent_dir = old_path
+        .parent()
+        .ok_or("Could not determine parent directory")?;
     let old_extension = old_path.extension().and_then(|s| s.to_str()).unwrap_or("");
     let new_path = parent_dir.join(&new_filename).with_extension(old_extension);
 
     // 4. Check if new path already exists
     if new_path.exists() {
-        return Err(format!("A file named '{}' already exists.", new_path.display()));
+        return Err(format!(
+            "A file named '{}' already exists.",
+            new_path.display()
+        ));
     }
 
     // 5. Rename the audio file
@@ -538,19 +557,26 @@ async fn rename_recording(old_path: String, new_filename: String) -> Result<Reco
     // 6. Rename the transcript file
     let config = RecorderConfig::new();
     let old_file_stem = old_path.file_stem().ok_or("Could not get file stem")?;
-    let new_file_stem = Path::new(&new_filename).file_stem().ok_or("Could not get file stem from new filename")?;
-    let old_transcript_path = config.transcriptions_dir.join(old_file_stem).with_extension("md");
-    
+    let new_file_stem = Path::new(&new_filename)
+        .file_stem()
+        .ok_or("Could not get file stem from new filename")?;
+    let old_transcript_path = config
+        .transcriptions_dir
+        .join(old_file_stem)
+        .with_extension("md");
+
     if old_transcript_path.exists() {
-        let new_transcript_path = config.transcriptions_dir.join(new_file_stem).with_extension("md");
-        std::fs::rename(&old_transcript_path, &new_transcript_path)
-            .map_err(|e| {
-                // Try to roll back the audio file rename on transcript rename failure
-                if let Err(rollback_err) = std::fs::rename(&new_path, old_path) {
-                    tracing::error!("Failed to rollback audio file rename: {}", rollback_err);
-                }
-                format!("Failed to rename transcript file: {}", e)
-            })?;
+        let new_transcript_path = config
+            .transcriptions_dir
+            .join(new_file_stem)
+            .with_extension("md");
+        std::fs::rename(&old_transcript_path, &new_transcript_path).map_err(|e| {
+            // Try to roll back the audio file rename on transcript rename failure
+            if let Err(rollback_err) = std::fs::rename(&new_path, old_path) {
+                tracing::error!("Failed to rollback audio file rename: {}", rollback_err);
+            }
+            format!("Failed to rename transcript file: {}", e)
+        })?;
     }
 
     // 7. Return the new RecordingFile object
@@ -632,19 +658,18 @@ async fn transcribe_recording(
         optimize,
         &session_id_clone,
     )
-        .await
-        .and_then(|result| {
-            tracing::info!("Transcription completed successfully");
-            serde_json::to_value(result)
-                .map_err(|e| {
-                    tracing::error!(error = %e, "Failed to serialize transcription result");
-                    anyhow::anyhow!("Failed to serialize transcription result: {}", e)
-                })
+    .await
+    .and_then(|result| {
+        tracing::info!("Transcription completed successfully");
+        serde_json::to_value(result).map_err(|e| {
+            tracing::error!(error = %e, "Failed to serialize transcription result");
+            anyhow::anyhow!("Failed to serialize transcription result: {}", e)
         })
-        .map_err(|e| {
-            tracing::error!(error = %e, "Transcription failed");
-            e.to_string()
-        })
+    })
+    .map_err(|e| {
+        tracing::error!(error = %e, "Transcription failed");
+        e.to_string()
+    })
 }
 
 /// Read transcript file content
@@ -660,11 +685,10 @@ async fn read_transcript(file_path: String) -> Result<String, String> {
         return Err(format!("Transcript file not found: {}", file_path));
     }
 
-    std::fs::read_to_string(path)
-        .map_err(|e| {
-            tracing::error!("Failed to read transcript file: {}", e);
-            format!("Failed to read transcript: {}", e)
-        })
+    std::fs::read_to_string(path).map_err(|e| {
+        tracing::error!("Failed to read transcript file: {}", e);
+        format!("Failed to read transcript: {}", e)
+    })
 }
 
 /// Check if a transcript exists for a given audio file
@@ -676,10 +700,14 @@ async fn check_transcript_exists(file_path: String) -> Result<bool, String> {
     let config = RecorderConfig::new();
 
     let path = Path::new(&file_path);
-    let file_stem = path.file_stem()
+    let file_stem = path
+        .file_stem()
         .ok_or_else(|| "Invalid file path".to_string())?;
 
-    let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+    let transcript_path = config
+        .transcriptions_dir
+        .join(file_stem)
+        .with_extension("md");
 
     Ok(transcript_path.exists())
 }
@@ -693,10 +721,14 @@ async fn get_transcript_path(file_path: String) -> Result<String, String> {
     let config = RecorderConfig::new();
 
     let path = Path::new(&file_path);
-    let file_stem = path.file_stem()
+    let file_stem = path
+        .file_stem()
         .ok_or_else(|| "Invalid file path".to_string())?;
 
-    let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+    let transcript_path = config
+        .transcriptions_dir
+        .join(file_stem)
+        .with_extension("md");
 
     Ok(transcript_path.to_string_lossy().to_string())
 }
@@ -728,8 +760,7 @@ async fn get_transcription_status(session_id: String) -> Result<Option<serde_jso
 #[tauri::command]
 async fn load_recorder_config() -> Result<serde_json::Value, String> {
     let config = RecorderConfig::new();
-    serde_json::to_value(&config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))
+    serde_json::to_value(&config).map_err(|e| format!("Failed to serialize config: {}", e))
 }
 
 /// Save recorder configuration (storage path)
@@ -737,10 +768,12 @@ async fn load_recorder_config() -> Result<serde_json::Value, String> {
 async fn save_recorder_config(storage_dir: String) -> Result<(), String> {
     let config = RecorderConfig::from_storage_dir(std::path::PathBuf::from(storage_dir));
 
-    config.ensure_directories()
+    config
+        .ensure_directories()
         .map_err(|e| format!("Failed to create directories: {}", e))?;
 
-    config.save()
+    config
+        .save()
         .map_err(|e| format!("Failed to save config: {}", e))?;
 
     Ok(())
@@ -748,7 +781,10 @@ async fn save_recorder_config(storage_dir: String) -> Result<(), String> {
 
 /// Pick a folder using native dialog
 #[tauri::command]
-async fn pick_folder(app: tauri::AppHandle, default_path: Option<String>) -> Result<Option<String>, String> {
+async fn pick_folder(
+    app: tauri::AppHandle,
+    default_path: Option<String>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
     let dialog = app.dialog().file();
@@ -765,7 +801,9 @@ async fn pick_folder(app: tauri::AppHandle, default_path: Option<String>) -> Res
 /// Start monitoring audio input levels
 #[tauri::command]
 async fn start_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
-    let mut monitor = state.audio_monitor.lock()
+    let mut monitor = state
+        .audio_monitor
+        .lock()
         .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
 
     // Stop existing monitor if any
@@ -776,8 +814,8 @@ async fn start_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
     }
 
     // Start new monitor
-    let new_monitor = AudioLevelMonitor::new()
-        .map_err(|e| format!("Failed to start audio monitor: {}", e))?;
+    let new_monitor =
+        AudioLevelMonitor::new().map_err(|e| format!("Failed to start audio monitor: {}", e))?;
 
     *monitor = Some(new_monitor);
     tracing::info!("Audio level monitor started");
@@ -788,7 +826,9 @@ async fn start_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
 /// Stop monitoring audio input levels
 #[tauri::command]
 async fn stop_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
-    let mut monitor = state.audio_monitor.lock()
+    let mut monitor = state
+        .audio_monitor
+        .lock()
         .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
 
     if monitor.is_some() {
@@ -808,7 +848,9 @@ struct AudioLevels {
 
 #[tauri::command]
 async fn get_audio_levels(state: State<'_, AppState>) -> Result<AudioLevels, String> {
-    let monitor = state.audio_monitor.lock()
+    let monitor = state
+        .audio_monitor
+        .lock()
         .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
 
     if let Some(ref m) = *monitor {
@@ -838,7 +880,11 @@ async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<
     // Default to 100 samples for the waveform
     let num_samples = samples.unwrap_or(100);
 
-    tracing::info!("Generating waveform for: {} with {} samples", file_path, num_samples);
+    tracing::info!(
+        "Generating waveform for: {} with {} samples",
+        file_path,
+        num_samples
+    );
 
     // Use ffmpeg to extract audio data and calculate peak values
     // We'll use ffmpeg to decode audio and output raw PCM data, then calculate peaks
@@ -858,7 +904,10 @@ async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<
 
     let output = cmd.output().await.map_err(|e| {
         tracing::error!("Failed to run ffmpeg: {}", e);
-        format!("Failed to run ffmpeg: {}. Make sure ffmpeg is installed and in PATH.", e)
+        format!(
+            "Failed to run ffmpeg: {}. Make sure ffmpeg is installed and in PATH.",
+            e
+        )
     })?;
 
     if !output.status.success() {
@@ -911,7 +960,10 @@ async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<
         }
     }
 
-    tracing::info!("Waveform generated successfully with {} bars", waveform.len());
+    tracing::info!(
+        "Waveform generated successfully with {} bars",
+        waveform.len()
+    );
 
     Ok(waveform)
 }
@@ -950,7 +1002,9 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
                         if path.extension().map(|e| e == "json").unwrap_or(false) {
                             // Read and emit status update
                             if let Ok(content) = std::fs::read_to_string(&path) {
-                                if let Ok(status) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Ok(status) =
+                                    serde_json::from_str::<serde_json::Value>(&content)
+                                {
                                     let _ = app_handle.emit("recording-status-update", status);
                                 }
                             }
@@ -1019,10 +1073,16 @@ fn main() {
     // Create native splash screen (shows instantly, no WebView2 dependency)
     #[cfg(windows)]
     let splash = {
-        tracing::info!("[TIMING] Creating native splash screen: {:?}", app_start.elapsed());
+        tracing::info!(
+            "[TIMING] Creating native splash screen: {:?}",
+            app_start.elapsed()
+        );
         match splash_screen::SplashScreen::new() {
             Ok(s) => {
-                tracing::info!("[TIMING] Native splash screen created and visible: {:?}", app_start.elapsed());
+                tracing::info!(
+                    "[TIMING] Native splash screen created and visible: {:?}",
+                    app_start.elapsed()
+                );
                 Some(s)
             }
             Err(e) => {
@@ -1043,7 +1103,10 @@ fn main() {
         audio_monitor: Mutex::new(None),
     });
 
-    tracing::info!("[TIMING] Configuring setup handler: {:?}", app_start.elapsed());
+    tracing::info!(
+        "[TIMING] Configuring setup handler: {:?}",
+        app_start.elapsed()
+    );
     let builder = builder.setup({
         let app_start_clone = app_start.clone();
         let splash_opt = splash;
@@ -1100,7 +1163,10 @@ fn main() {
         generate_waveform,
     ]);
 
-    tracing::info!("[TIMING] Starting Tauri application run loop: {:?}", app_start.elapsed());
+    tracing::info!(
+        "[TIMING] Starting Tauri application run loop: {:?}",
+        app_start.elapsed()
+    );
     builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

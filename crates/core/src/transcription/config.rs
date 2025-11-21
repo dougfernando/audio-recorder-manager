@@ -1,7 +1,7 @@
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use anyhow::{Result, Context};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscriptionConfig {
@@ -41,8 +41,8 @@ Your entire response should be a single markdown document."#.to_string(),
 }
 
 pub fn get_config_file_path() -> Result<PathBuf> {
-    let app_data = std::env::var("APPDATA")
-        .context("Failed to get APPDATA environment variable")?;
+    let app_data =
+        std::env::var("APPDATA").context("Failed to get APPDATA environment variable")?;
     let config_dir = PathBuf::from(app_data).join("audio-recorder-manager");
     fs::create_dir_all(&config_dir)?;
     Ok(config_dir.join("transcription_config.json"))
@@ -56,19 +56,16 @@ pub fn load_config() -> Result<TranscriptionConfig> {
         return Ok(TranscriptionConfig::default());
     }
 
-    let content = fs::read_to_string(&config_path)
-        .context("Failed to read config file")?;
-    let config: TranscriptionConfig = serde_json::from_str(&content)
-        .context("Failed to parse config file")?;
+    let content = fs::read_to_string(&config_path).context("Failed to read config file")?;
+    let config: TranscriptionConfig =
+        serde_json::from_str(&content).context("Failed to parse config file")?;
 
     Ok(config)
 }
 
 pub fn save_config(config: &TranscriptionConfig) -> Result<()> {
     let config_path = get_config_file_path()?;
-    let content = serde_json::to_string_pretty(config)
-        .context("Failed to serialize config")?;
-    fs::write(&config_path, content)
-        .context("Failed to write config file")?;
+    let content = serde_json::to_string_pretty(config).context("Failed to serialize config")?;
+    fs::write(&config_path, content).context("Failed to write config file")?;
     Ok(())
 }

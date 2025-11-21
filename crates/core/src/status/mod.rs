@@ -1,5 +1,5 @@
-pub mod observer;
 pub mod json_observer;
+pub mod observer;
 
-pub use observer::{StatusObserver, RecordingStatus, RecordingResult};
 pub use json_observer::JsonFileObserver;
+pub use observer::{RecordingResult, RecordingStatus, StatusObserver};

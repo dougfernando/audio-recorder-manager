@@ -62,14 +62,10 @@ pub mod windows_microphone {
                     .context("Failed to initialize COM in recording thread")?;
 
                 // Get default audio endpoint for capture (microphone/input)
-                let device_enumerator: IMMDeviceEnumerator = CoCreateInstance(
-                    &MMDeviceEnumerator,
-                    None,
-                    CLSCTX_ALL,
-                )?;
+                let device_enumerator: IMMDeviceEnumerator =
+                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
 
-                let device = device_enumerator
-                    .GetDefaultAudioEndpoint(eCapture, eConsole)?;
+                let device = device_enumerator.GetDefaultAudioEndpoint(eCapture, eConsole)?;
 
                 // Activate audio client
                 let audio_client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
@@ -103,7 +99,7 @@ pub mod windows_microphone {
                 tracing::info!("Initializing audio client with native format...");
                 audio_client.Initialize(
                     AUDCLNT_SHAREMODE_SHARED,
-                    0, // No loopback flag for microphone capture
+                    0,                // No loopback flag for microphone capture
                     REFTIMES_PER_SEC, // 1 second buffer
                     0,
                     native_format,
@@ -215,14 +211,18 @@ pub mod windows_microphone {
                                         let rms = calculate_rms_f32(samples);
                                         if rms > 0.01 {
                                             has_audio.store(true, Ordering::Relaxed);
-                                            tracing::info!("Microphone audio detected! Level: {:.4}", rms);
+                                            tracing::info!(
+                                                "Microphone audio detected! Level: {:.4}",
+                                                rms
+                                            );
                                         }
                                     }
 
                                     // Convert and write to 16-bit
                                     if let Some(writer) = writer.as_mut() {
                                         for &sample in samples {
-                                            let sample_i16 = (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
+                                            let sample_i16 =
+                                                (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
                                             let _ = writer.write_sample(sample_i16);
                                         }
                                     }
@@ -236,9 +236,13 @@ pub mod windows_microphone {
                                     // Detect audio
                                     if !has_audio.load(Ordering::Relaxed) {
                                         let rms = calculate_rms_i16(samples);
-                                        if rms > 327.0 { // 0.01 * 32767
+                                        if rms > 327.0 {
+                                            // 0.01 * 32767
                                             has_audio.store(true, Ordering::Relaxed);
-                                            tracing::info!("Microphone audio detected! Level: {:.4}", rms / 32767.0);
+                                            tracing::info!(
+                                                "Microphone audio detected! Level: {:.4}",
+                                                rms / 32767.0
+                                            );
                                         }
                                     }
 
@@ -250,7 +254,10 @@ pub mod windows_microphone {
                                     }
                                 } else {
                                     // Unsupported format - write silence
-                                    tracing::warn!("Unsupported audio format: {} bits, writing silence", bits_per_sample);
+                                    tracing::warn!(
+                                        "Unsupported audio format: {} bits, writing silence",
+                                        bits_per_sample
+                                    );
                                     if let Some(writer) = writer.as_mut() {
                                         for _ in 0..(num_frames * channels as u32) {
                                             let _ = writer.write_sample(0i16);

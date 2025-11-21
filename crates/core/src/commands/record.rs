@@ -63,7 +63,11 @@ pub async fn execute_with_output(
     Ok(())
 }
 
-async fn record_worker(session: RecordingSession, config: RecorderConfig, output: UserOutput) -> Result<()> {
+async fn record_worker(
+    session: RecordingSession,
+    config: RecorderConfig,
+    output: UserOutput,
+) -> Result<()> {
     // Capture values for the span before moving session
     let session_id = session.id.clone();
     let format = session.format;

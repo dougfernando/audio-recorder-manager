@@ -15,14 +15,13 @@ const DEFAULT_LOG_RETENTION_DAYS: u64 = 7;
 ///
 /// Returns: `%APPDATA%\audio-recorder-manager\logs\`
 pub fn get_log_dir() -> PathBuf {
-    let app_data = std::env::var("APPDATA")
-        .unwrap_or_else(|_| {
-            // Fallback to current directory if APPDATA is not set
-            std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .to_string_lossy()
-                .to_string()
-        });
+    let app_data = std::env::var("APPDATA").unwrap_or_else(|_| {
+        // Fallback to current directory if APPDATA is not set
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .to_string_lossy()
+            .to_string()
+    });
 
     let log_dir = PathBuf::from(app_data)
         .join("audio-recorder-manager")
@@ -111,9 +110,7 @@ pub fn init_cli_logging(
     // Build the base filter
     let default_level = log_level.unwrap_or(Level::INFO);
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            EnvFilter::new(format!("audio_recorder_manager={}", default_level))
-        });
+        .unwrap_or_else(|_| EnvFilter::new(format!("audio_recorder_manager={}", default_level)));
 
     let mut layers = Vec::new();
 
@@ -174,9 +171,7 @@ pub fn init_tauri_logging(
     // Build the base filter
     let default_level = log_level.unwrap_or(Level::INFO);
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| {
-            EnvFilter::new(format!("audio_recorder_manager={}", default_level))
-        });
+        .unwrap_or_else(|_| EnvFilter::new(format!("audio_recorder_manager={}", default_level)));
 
     let mut layers = Vec::new();
 
@@ -223,7 +218,7 @@ pub fn init_test_logging() {
         .with_test_writer()
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("audio_recorder_manager=debug"))
+                .unwrap_or_else(|_| EnvFilter::new("audio_recorder_manager=debug")),
         )
         .try_init();
 }

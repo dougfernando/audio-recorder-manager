@@ -51,7 +51,7 @@ impl UserOutput {
         // Check if we're in a terminal that supports ANSI colors
         std::env::var("TERM").is_ok() ||
         std::env::var("WT_SESSION").is_ok() || // Windows Terminal
-        std::env::var("ConEmuANSI").is_ok()    // ConEmu
+        std::env::var("ConEmuANSI").is_ok() // ConEmu
     }
 
     /// Prints an informational message to stdout
@@ -126,7 +126,8 @@ impl UserOutput {
             category = "progress",
             step = step,
             total = total,
-            "{}", msg_str
+            "{}",
+            msg_str
         );
 
         // Display to terminal
@@ -144,11 +145,7 @@ impl UserOutput {
         let msg_str = msg.to_string();
 
         // Log to file
-        tracing::info!(
-            user_output = true,
-            prefix = prefix,
-            "{}", msg_str
-        );
+        tracing::info!(user_output = true, prefix = prefix, "{}", msg_str);
 
         // Display to terminal
         if !self.quiet {

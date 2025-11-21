@@ -1,7 +1,7 @@
-use anyhow::{Result, Context, bail};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -116,8 +116,6 @@ fn write_status(
     Ok(())
 }
 
-
-
 /// Transcribe an audio file using the Gemini API
 pub async fn transcribe_audio(
     audio_file_path: &Path,
@@ -135,8 +133,7 @@ pub async fn transcribe_audio(
     }
 
     // Ensure transcriptions directory exists
-    fs::create_dir_all(transcriptions_dir)
-        .context("Failed to create transcriptions directory")?;
+    fs::create_dir_all(transcriptions_dir).context("Failed to create transcriptions directory")?;
 
     // Create output file in transcriptions directory with same name as audio file
     let file_stem = audio_file_path
@@ -150,7 +147,10 @@ pub async fn transcribe_audio(
         Some("m4a") => "audio/mp4",
         Some("mp3") => "audio/mpeg",
         Some("flac") => "audio/flac",
-        _ => bail!("Unsupported audio format: {:?}", audio_file_path.extension()),
+        _ => bail!(
+            "Unsupported audio format: {:?}",
+            audio_file_path.extension()
+        ),
     };
 
     tracing::info!("Starting transcription for: {}", audio_file_path.display());
@@ -162,16 +162,29 @@ pub async fn transcribe_audio(
         .build()?;
 
     // Step 1: Read and encode audio file
-    write_status(status_dir, session_id, 1, 4, "reading", "Reading audio file...")?;
+    write_status(
+        status_dir,
+        session_id,
+        1,
+        4,
+        "reading",
+        "Reading audio file...",
+    )?;
     tracing::info!("[1/4] Reading audio file...");
 
-    let audio_data = fs::read(audio_file_path)
-        .context("Failed to read audio file")?;
+    let audio_data = fs::read(audio_file_path).context("Failed to read audio file")?;
     let file_size_mb = audio_data.len() as f64 / (1024.0 * 1024.0);
     tracing::info!("File size: {:.2} MB", file_size_mb);
 
     // Step 2: Upload file to Gemini API
-    write_status(status_dir, session_id, 2, 4, "uploading", "Uploading file to Gemini API...")?;
+    write_status(
+        status_dir,
+        session_id,
+        2,
+        4,
+        "uploading",
+        "Uploading file to Gemini API...",
+    )?;
     tracing::info!("[2/4] Uploading to Gemini API...");
 
     let upload_url = format!(
@@ -192,7 +205,10 @@ pub async fn transcribe_audio(
         .post(&upload_url)
         .header("X-Goog-Upload-Protocol", "resumable")
         .header("X-Goog-Upload-Command", "start")
-        .header("X-Goog-Upload-Header-Content-Length", audio_data.len().to_string())
+        .header(
+            "X-Goog-Upload-Header-Content-Length",
+            audio_data.len().to_string(),
+        )
         .header("X-Goog-Upload-Header-Content-Type", mime_type)
         .json(&upload_request)
         .send()
@@ -204,7 +220,11 @@ pub async fn transcribe_audio(
 
     if !status.is_success() {
         let error_text = init_response.text().await?;
-        tracing::error!("Upload initiation failed with status {}: {}", status, error_text);
+        tracing::error!(
+            "Upload initiation failed with status {}: {}",
+            status,
+            error_text
+        );
         bail!("Upload initiation failed: {}", error_text);
     }
 
@@ -233,21 +253,42 @@ pub async fn transcribe_audio(
 
     let upload_duration = upload_start.elapsed();
     let upload_status = upload_response.status();
-    tracing::debug!("File upload response status: {} (took {:.2}s)", upload_status, upload_duration.as_secs_f64());
+    tracing::debug!(
+        "File upload response status: {} (took {:.2}s)",
+        upload_status,
+        upload_duration.as_secs_f64()
+    );
 
     if !upload_status.is_success() {
         let error_text = upload_response.text().await?;
-        tracing::error!("File upload failed with status {}: {}", upload_status, error_text);
+        tracing::error!(
+            "File upload failed with status {}: {}",
+            upload_status,
+            error_text
+        );
         bail!("File upload failed: {}", error_text);
     }
 
-    let upload_result: FileUploadResponse = upload_response.json().await
+    let upload_result: FileUploadResponse = upload_response
+        .json()
+        .await
         .context("Failed to parse upload response")?;
 
-    tracing::info!("File uploaded successfully: {} (state: {})", upload_result.file.uri, upload_result.file.state);
+    tracing::info!(
+        "File uploaded successfully: {} (state: {})",
+        upload_result.file.uri,
+        upload_result.file.state
+    );
 
     // Step 3: Wait for file processing (if needed)
-    write_status(status_dir, session_id, 3, 4, "processing", "Waiting for file processing...")?;
+    write_status(
+        status_dir,
+        session_id,
+        3,
+        4,
+        "processing",
+        "Waiting for file processing...",
+    )?;
     tracing::info!("[3/4] Waiting for file processing...");
 
     let mut file_info = upload_result.file;
@@ -278,18 +319,36 @@ pub async fn transcribe_audio(
     let processing_duration = processing_start.elapsed();
 
     if file_info.state == "FAILED" {
-        tracing::error!("File processing failed after {:.2}s", processing_duration.as_secs_f64());
+        tracing::error!(
+            "File processing failed after {:.2}s",
+            processing_duration.as_secs_f64()
+        );
         bail!("File processing failed");
     }
 
     if attempts >= 60 {
-        tracing::warn!("File processing timeout after {} attempts ({:.2}s)", attempts, processing_duration.as_secs_f64());
+        tracing::warn!(
+            "File processing timeout after {} attempts ({:.2}s)",
+            attempts,
+            processing_duration.as_secs_f64()
+        );
     }
 
-    tracing::info!("File processing completed in {:.2}s, state: {}", processing_duration.as_secs_f64(), file_info.state);
+    tracing::info!(
+        "File processing completed in {:.2}s, state: {}",
+        processing_duration.as_secs_f64(),
+        file_info.state
+    );
 
     // Step 4: Generate transcription
-    write_status(status_dir, session_id, 4, 4, "transcribing", "Generating transcription...")?;
+    write_status(
+        status_dir,
+        session_id,
+        4,
+        4,
+        "transcribing",
+        "Generating transcription...",
+    )?;
     tracing::info!("[4/4] Generating transcription...");
 
     let generate_url = format!(
@@ -319,7 +378,11 @@ pub async fn transcribe_audio(
         },
     };
 
-    tracing::debug!("Sending content generation request to {} with file URI: {}", model, file_info.uri);
+    tracing::debug!(
+        "Sending content generation request to {} with file URI: {}",
+        model,
+        file_info.uri
+    );
     tracing::debug!("Generation config: temp=0.1, top_p=0.95, top_k=40, max_tokens=8192");
 
     let generation_start = std::time::Instant::now();
@@ -332,39 +395,55 @@ pub async fn transcribe_audio(
 
     let generation_duration = generation_start.elapsed();
     let gen_status = generate_response.status();
-    tracing::debug!("Content generation response status: {} (took {:.2}s)", gen_status, generation_duration.as_secs_f64());
+    tracing::debug!(
+        "Content generation response status: {} (took {:.2}s)",
+        gen_status,
+        generation_duration.as_secs_f64()
+    );
 
     if !gen_status.is_success() {
         let error_text = generate_response.text().await?;
-        tracing::error!("Content generation failed with status {}: {}", gen_status, error_text);
+        tracing::error!(
+            "Content generation failed with status {}: {}",
+            gen_status,
+            error_text
+        );
         tracing::error!("Generate URL was: {}", generate_url);
         bail!("Content generation failed: {}", error_text);
     }
 
     // Log raw response for debugging
     let response_text = generate_response.text().await?;
-    tracing::debug!("Raw API response: {}", &response_text[..response_text.len().min(500)]);
+    tracing::debug!(
+        "Raw API response: {}",
+        &response_text[..response_text.len().min(500)]
+    );
 
-    let result: GenerateContentResponse = serde_json::from_str(&response_text)
-        .context("Failed to parse generation response")?;
+    let result: GenerateContentResponse =
+        serde_json::from_str(&response_text).context("Failed to parse generation response")?;
 
-    let transcript = result.candidates
+    let transcript = result
+        .candidates
         .first()
         .and_then(|c| c.content.parts.first())
         .map(|p| p.text.clone())
         .context("No transcript in response")?;
 
-    tracing::info!("Transcription completed in {:.2}s, length: {} chars ({} words approx)",
+    tracing::info!(
+        "Transcription completed in {:.2}s, length: {} chars ({} words approx)",
         generation_duration.as_secs_f64(),
         transcript.len(),
-        transcript.split_whitespace().count());
+        transcript.split_whitespace().count()
+    );
 
     // Save transcript to file
     tracing::debug!("Writing transcript to: {}", output_file.display());
-    fs::write(&output_file, &transcript)
-        .context("Failed to write transcript file")?;
+    fs::write(&output_file, &transcript).context("Failed to write transcript file")?;
 
-    tracing::info!("Transcript saved successfully to: {}", output_file.display());
+    tracing::info!(
+        "Transcript saved successfully to: {}",
+        output_file.display()
+    );
 
     Ok(TranscriptionResult {
         success: true,

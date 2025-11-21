@@ -146,27 +146,28 @@ unsafe extern "system" fn window_proc(
 
                 // Title
                 let title = "Audio Recorder Manager";
-                let mut title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+                let mut title_wide: Vec<u16> =
+                    title.encode_utf16().chain(std::iter::once(0)).collect();
 
                 let mut title_rect = rect;
                 title_rect.top = 60;
                 title_rect.bottom = 90;
 
                 let font = CreateFontW(
-                    24,                           // Height
-                    0,                            // Width
-                    0,                            // Escapement
-                    0,                            // Orientation
-                    FW_SEMIBOLD.0 as i32,        // Weight
-                    0,                            // Italic
-                    0,                            // Underline
-                    0,                            // StrikeOut
-                    DEFAULT_CHARSET.0 as u32,     // CharSet
-                    OUT_DEFAULT_PRECIS.0 as u32,  // OutputPrecision
-                    CLIP_DEFAULT_PRECIS.0 as u32, // ClipPrecision
-                    DEFAULT_QUALITY.0 as u32,     // Quality
+                    24,                                       // Height
+                    0,                                        // Width
+                    0,                                        // Escapement
+                    0,                                        // Orientation
+                    FW_SEMIBOLD.0 as i32,                     // Weight
+                    0,                                        // Italic
+                    0,                                        // Underline
+                    0,                                        // StrikeOut
+                    DEFAULT_CHARSET.0 as u32,                 // CharSet
+                    OUT_DEFAULT_PRECIS.0 as u32,              // OutputPrecision
+                    CLIP_DEFAULT_PRECIS.0 as u32,             // ClipPrecision
+                    DEFAULT_QUALITY.0 as u32,                 // Quality
                     (DEFAULT_PITCH.0 | FF_DONTCARE.0) as u32, // PitchAndFamily
-                    w!("Segoe UI"),               // FaceName
+                    w!("Segoe UI"),                           // FaceName
                 );
 
                 let old_font = SelectObject(hdc, font);
@@ -181,7 +182,8 @@ unsafe extern "system" fn window_proc(
 
                 // Loading text
                 let loading = "Loading...";
-                let mut loading_wide: Vec<u16> = loading.encode_utf16().chain(std::iter::once(0)).collect();
+                let mut loading_wide: Vec<u16> =
+                    loading.encode_utf16().chain(std::iter::once(0)).collect();
 
                 let mut loading_rect = rect;
                 loading_rect.top = 110;

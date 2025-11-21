@@ -286,7 +286,9 @@ impl RecordingHandle {
         RecordingStatus {
             status: "recording".to_string(),
             session_id: self.session_id.clone(),
-            filename: self.filepath.file_name()
+            filename: self
+                .filepath
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown")
                 .to_string(),
@@ -322,7 +324,9 @@ impl RecordingHandle {
         }
 
         // Check for stop signal
-        let signals_dir = self.status_file.parent()
+        let signals_dir = self
+            .status_file
+            .parent()
             .and_then(|p| p.parent())
             .map(|p| p.join("signals"));
 
@@ -414,7 +418,9 @@ pub async fn convert_wav_to_m4a(wav_path: &PathBuf, m4a_path: &PathBuf) -> Resul
     let check_result = ffmpeg_check.output().await;
 
     if check_result.is_err() {
-        anyhow::bail!("FFmpeg is not installed or not in PATH. Please install FFmpeg to use M4A encoding.");
+        anyhow::bail!(
+            "FFmpeg is not installed or not in PATH. Please install FFmpeg to use M4A encoding."
+        );
     }
 
     // Convert using FFmpeg with AAC codec
@@ -509,11 +515,14 @@ pub async fn merge_audio_streams_smart(
         // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
         tracing::info!("Using loopback only (microphone was silent)");
         setup_ffmpeg_command()
-            .arg("-i").arg(loopback_wav)
+            .arg("-i")
+            .arg(loopback_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=stereo[aout]")
-            .arg("-map").arg("[aout]")
-            .arg("-ar").arg(&target_sample_rate)
+            .arg("-map")
+            .arg("[aout]")
+            .arg("-ar")
+            .arg(&target_sample_rate)
             .arg("-y")
             .arg(output_wav)
             .output()
@@ -535,11 +544,14 @@ pub async fn merge_audio_streams_smart(
         // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
         tracing::info!("Both channels were silent, creating silent stereo file");
         setup_ffmpeg_command()
-            .arg("-i").arg(loopback_wav)
+            .arg("-i")
+            .arg(loopback_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=stereo[aout]")
-            .arg("-map").arg("[aout]")
-            .arg("-ar").arg(&target_sample_rate)
+            .arg("-map")
+            .arg("[aout]")
+            .arg("-ar")
+            .arg(&target_sample_rate)
             .arg("-y")
             .arg(output_wav)
             .output()

@@ -54,14 +54,16 @@ impl AudioFormat {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecordingDuration {
-    Fixed(u64),        // seconds
+    Fixed(u64),          // seconds
     Manual { max: u64 }, // -1 becomes this
 }
 
 impl RecordingDuration {
     pub fn from_secs(duration: i64, max_manual_duration: u64) -> Result<Self> {
         match duration {
-            -1 => Ok(RecordingDuration::Manual { max: max_manual_duration }),
+            -1 => Ok(RecordingDuration::Manual {
+                max: max_manual_duration,
+            }),
             d if d > 0 => Ok(RecordingDuration::Fixed(d as u64)),
             d => Err(RecorderError::InvalidParameter(format!(
                 "Duration must be -1 (manual mode) or a positive number, got: {}",

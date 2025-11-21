@@ -45,7 +45,10 @@ async fn handle_record_command(args: &[String], output: &UserOutput) -> Result<(
                 std::process::exit(1);
             }
             Err(_) => {
-                output.error(&format!("Invalid duration '{}'. Must be a number.", args[2]));
+                output.error(&format!(
+                    "Invalid duration '{}'. Must be a number.",
+                    args[2]
+                ));
                 std::process::exit(1);
             }
         }
@@ -53,14 +56,14 @@ async fn handle_record_command(args: &[String], output: &UserOutput) -> Result<(
         30
     };
 
-    let duration = match RecordingDuration::from_secs(duration_secs, config.max_manual_duration_secs)
-    {
-        Ok(d) => d,
-        Err(e) => {
-            output.error(&e.to_string());
-            std::process::exit(1);
-        }
-    };
+    let duration =
+        match RecordingDuration::from_secs(duration_secs, config.max_manual_duration_secs) {
+            Ok(d) => d,
+            Err(e) => {
+                output.error(&e.to_string());
+                std::process::exit(1);
+            }
+        };
 
     // Parse format
     let audio_format = if args.len() > 3 {
@@ -95,7 +98,8 @@ async fn handle_record_command(args: &[String], output: &UserOutput) -> Result<(
         RecordingQuality::professional()
     };
 
-    commands::record::execute_with_output(duration, audio_format, quality, config, output.clone()).await
+    commands::record::execute_with_output(duration, audio_format, quality, config, output.clone())
+        .await
 }
 
 async fn handle_stop_command(args: &[String], _output: &UserOutput) -> Result<()> {
@@ -154,9 +158,13 @@ fn print_usage() {
     println!("  audio-recorder-manager record -1 m4a standard  # Manual mode");
     println!("  audio-recorder-manager stop                    # Stop latest recording");
     println!("  audio-recorder-manager stop rec-20250109_120000 # Stop specific session");
-    println!("  audio-recorder-manager recover                 # Recover all incomplete recordings");
+    println!(
+        "  audio-recorder-manager recover                 # Recover all incomplete recordings"
+    );
     println!("  audio-recorder-manager recover rec-20250109_120000 # Recover specific session");
-    println!("  audio-recorder-manager recover rec-20250109_120000 m4a # Recover and convert to M4A");
+    println!(
+        "  audio-recorder-manager recover rec-20250109_120000 m4a # Recover and convert to M4A"
+    );
     println!("  audio-recorder-manager status                  # Show system audio devices");
     println!();
 }

@@ -17,7 +17,6 @@ pub mod windows_monitor {
 
     impl AudioLevelMonitor {
         pub fn new() -> Result<Self> {
-
             let is_monitoring = Arc::new(AtomicBool::new(true));
             let loopback_level = Arc::new(AtomicU32::new(0));
             let microphone_level = Arc::new(AtomicU32::new(0));
@@ -43,23 +42,16 @@ pub mod windows_monitor {
             })
         }
 
-        fn monitor_loopback(
-            is_monitoring: Arc<AtomicBool>,
-            level: Arc<AtomicU32>,
-        ) -> Result<()> {
+        fn monitor_loopback(is_monitoring: Arc<AtomicBool>, level: Arc<AtomicU32>) -> Result<()> {
             unsafe {
                 CoInitializeEx(None, COINIT_MULTITHREADED)
                     .ok()
                     .context("Failed to initialize COM")?;
 
-                let device_enumerator: IMMDeviceEnumerator = CoCreateInstance(
-                    &MMDeviceEnumerator,
-                    None,
-                    CLSCTX_ALL,
-                )?;
+                let device_enumerator: IMMDeviceEnumerator =
+                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
 
-                let device = device_enumerator
-                    .GetDefaultAudioEndpoint(eRender, eConsole)?;
+                let device = device_enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?;
 
                 let audio_client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
                 let mix_format = audio_client.GetMixFormat()?;
@@ -142,23 +134,16 @@ pub mod windows_monitor {
             }
         }
 
-        fn monitor_microphone(
-            is_monitoring: Arc<AtomicBool>,
-            level: Arc<AtomicU32>,
-        ) -> Result<()> {
+        fn monitor_microphone(is_monitoring: Arc<AtomicBool>, level: Arc<AtomicU32>) -> Result<()> {
             unsafe {
                 CoInitializeEx(None, COINIT_MULTITHREADED)
                     .ok()
                     .context("Failed to initialize COM")?;
 
-                let device_enumerator: IMMDeviceEnumerator = CoCreateInstance(
-                    &MMDeviceEnumerator,
-                    None,
-                    CLSCTX_ALL,
-                )?;
+                let device_enumerator: IMMDeviceEnumerator =
+                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
 
-                let device = device_enumerator
-                    .GetDefaultAudioEndpoint(eCapture, eConsole)?;
+                let device = device_enumerator.GetDefaultAudioEndpoint(eCapture, eConsole)?;
 
                 let audio_client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
                 let mix_format = audio_client.GetMixFormat()?;

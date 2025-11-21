@@ -65,7 +65,10 @@ pub async fn execute_with_output(
     let mut errors = Vec::new();
 
     for recording in to_recover {
-        output.prefixed("Recovery", &format!("Processing session: {}", recording.session_id));
+        output.prefixed(
+            "Recovery",
+            &format!("Processing session: {}", recording.session_id),
+        );
 
         match recover_recording(&recording, target_format, &config, &output).await {
             Ok(output_path) => {
@@ -83,7 +86,10 @@ pub async fn execute_with_output(
                 }));
             }
             Err(e) => {
-                output.error(&format!("Failed to recover {}: {}", recording.session_id, e));
+                output.error(&format!(
+                    "Failed to recover {}: {}",
+                    recording.session_id, e
+                ));
                 errors.push(json!({
                     "session_id": recording.session_id,
                     "error": e.to_string()
@@ -128,8 +134,8 @@ fn find_incomplete_recordings(recordings_dir: &PathBuf) -> Result<Vec<Incomplete
         return Ok(Vec::new());
     }
 
-    let entries = std::fs::read_dir(recordings_dir)
-        .context("Failed to read recordings directory")?;
+    let entries =
+        std::fs::read_dir(recordings_dir).context("Failed to read recordings directory")?;
 
     // Group files by session ID
     let mut sessions: HashMap<String, (Option<PathBuf>, Option<PathBuf>)> = HashMap::new();
@@ -217,10 +223,11 @@ async fn recover_recording(
         .ok_or_else(|| anyhow::anyhow!("No loopback file found for recovery"))?;
 
     // Create a dummy mic file path if it doesn't exist (merge function handles this)
-    let mic_path = recording
-        .mic_file
-        .clone()
-        .unwrap_or_else(|| config.recordings_dir.join(format!("{}_mic.wav", recording.session_id)));
+    let mic_path = recording.mic_file.clone().unwrap_or_else(|| {
+        config
+            .recordings_dir
+            .join(format!("{}_mic.wav", recording.session_id))
+    });
 
     output.prefixed("Merging", "Merging audio channels...");
 
