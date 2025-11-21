@@ -17,6 +17,7 @@ This project was inspired by and based on the Python implementation from [Meetin
 
 ## Features
 
+### Core Recording Features
 - **Dual-channel recording** on Windows (system audio + microphone simultaneously)
 - Intelligent audio merging with FFmpeg (dual-mono stereo: L=system, R=microphone)
 - **Recovery mode** for interrupted recordings - automatically completes merge and conversion
@@ -28,6 +29,32 @@ This project was inspired by and based on the Python implementation from [Meetin
 - Professional quality audio (48kHz, 16-bit, stereo)
 - M4A format support with automatic WAV conversion
 - Compatible with existing Python CLI interface
+
+### Desktop GUI Features (Tauri App)
+- **Embedded Audio Player** with visual waveform display
+  - Real-time waveform visualization using FFmpeg analysis
+  - Play/pause controls with timeline scrubbing
+  - Duration display and progress tracking
+  - Integrated directly into recording detail view
+
+- **Modern Recording Interface**
+  - Clean, streamlined recording panel with preset duration buttons
+  - Live audio level monitoring for both loopback and microphone
+  - Real-time visual feedback during recording setup
+  - Quality and format selection with detailed specifications
+
+- **Enhanced Recording Management**
+  - Modern card-based list view with search and filtering
+  - Inline rename functionality - double-click to edit
+  - Quick actions: play, delete, transcribe
+  - Visual status indicators for transcriptions
+
+- **System Tray Integration**
+  - Minimize to tray instead of closing the app
+  - Quick Record submenu (30s, 1m, 5m, 10m presets)
+  - Show/Hide window toggle
+  - Direct access to recordings folder
+  - Left-click tray icon to toggle window visibility
 
 ## Quick Start
 
@@ -86,6 +113,31 @@ The compiled CLI binary will be in `target/release/audio-recorder-manager.exe` (
 For Tauri GUI, see [docs/tauri-setup.md](docs/tauri-setup.md).
 
 ## Usage
+
+### Desktop GUI (Tauri App)
+
+The Tauri application provides a modern desktop interface for audio recording:
+
+```bash
+# Development mode (with hot reload)
+cd crates/tauri-app
+cargo tauri dev
+
+# Build production app
+cargo tauri build
+```
+
+**Key Features:**
+- Visual recording controls with live audio level monitoring
+- Browse and play recordings with embedded audio player and waveform
+- Inline rename - double-click any recording name to edit
+- System tray integration - app minimizes to tray instead of closing
+- Quick recording from tray menu (30s, 1m, 5m, 10m presets)
+- Transcription support with visual status indicators
+
+The GUI uses the same storage location as the CLI, so recordings are accessible from both interfaces.
+
+### Command Line Interface (CLI)
 
 This Rust version maintains full compatibility with the Python CLI interface:
 
