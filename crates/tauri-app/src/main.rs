@@ -968,6 +968,124 @@ async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<
     Ok(waveform)
 }
 
+/// Set up system tray with menu
+fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let app_handle = app.handle();
+
+    // Create menu items
+    let show_hide = MenuItem::with_id(app, "show_hide", "Show/Hide Window", true, None::<&str>)?;
+    let separator1 = PredefinedMenuItem::separator(app)?;
+
+    // Quick recording submenu
+    let record_30s = MenuItem::with_id(app, "record_30s", "30 seconds", true, None::<&str>)?;
+    let record_1m = MenuItem::with_id(app, "record_1m", "1 minute", true, None::<&str>)?;
+    let record_5m = MenuItem::with_id(app, "record_5m", "5 minutes", true, None::<&str>)?;
+    let record_10m = MenuItem::with_id(app, "record_10m", "10 minutes", true, None::<&str>)?;
+
+    let quick_record_menu =
+        Submenu::with_items(app, "Quick Record", true, &[&record_30s, &record_1m, &record_5m, &record_10m])?;
+
+    let separator2 = PredefinedMenuItem::separator(app)?;
+    let open_recordings = MenuItem::with_id(app, "open_recordings", "Open Recordings Folder", true, None::<&str>)?;
+    let separator3 = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+
+    // Build menu
+    let menu = Menu::with_items(
+        app,
+        &[
+            &show_hide,
+            &separator1,
+            &quick_record_menu,
+            &separator2,
+            &open_recordings,
+            &separator3,
+            &quit,
+        ],
+    )?;
+
+    // Create tray icon
+    let _tray = TrayIconBuilder::with_id("main-tray")
+        .tooltip("Audio Recorder Manager")
+        .icon(app.default_window_icon().unwrap().clone())
+        .menu(&menu)
+        .on_menu_event(move |app, event| match event.id().as_ref() {
+            "show_hide" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+            "record_30s" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("tray-start-recording", serde_json::json!({"duration": 30}));
+                }
+            }
+            "record_1m" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("tray-start-recording", serde_json::json!({"duration": 60}));
+                }
+            }
+            "record_5m" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("tray-start-recording", serde_json::json!({"duration": 300}));
+                }
+            }
+            "record_10m" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("tray-start-recording", serde_json::json!({"duration": 600}));
+                }
+            }
+            "open_recordings" => {
+                let config = RecorderConfig::new();
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = std::process::Command::new("explorer")
+                        .arg(config.recordings_dir)
+                        .spawn();
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let _ = std::process::Command::new("xdg-open")
+                        .arg(config.recordings_dir)
+                        .spawn();
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
 /// Set up file watcher for status directory
 fn setup_status_watcher(app_handle: tauri::AppHandle) {
     let config = RecorderConfig::new();
@@ -1124,6 +1242,23 @@ fn main() {
 
             // Set up status file watcher
             setup_status_watcher(app.handle().clone());
+
+            // Set up system tray
+            setup_system_tray(app)?;
+
+            // Handle window close event to minimize to tray instead of exiting
+            if let Some(window) = app.get_webview_window("main") {
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // Prevent default close behavior
+                        api.prevent_close();
+                        // Hide window instead
+                        if let Some(window) = api.window().app_handle().get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                    }
+                });
+            }
 
             // Close splash screen now that main window is ready
             #[cfg(windows)]

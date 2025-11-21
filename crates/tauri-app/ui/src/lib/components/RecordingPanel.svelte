@@ -1,5 +1,6 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import { onMount, onDestroy } from 'svelte';
   import {
     isRecording,
@@ -26,8 +27,23 @@
   let loopbackLevel = 0;
   let microphoneLevel = 0;
   let levelPollInterval = null;
+  let unlistenTrayRecording = null;
 
   onMount(async () => {
+    // Listen for tray recording events
+    unlistenTrayRecording = await listen('tray-start-recording', async (event) => {
+      console.log('Tray recording event received:', event.payload);
+      const duration = event.payload?.duration || 60;
+
+      // Set the duration in the store
+      durationInSeconds.set(duration);
+
+      // Start recording if not already recording
+      if (!$isRecording) {
+        await startRecording();
+      }
+    });
+
     // Start audio monitoring
     try {
       await invoke('start_audio_monitor');
@@ -48,6 +64,11 @@
   });
 
   onDestroy(async () => {
+    // Unlisten from tray events
+    if (unlistenTrayRecording) {
+      unlistenTrayRecording();
+    }
+
     // Stop polling
     if (levelPollInterval) {
       clearInterval(levelPollInterval);
