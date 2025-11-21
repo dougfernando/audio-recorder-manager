@@ -5,6 +5,7 @@
 mod splash_screen;
 
 use audio_recorder_manager_core::{
+    audio_monitor::windows_monitor::AudioLevelMonitor,
     commands::{record, recover, status, stop},
     config::RecorderConfig,
     domain::{AudioFormat, RecordingDuration},
@@ -21,9 +22,10 @@ use tauri::{Emitter, State};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-// State to track active recording sessions
+// State to track active recording sessions and audio monitor
 struct AppState {
     active_sessions: Mutex<Vec<String>>,
+    audio_monitor: Mutex<Option<AudioLevelMonitor>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -760,6 +762,68 @@ async fn pick_folder(app: tauri::AppHandle, default_path: Option<String>) -> Res
     Ok(dialog.blocking_pick_folder().map(|p| p.to_string()))
 }
 
+/// Start monitoring audio input levels
+#[tauri::command]
+async fn start_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
+    let mut monitor = state.audio_monitor.lock()
+        .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+
+    // Stop existing monitor if any
+    if monitor.is_some() {
+        *monitor = None;
+        // Give it a moment to clean up
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    // Start new monitor
+    let new_monitor = AudioLevelMonitor::new()
+        .map_err(|e| format!("Failed to start audio monitor: {}", e))?;
+
+    *monitor = Some(new_monitor);
+    tracing::info!("Audio level monitor started");
+
+    Ok(())
+}
+
+/// Stop monitoring audio input levels
+#[tauri::command]
+async fn stop_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
+    let mut monitor = state.audio_monitor.lock()
+        .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+
+    if monitor.is_some() {
+        *monitor = None;
+        tracing::info!("Audio level monitor stopped");
+    }
+
+    Ok(())
+}
+
+/// Get current audio input levels
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AudioLevels {
+    loopback: f32,
+    microphone: f32,
+}
+
+#[tauri::command]
+async fn get_audio_levels(state: State<'_, AppState>) -> Result<AudioLevels, String> {
+    let monitor = state.audio_monitor.lock()
+        .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+
+    if let Some(ref m) = *monitor {
+        Ok(AudioLevels {
+            loopback: m.get_loopback_level(),
+            microphone: m.get_microphone_level(),
+        })
+    } else {
+        Ok(AudioLevels {
+            loopback: 0.0,
+            microphone: 0.0,
+        })
+    }
+}
+
 /// Generate waveform data from an audio file using ffmpeg
 #[tauri::command]
 async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<Vec<f32>, String> {
@@ -976,6 +1040,7 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_dialog::init());
     let builder = builder.manage(AppState {
         active_sessions: Mutex::new(Vec::new()),
+        audio_monitor: Mutex::new(None),
     });
 
     tracing::info!("[TIMING] Configuring setup handler: {:?}", app_start.elapsed());
@@ -1029,6 +1094,9 @@ fn main() {
         load_recorder_config,
         save_recorder_config,
         pick_folder,
+        start_audio_monitor,
+        stop_audio_monitor,
+        get_audio_levels,
         generate_waveform,
     ]);
 

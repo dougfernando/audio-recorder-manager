@@ -1,5 +1,6 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
+  import { onMount, onDestroy } from 'svelte';
   import {
     isRecording,
     selectedDuration,
@@ -22,12 +23,61 @@
 
   let isStarting = false;
   let errorMessage = '';
+  let loopbackLevel = 0;
+  let microphoneLevel = 0;
+  let levelPollInterval = null;
+
+  onMount(async () => {
+    // Start audio monitoring
+    try {
+      await invoke('start_audio_monitor');
+
+      // Poll for levels
+      levelPollInterval = setInterval(async () => {
+        try {
+          const levels = await invoke('get_audio_levels');
+          loopbackLevel = levels.loopback;
+          microphoneLevel = levels.microphone;
+        } catch (error) {
+          console.error('Failed to get audio levels:', error);
+        }
+      }, 100); // Update every 100ms for smooth animation
+    } catch (error) {
+      console.error('Failed to start audio monitor:', error);
+    }
+  });
+
+  onDestroy(async () => {
+    // Stop polling
+    if (levelPollInterval) {
+      clearInterval(levelPollInterval);
+    }
+
+    // Stop audio monitoring
+    try {
+      await invoke('stop_audio_monitor');
+    } catch (error) {
+      console.error('Failed to stop audio monitor:', error);
+    }
+  });
 
   async function startRecording() {
     if ($isRecording) return;
 
     isStarting = true;
     errorMessage = '';
+
+    // Stop monitoring before starting recording
+    if (levelPollInterval) {
+      clearInterval(levelPollInterval);
+      levelPollInterval = null;
+    }
+
+    try {
+      await invoke('stop_audio_monitor');
+    } catch (error) {
+      console.warn('Failed to stop audio monitor:', error);
+    }
 
     try {
       const result = await invoke('start_recording', {
@@ -42,6 +92,22 @@
     } catch (error) {
       console.error('Failed to start recording:', error);
       errorMessage = error;
+
+      // Restart monitoring if recording failed
+      try {
+        await invoke('start_audio_monitor');
+        levelPollInterval = setInterval(async () => {
+          try {
+            const levels = await invoke('get_audio_levels');
+            loopbackLevel = levels.loopback;
+            microphoneLevel = levels.microphone;
+          } catch (error) {
+            console.error('Failed to get audio levels:', error);
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Failed to restart audio monitor:', error);
+      }
     } finally {
       isStarting = false;
     }
@@ -115,6 +181,49 @@
           <option value={quality.value}>{quality.label}</option>
         {/each}
       </select>
+    </div>
+  </div>
+
+  <!-- Audio Level Meters -->
+  <div class="level-meters">
+    <div class="level-meter-group">
+      <div class="level-meter-header">
+        <div class="level-meter-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          </svg>
+          System Audio
+        </div>
+        <div class="level-indicator {loopbackLevel > 0.01 ? 'active' : ''}">
+          {loopbackLevel > 0.01 ? '● Active' : '○ Silent'}
+        </div>
+      </div>
+      <div class="level-meter-bar">
+        <div
+          class="level-meter-fill {loopbackLevel > 0.8 ? 'clipping' : ''}"
+          style="width: {Math.min(loopbackLevel * 100, 100)}%"
+        ></div>
+      </div>
+    </div>
+
+    <div class="level-meter-group">
+      <div class="level-meter-header">
+        <div class="level-meter-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+          </svg>
+          Microphone
+        </div>
+        <div class="level-indicator {microphoneLevel > 0.01 ? 'active' : ''}">
+          {microphoneLevel > 0.01 ? '● Active' : '○ Silent'}
+        </div>
+      </div>
+      <div class="level-meter-bar">
+        <div
+          class="level-meter-fill {microphoneLevel > 0.8 ? 'clipping' : ''}"
+          style="width: {Math.min(microphoneLevel * 100, 100)}%"
+        ></div>
+      </div>
     </div>
   </div>
 
@@ -304,6 +413,84 @@
   .setting-select:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .level-meters {
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-lg);
+    background: var(--card-background-secondary);
+    border: 1px solid var(--stroke-surface);
+    border-radius: var(--corner-radius-medium);
+  }
+
+  .level-meter-group {
+    margin-bottom: var(--spacing-md);
+  }
+
+  .level-meter-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .level-meter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .level-meter-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .level-meter-label svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .level-indicator {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    transition: color 0.2s ease;
+  }
+
+  .level-indicator.active {
+    color: var(--success);
+  }
+
+  .level-meter-bar {
+    height: 24px;
+    background: var(--card-background);
+    border-radius: var(--corner-radius-small);
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--stroke-surface);
+  }
+
+  .level-meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 70%, #FFC107 85%, #FF9800 95%);
+    transition: width 0.05s linear;
+    position: relative;
+  }
+
+  .level-meter-fill.clipping {
+    background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 60%, #FFC107 75%, #FF5722 90%);
+    animation: clipPulse 0.3s ease-in-out infinite;
+  }
+
+  @keyframes clipPulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
   }
 
   .quality-hint {

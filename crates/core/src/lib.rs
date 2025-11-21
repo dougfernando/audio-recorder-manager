@@ -1,3 +1,4 @@
+pub mod audio_monitor;
 pub mod cli;
 pub mod commands;
 pub mod config;
