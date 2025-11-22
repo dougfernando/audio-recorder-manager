@@ -1,5 +1,7 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
+  import { onMount, onDestroy } from 'svelte';
   import {
     isRecording,
     selectedDuration,
@@ -22,12 +24,81 @@
 
   let isStarting = false;
   let errorMessage = '';
+  let loopbackLevel = 0;
+  let microphoneLevel = 0;
+  let levelPollInterval = null;
+  let unlistenTrayRecording = null;
+
+  onMount(async () => {
+    // Listen for tray recording events
+    unlistenTrayRecording = await listen('tray-start-recording', async (event) => {
+      console.log('Tray recording event received:', event.payload);
+      const duration = event.payload?.duration || 60;
+
+      // Set the duration in the store
+      durationInSeconds.set(duration);
+
+      // Start recording if not already recording
+      if (!$isRecording) {
+        await startRecording();
+      }
+    });
+
+    // Start audio monitoring
+    try {
+      await invoke('start_audio_monitor');
+
+      // Poll for levels
+      levelPollInterval = setInterval(async () => {
+        try {
+          const levels = await invoke('get_audio_levels');
+          loopbackLevel = levels.loopback;
+          microphoneLevel = levels.microphone;
+        } catch (error) {
+          console.error('Failed to get audio levels:', error);
+        }
+      }, 100); // Update every 100ms for smooth animation
+    } catch (error) {
+      console.error('Failed to start audio monitor:', error);
+    }
+  });
+
+  onDestroy(async () => {
+    // Unlisten from tray events
+    if (unlistenTrayRecording) {
+      unlistenTrayRecording();
+    }
+
+    // Stop polling
+    if (levelPollInterval) {
+      clearInterval(levelPollInterval);
+    }
+
+    // Stop audio monitoring
+    try {
+      await invoke('stop_audio_monitor');
+    } catch (error) {
+      console.error('Failed to stop audio monitor:', error);
+    }
+  });
 
   async function startRecording() {
     if ($isRecording) return;
 
     isStarting = true;
     errorMessage = '';
+
+    // Stop monitoring before starting recording
+    if (levelPollInterval) {
+      clearInterval(levelPollInterval);
+      levelPollInterval = null;
+    }
+
+    try {
+      await invoke('stop_audio_monitor');
+    } catch (error) {
+      console.warn('Failed to stop audio monitor:', error);
+    }
 
     try {
       const result = await invoke('start_recording', {
@@ -42,84 +113,91 @@
     } catch (error) {
       console.error('Failed to start recording:', error);
       errorMessage = error;
+
+      // Restart monitoring if recording failed
+      try {
+        await invoke('start_audio_monitor');
+        levelPollInterval = setInterval(async () => {
+          try {
+            const levels = await invoke('get_audio_levels');
+            loopbackLevel = levels.loopback;
+            microphoneLevel = levels.microphone;
+          } catch (error) {
+            console.error('Failed to get audio levels:', error);
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Failed to restart audio monitor:', error);
+      }
     } finally {
       isStarting = false;
     }
   }
 </script>
 
-<div class="card recording-card">
-  <h2 class="card-title">Start Recording</h2>
+<div class="recording-panel">
+  <div class="panel-header">
+    <h2 class="panel-title">New Recording</h2>
+    <p class="panel-subtitle">Configure and start your audio capture</p>
+  </div>
 
   {#if errorMessage}
     <div class="error-message">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
       {errorMessage}
     </div>
   {/if}
 
-  <div class="form-group">
-    <label class="form-label">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <polyline points="12 6 12 12 16 14"/>
-      </svg>
-      Duration
-    </label>
-    <div class="duration-grid">
+  <!-- Duration Selection -->
+  <div class="setting-group">
+    <label class="setting-label">Duration</label>
+    <div class="duration-pills">
       {#each durationPresets as preset}
         <button
-          class="duration-btn {$selectedDuration === preset && !$isManualMode ? 'active' : ''}"
+          class="duration-pill {$selectedDuration === preset && !$isManualMode ? 'active' : ''}"
           on:click={() => {
             selectedDuration.set(preset);
             isManualMode.set(false);
           }}
           disabled={$isRecording}
         >
-          <span class="duration-value">{formatDuration(preset)}</span>
+          {formatDuration(preset)}
         </button>
       {/each}
       <button
-        class="duration-btn manual-mode-btn {$isManualMode ? 'active' : ''}"
+        class="duration-pill manual-pill {$isManualMode ? 'active' : ''}"
         on:click={() => {
           isManualMode.set(true);
         }}
         disabled={$isRecording}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <circle cx="12" cy="12" r="10"/>
           <line x1="12" y1="8" x2="12" y2="16"/>
         </svg>
-        <span class="duration-value">Manual</span>
+        Manual
       </button>
     </div>
   </div>
 
-  <div class="form-row">
-    <div class="form-group">
-      <label class="form-label">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="12" y1="18" x2="12" y2="12"/>
-          <line x1="9" y1="15" x2="15" y2="15"/>
-        </svg>
-        Format
-      </label>
-      <select class="form-select" bind:value={$selectedFormat} disabled={$isRecording}>
+  <!-- Format & Quality in compact row -->
+  <div class="settings-row">
+    <div class="setting-group compact">
+      <label class="setting-label" for="format-select">Format</label>
+      <select id="format-select" class="setting-select" bind:value={$selectedFormat} disabled={$isRecording}>
         {#each formats as format}
           <option value={format}>{format.toUpperCase()}</option>
         {/each}
       </select>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-        </svg>
-        Quality
-      </label>
-      <select class="form-select" bind:value={$selectedQuality} disabled={$isRecording}>
+    <div class="setting-group compact">
+      <label class="setting-label" for="quality-select">Quality</label>
+      <select id="quality-select" class="setting-select" bind:value={$selectedQuality} disabled={$isRecording}>
         {#each qualities as quality}
           <option value={quality.value}>{quality.label}</option>
         {/each}
@@ -127,272 +205,461 @@
     </div>
   </div>
 
+  <!-- Audio Level Meters -->
+  <div class="level-meters">
+    <div class="level-meter-group">
+      <div class="level-meter-header">
+        <div class="level-meter-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          </svg>
+          System Audio
+        </div>
+        <div class="level-indicator {loopbackLevel > 0.01 ? 'active' : ''}">
+          {loopbackLevel > 0.01 ? '● Active' : '○ Silent'}
+        </div>
+      </div>
+      <div class="level-meter-bar">
+        <div
+          class="level-meter-fill {loopbackLevel > 0.8 ? 'clipping' : ''}"
+          style="width: {Math.min(loopbackLevel * 100, 100)}%"
+        ></div>
+      </div>
+    </div>
+
+    <div class="level-meter-group">
+      <div class="level-meter-header">
+        <div class="level-meter-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/>
+          </svg>
+          Microphone
+        </div>
+        <div class="level-indicator {microphoneLevel > 0.01 ? 'active' : ''}">
+          {microphoneLevel > 0.01 ? '● Active' : '○ Silent'}
+        </div>
+      </div>
+      <div class="level-meter-bar">
+        <div
+          class="level-meter-fill {microphoneLevel > 0.8 ? 'clipping' : ''}"
+          style="width: {Math.min(microphoneLevel * 100, 100)}%"
+        ></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quality info hint -->
+  <div class="quality-hint">
+    {#each qualities as quality}
+      {#if quality.value === $selectedQuality}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4M12 8h.01"/>
+        </svg>
+        Estimated size: {quality.description}
+      {/if}
+    {/each}
+  </div>
+
+  <!-- Start Button -->
   <button
-    class="btn btn-primary btn-lg start-btn"
+    class="start-recording-btn {$isRecording ? 'recording' : ''}"
     on:click={startRecording}
     disabled={$isRecording || isStarting}
   >
     {#if isStarting}
-      Starting...
+      <div class="btn-spinner"></div>
+      <span>Starting...</span>
     {:else if $isRecording}
-      Recording in Progress
+      <div class="recording-pulse"></div>
+      <span>Recording Active</span>
     {:else}
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="12" r="8"/>
       </svg>
-      Start Recording
+      <span>Start Recording</span>
     {/if}
   </button>
 </div>
 
 <style>
-  .recording-card {
-    background: var(--gradient-surface);
-    border: 2px solid var(--border-subtle);
-    box-shadow: var(--shadow-lg);
-    position: relative;
-    overflow: hidden;
+  .recording-panel {
+    background: var(--card-background);
+    border: 1px solid var(--stroke-surface);
+    border-radius: var(--corner-radius-large);
+    padding: var(--spacing-xxl);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
   }
 
-  .recording-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: var(--gradient-primary);
+  .recording-panel:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--accent-default);
   }
 
-  .recording-card::after {
-    content: '';
-    position: absolute;
-    top: 20%;
-    right: -10%;
-    width: 40%;
-    height: 60%;
-    background: radial-gradient(circle, rgba(0, 229, 255, 0.08) 0%, transparent 70%);
-    pointer-events: none;
+  .panel-header {
+    margin-bottom: var(--spacing-xxl);
   }
 
-  .recording-card:hover {
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-lg), var(--shadow-glow-cyan);
+  .panel-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .panel-subtitle {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    margin: 0;
   }
 
   .error-message {
-    background-color: var(--danger-bg);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    background-color: rgba(255, 59, 48, 0.1);
     border: 1px solid var(--danger);
     color: var(--danger);
     padding: var(--spacing-md);
     border-radius: var(--corner-radius-medium);
     margin-bottom: var(--spacing-lg);
-    font-size: 14px;
+    font-size: 13px;
   }
 
-  .form-label {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-md);
-    font-weight: 700;
-    font-size: 11px;
-    color: var(--text-accent);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-
-  .form-label svg {
-    opacity: 1;
-    color: var(--accent-cyan);
-  }
-
-  .duration-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-xl);
-    position: relative;
-    z-index: 1;
-  }
-
-  .duration-btn {
-    padding: var(--spacing-lg);
-    background: var(--bg-elevated);
-    border: 2px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    font-size: 18px;
-    font-weight: 700;
-    font-family: 'IBM Plex Mono', monospace;
-    color: var(--text-primary);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
-    min-height: 64px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .duration-btn::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--gradient-primary);
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-
-  .duration-btn .duration-value {
-    position: relative;
-    z-index: 1;
-  }
-
-  .duration-btn:hover:not(:disabled) {
-    border-color: var(--accent-cyan);
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: var(--shadow-md), var(--shadow-glow-cyan);
-  }
-
-  .duration-btn.active {
-    background: var(--gradient-primary);
-    border-color: transparent;
-    color: var(--text-on-accent);
-    box-shadow: var(--shadow-md), var(--shadow-glow-cyan);
-    animation: glowPulse 3s ease-in-out infinite;
-  }
-
-  .duration-btn.active .duration-value {
-    color: var(--text-on-accent);
-  }
-
-  .duration-btn.active:hover:not(:disabled) {
-    transform: translateY(-3px) scale(1.05);
-    box-shadow: var(--shadow-lg), 0 0 32px var(--accent-cyan-glow);
-  }
-
-  .duration-value {
-    font-size: 15px;
-    line-height: 1;
-  }
-
-  .manual-mode-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-sm);
-  }
-
-  .manual-mode-btn svg {
+  .error-message svg {
     flex-shrink: 0;
-    stroke-width: 2.5;
   }
 
-  .manual-mode-btn.active svg {
-    stroke: var(--text-on-accent);
-  }
-
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing-lg);
+  .setting-group {
     margin-bottom: var(--spacing-lg);
   }
 
-  .start-btn {
+  .setting-group.compact {
+    margin-bottom: 0;
+  }
+
+  .setting-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .duration-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .duration-pill {
+    padding: 8px 16px;
+    background: var(--card-background-secondary);
+    border: 1px solid var(--stroke-surface);
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .duration-pill:hover:not(:disabled) {
+    background: var(--card-background);
+    border-color: var(--accent-default);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+  }
+
+  .duration-pill.active {
+    background: var(--accent-default);
+    border-color: var(--accent-default);
+    color: white;
+  }
+
+  .duration-pill.active:hover:not(:disabled) {
+    background: var(--accent-secondary);
+    border-color: var(--accent-secondary);
+  }
+
+  .duration-pill:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .manual-pill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .manual-pill svg {
+    flex-shrink: 0;
+  }
+
+  .settings-row {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .setting-select {
     width: 100%;
-    background: var(--gradient-recording);
-    box-shadow: var(--shadow-md), var(--shadow-glow-magenta);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 10px 12px;
+    background: var(--card-background-secondary);
+    border: 1px solid var(--stroke-surface);
+    border-radius: var(--corner-radius-medium);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .setting-select:hover:not(:disabled) {
+    border-color: var(--accent-default);
+  }
+
+  .setting-select:focus {
+    outline: none;
+    border-color: var(--accent-default);
+    box-shadow: 0 0 0 3px rgba(0, 103, 192, 0.1);
+  }
+
+  .setting-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .level-meters {
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-lg);
+    background: var(--card-background-secondary);
+    border: 1px solid var(--stroke-surface);
+    border-radius: var(--corner-radius-medium);
+  }
+
+  .level-meter-group {
+    margin-bottom: var(--spacing-md);
+  }
+
+  .level-meter-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .level-meter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .level-meter-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .level-meter-label svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .level-indicator {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    transition: color 0.2s ease;
+  }
+
+  .level-indicator.active {
+    color: var(--success);
+  }
+
+  .level-meter-bar {
+    height: 24px;
+    background: var(--card-background);
+    border-radius: var(--corner-radius-small);
+    overflow: hidden;
     position: relative;
-    z-index: 1;
-    font-size: 16px;
-    letter-spacing: 0.1em;
+    border: 1px solid var(--stroke-surface);
   }
 
-  .start-btn::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), transparent);
-    opacity: 0;
-    transition: opacity 0.2s;
+  .level-meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 70%, #FFC107 85%, #FF9800 95%);
+    transition: width 0.05s linear;
+    position: relative;
   }
 
-  .start-btn:hover:not(:disabled) {
-    box-shadow: var(--shadow-lg), 0 0 40px var(--accent-magenta-glow);
-    transform: translateY(-3px) scale(1.02);
+  .level-meter-fill.clipping {
+    background: linear-gradient(90deg, #4CAF50 0%, #8BC34A 60%, #FFC107 75%, #FF5722 90%);
+    animation: clipPulse 0.3s ease-in-out infinite;
   }
 
-  .start-btn:hover:not(:disabled)::before {
-    opacity: 1;
+  @keyframes clipPulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
   }
 
-  .start-btn:active:not(:disabled) {
-    transform: translateY(-1px) scale(0.99);
+  .quality-hint {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-bottom: var(--spacing-xxl);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--card-background-secondary);
+    border-radius: var(--corner-radius-small);
+  }
+
+  .quality-hint svg {
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .start-recording-btn {
+    width: 100%;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, #FF3B30 0%, #FF6B6B 100%);
+    border: none;
+    border-radius: var(--corner-radius-medium);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+  }
+
+  .start-recording-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 59, 48, 0.4);
+  }
+
+  .start-recording-btn:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .start-recording-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .start-recording-btn.recording {
+    background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+  }
+
+  .btn-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .recording-pulse {
+    width: 12px;
+    height: 12px;
+    background: white;
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(0.8);
+    }
   }
 
   /* Responsive Design */
   @media (max-width: 768px) {
-    .duration-grid {
-      grid-template-columns: repeat(2, 1fr);
-      gap: var(--spacing-sm);
+    .recording-panel {
+      padding: var(--spacing-lg);
     }
 
-    .duration-btn {
-      padding: var(--spacing-md);
-      min-height: 48px;
-      font-size: 14px;
+    .panel-title {
+      font-size: 18px;
     }
 
-    .duration-value {
-      font-size: 14px;
-    }
-
-    .form-row {
+    .settings-row {
       grid-template-columns: 1fr;
       gap: var(--spacing-md);
+      margin-bottom: var(--spacing-md);
+    }
+
+    .setting-group {
+      margin-bottom: var(--spacing-md);
+    }
+
+    .duration-pills {
+      gap: var(--spacing-xs);
+    }
+
+    .duration-pill {
+      padding: 6px 12px;
+      font-size: 12px;
     }
   }
 
   @media (max-width: 480px) {
-    .recording-card {
+    .recording-panel {
       padding: var(--spacing-md);
     }
 
-    .card-title {
+    .panel-header {
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .panel-title {
       font-size: 16px;
     }
 
-    .duration-grid {
-      gap: var(--spacing-xs);
-    }
-
-    .duration-btn {
-      padding: var(--spacing-sm);
-      min-height: 44px;
-      font-size: 13px;
-    }
-
-    .duration-value {
-      font-size: 13px;
-    }
-
-    .form-label {
+    .panel-subtitle {
       font-size: 12px;
-      margin-bottom: var(--spacing-sm);
     }
 
-    .form-select {
-      font-size: 13px;
+    .duration-pills {
+      justify-content: stretch;
     }
 
-    .start-btn {
+    .duration-pill {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 11px;
+      padding: 6px 10px;
+    }
+
+    .start-recording-btn {
       font-size: 14px;
-      padding: var(--spacing-md) var(--spacing-lg);
+      padding: 14px 20px;
     }
   }
-
 </style>

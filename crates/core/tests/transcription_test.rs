@@ -1,4 +1,4 @@
-use audio_recorder_manager::transcription::{transcribe_audio, load_config};
+use audio_recorder_manager::transcription::{load_config, transcribe_audio};
 use std::path::PathBuf;
 
 #[tokio::test]
@@ -11,10 +11,15 @@ async fn test_transcription_with_real_audio() {
         .try_init();
 
     // Path to the test audio file
-    let audio_path = PathBuf::from("src-tauri/target/release/storage/recordings/recording_20251115_184335.m4a");
+    let audio_path =
+        PathBuf::from("src-tauri/target/release/storage/recordings/recording_20251115_184335.m4a");
 
     // Verify file exists
-    assert!(audio_path.exists(), "Test audio file not found at {:?}", audio_path);
+    assert!(
+        audio_path.exists(),
+        "Test audio file not found at {:?}",
+        audio_path
+    );
 
     // Load configuration (will use saved API key)
     let mut config = load_config().expect("Failed to load transcription config");
@@ -23,7 +28,10 @@ async fn test_transcription_with_real_audio() {
     config.model = "gemini-2.5-flash".to_string();
 
     // Verify API key is configured
-    assert!(!config.api_key.is_empty(), "API key not configured. Please set it in Settings first.");
+    assert!(
+        !config.api_key.is_empty(),
+        "API key not configured. Please set it in Settings first."
+    );
 
     println!("Test Configuration:");
     println!("  Audio file: {}", audio_path.display());
@@ -54,21 +62,33 @@ async fn test_transcription_with_real_audio() {
             println!("  Success: {}", transcript_result.success);
             println!("  Transcript file: {:?}", transcript_result.transcript_file);
 
-            assert!(transcript_result.success, "Transcription should be successful");
-            assert!(transcript_result.transcript_file.is_some(), "Transcript file path should be set");
+            assert!(
+                transcript_result.success,
+                "Transcription should be successful"
+            );
+            assert!(
+                transcript_result.transcript_file.is_some(),
+                "Transcript file path should be set"
+            );
 
             // Verify transcript file was created
             if let Some(ref path) = transcript_result.transcript_file {
                 let transcript_path = PathBuf::from(path);
-                assert!(transcript_path.exists(), "Transcript file should exist at {:?}", transcript_path);
+                assert!(
+                    transcript_path.exists(),
+                    "Transcript file should exist at {:?}",
+                    transcript_path
+                );
 
                 // Read and display transcript content
                 let content = std::fs::read_to_string(&transcript_path)
                     .expect("Failed to read transcript file");
 
-                println!("\n📄 Transcript content ({} chars, {} words):",
+                println!(
+                    "\n📄 Transcript content ({} chars, {} words):",
                     content.len(),
-                    content.split_whitespace().count());
+                    content.split_whitespace().count()
+                );
                 println!("{}", "=".repeat(80));
                 println!("{}", content);
                 println!("{}", "=".repeat(80));
@@ -102,7 +122,8 @@ async fn test_config_loading() {
 
 #[test]
 fn test_audio_file_exists() {
-    let audio_path = PathBuf::from("src-tauri/target/release/storage/recordings/recording_20251115_184335.m4a");
+    let audio_path =
+        PathBuf::from("src-tauri/target/release/storage/recordings/recording_20251115_184335.m4a");
 
     if !audio_path.exists() {
         println!("⚠️  Warning: Test audio file not found at {:?}", audio_path);

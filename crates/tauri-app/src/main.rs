@@ -5,6 +5,7 @@
 mod splash_screen;
 
 use audio_recorder_manager_core::{
+    audio_monitor::windows_monitor::AudioLevelMonitor,
     commands::{record, recover, status, stop},
     config::RecorderConfig,
     domain::{AudioFormat, RecordingDuration},
@@ -21,9 +22,10 @@ use tauri::{Emitter, State};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-// State to track active recording sessions
+// State to track active recording sessions and audio monitor
 struct AppState {
     active_sessions: Mutex<Vec<String>>,
+    audio_monitor: Mutex<Option<AudioLevelMonitor>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,7 +150,10 @@ async fn start_recording(
             Ok(mut sessions) => sessions.push(session_id.clone()),
             Err(e) => {
                 tracing::error!(error = %e, "Failed to lock active_sessions mutex (poisoned)");
-                return Err(format!("Internal error: Failed to track recording session: {}", e));
+                return Err(format!(
+                    "Internal error: Failed to track recording session: {}",
+                    e
+                ));
             }
         }
     }
@@ -292,7 +297,10 @@ async fn get_recording_status(session_id: String) -> Result<RecordingStatusInfo,
         serde_json::from_str(&content).map_err(|e| e.to_string())?;
 
     Ok(RecordingStatusInfo {
-        status: status_data["status"].as_str().unwrap_or("unknown").to_string(),
+        status: status_data["status"]
+            .as_str()
+            .unwrap_or("unknown")
+            .to_string(),
         session_id: status_data["session_id"].as_str().map(|s| s.to_string()),
         filename: status_data["filename"].as_str().map(|s| s.to_string()),
         duration: status_data["duration"].as_u64(),
@@ -332,7 +340,10 @@ async fn list_recordings() -> Result<Vec<RecordingFile>, String> {
         // Skip temporary files and status files
         if let Some(filename) = path.file_name() {
             let filename_str = filename.to_string_lossy();
-            if filename_str.contains("_loopback") || filename_str.contains("_mic") || filename_str.ends_with(".json") {
+            if filename_str.contains("_loopback")
+                || filename_str.contains("_mic")
+                || filename_str.ends_with(".json")
+            {
                 continue;
             }
         }
@@ -436,7 +447,10 @@ async fn get_active_sessions(state: State<'_, AppState>) -> Result<Vec<String>, 
         Ok(sessions) => Ok(sessions.clone()),
         Err(e) => {
             tracing::error!(error = %e, "Failed to lock active_sessions mutex in get_active_sessions");
-            Err(format!("Internal error: Failed to get active sessions: {}", e))
+            Err(format!(
+                "Internal error: Failed to get active sessions: {}",
+                e
+            ))
         }
     }
 }
@@ -484,13 +498,15 @@ async fn delete_recording(file_path: String) -> Result<String, String> {
     }
 
     // Delete the audio file
-    std::fs::remove_file(path)
-        .map_err(|e| format!("Failed to delete file: {}", e))?;
+    std::fs::remove_file(path).map_err(|e| format!("Failed to delete file: {}", e))?;
 
     // Also delete the transcript if it exists (in transcriptions directory)
     let config = RecorderConfig::new();
     if let Some(file_stem) = path.file_stem() {
-        let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+        let transcript_path = config
+            .transcriptions_dir
+            .join(file_stem)
+            .with_extension("md");
         if transcript_path.exists() {
             tracing::info!("Deleting associated transcript: {:?}", transcript_path);
             std::fs::remove_file(&transcript_path)
@@ -508,7 +524,7 @@ async fn rename_recording(old_path: String, new_filename: String) -> Result<Reco
     use std::path::{Path, PathBuf};
 
     let old_path = Path::new(&old_path);
-    
+
     // 1. Validate new filename
     if new_filename.is_empty() || new_filename.contains('/') || new_filename.contains('\\') {
         return Err("Invalid new filename".to_string());
@@ -520,13 +536,18 @@ async fn rename_recording(old_path: String, new_filename: String) -> Result<Reco
     }
 
     // 3. Construct new path
-    let parent_dir = old_path.parent().ok_or("Could not determine parent directory")?;
+    let parent_dir = old_path
+        .parent()
+        .ok_or("Could not determine parent directory")?;
     let old_extension = old_path.extension().and_then(|s| s.to_str()).unwrap_or("");
     let new_path = parent_dir.join(&new_filename).with_extension(old_extension);
 
     // 4. Check if new path already exists
     if new_path.exists() {
-        return Err(format!("A file named '{}' already exists.", new_path.display()));
+        return Err(format!(
+            "A file named '{}' already exists.",
+            new_path.display()
+        ));
     }
 
     // 5. Rename the audio file
@@ -536,19 +557,26 @@ async fn rename_recording(old_path: String, new_filename: String) -> Result<Reco
     // 6. Rename the transcript file
     let config = RecorderConfig::new();
     let old_file_stem = old_path.file_stem().ok_or("Could not get file stem")?;
-    let new_file_stem = Path::new(&new_filename).file_stem().ok_or("Could not get file stem from new filename")?;
-    let old_transcript_path = config.transcriptions_dir.join(old_file_stem).with_extension("md");
-    
+    let new_file_stem = Path::new(&new_filename)
+        .file_stem()
+        .ok_or("Could not get file stem from new filename")?;
+    let old_transcript_path = config
+        .transcriptions_dir
+        .join(old_file_stem)
+        .with_extension("md");
+
     if old_transcript_path.exists() {
-        let new_transcript_path = config.transcriptions_dir.join(new_file_stem).with_extension("md");
-        std::fs::rename(&old_transcript_path, &new_transcript_path)
-            .map_err(|e| {
-                // Try to roll back the audio file rename on transcript rename failure
-                if let Err(rollback_err) = std::fs::rename(&new_path, old_path) {
-                    tracing::error!("Failed to rollback audio file rename: {}", rollback_err);
-                }
-                format!("Failed to rename transcript file: {}", e)
-            })?;
+        let new_transcript_path = config
+            .transcriptions_dir
+            .join(new_file_stem)
+            .with_extension("md");
+        std::fs::rename(&old_transcript_path, &new_transcript_path).map_err(|e| {
+            // Try to roll back the audio file rename on transcript rename failure
+            if let Err(rollback_err) = std::fs::rename(&new_path, old_path) {
+                tracing::error!("Failed to rollback audio file rename: {}", rollback_err);
+            }
+            format!("Failed to rename transcript file: {}", e)
+        })?;
     }
 
     // 7. Return the new RecordingFile object
@@ -630,19 +658,18 @@ async fn transcribe_recording(
         optimize,
         &session_id_clone,
     )
-        .await
-        .and_then(|result| {
-            tracing::info!("Transcription completed successfully");
-            serde_json::to_value(result)
-                .map_err(|e| {
-                    tracing::error!(error = %e, "Failed to serialize transcription result");
-                    anyhow::anyhow!("Failed to serialize transcription result: {}", e)
-                })
+    .await
+    .and_then(|result| {
+        tracing::info!("Transcription completed successfully");
+        serde_json::to_value(result).map_err(|e| {
+            tracing::error!(error = %e, "Failed to serialize transcription result");
+            anyhow::anyhow!("Failed to serialize transcription result: {}", e)
         })
-        .map_err(|e| {
-            tracing::error!(error = %e, "Transcription failed");
-            e.to_string()
-        })
+    })
+    .map_err(|e| {
+        tracing::error!(error = %e, "Transcription failed");
+        e.to_string()
+    })
 }
 
 /// Read transcript file content
@@ -658,11 +685,10 @@ async fn read_transcript(file_path: String) -> Result<String, String> {
         return Err(format!("Transcript file not found: {}", file_path));
     }
 
-    std::fs::read_to_string(path)
-        .map_err(|e| {
-            tracing::error!("Failed to read transcript file: {}", e);
-            format!("Failed to read transcript: {}", e)
-        })
+    std::fs::read_to_string(path).map_err(|e| {
+        tracing::error!("Failed to read transcript file: {}", e);
+        format!("Failed to read transcript: {}", e)
+    })
 }
 
 /// Check if a transcript exists for a given audio file
@@ -674,10 +700,14 @@ async fn check_transcript_exists(file_path: String) -> Result<bool, String> {
     let config = RecorderConfig::new();
 
     let path = Path::new(&file_path);
-    let file_stem = path.file_stem()
+    let file_stem = path
+        .file_stem()
         .ok_or_else(|| "Invalid file path".to_string())?;
 
-    let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+    let transcript_path = config
+        .transcriptions_dir
+        .join(file_stem)
+        .with_extension("md");
 
     Ok(transcript_path.exists())
 }
@@ -691,10 +721,14 @@ async fn get_transcript_path(file_path: String) -> Result<String, String> {
     let config = RecorderConfig::new();
 
     let path = Path::new(&file_path);
-    let file_stem = path.file_stem()
+    let file_stem = path
+        .file_stem()
         .ok_or_else(|| "Invalid file path".to_string())?;
 
-    let transcript_path = config.transcriptions_dir.join(file_stem).with_extension("md");
+    let transcript_path = config
+        .transcriptions_dir
+        .join(file_stem)
+        .with_extension("md");
 
     Ok(transcript_path.to_string_lossy().to_string())
 }
@@ -726,8 +760,7 @@ async fn get_transcription_status(session_id: String) -> Result<Option<serde_jso
 #[tauri::command]
 async fn load_recorder_config() -> Result<serde_json::Value, String> {
     let config = RecorderConfig::new();
-    serde_json::to_value(&config)
-        .map_err(|e| format!("Failed to serialize config: {}", e))
+    serde_json::to_value(&config).map_err(|e| format!("Failed to serialize config: {}", e))
 }
 
 /// Save recorder configuration (storage path)
@@ -735,10 +768,12 @@ async fn load_recorder_config() -> Result<serde_json::Value, String> {
 async fn save_recorder_config(storage_dir: String) -> Result<(), String> {
     let config = RecorderConfig::from_storage_dir(std::path::PathBuf::from(storage_dir));
 
-    config.ensure_directories()
+    config
+        .ensure_directories()
         .map_err(|e| format!("Failed to create directories: {}", e))?;
 
-    config.save()
+    config
+        .save()
         .map_err(|e| format!("Failed to save config: {}", e))?;
 
     Ok(())
@@ -746,7 +781,10 @@ async fn save_recorder_config(storage_dir: String) -> Result<(), String> {
 
 /// Pick a folder using native dialog
 #[tauri::command]
-async fn pick_folder(app: tauri::AppHandle, default_path: Option<String>) -> Result<Option<String>, String> {
+async fn pick_folder(
+    app: tauri::AppHandle,
+    default_path: Option<String>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
     let dialog = app.dialog().file();
@@ -758,6 +796,294 @@ async fn pick_folder(app: tauri::AppHandle, default_path: Option<String>) -> Res
     };
 
     Ok(dialog.blocking_pick_folder().map(|p| p.to_string()))
+}
+
+/// Start monitoring audio input levels
+#[tauri::command]
+async fn start_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
+    let mut monitor = state
+        .audio_monitor
+        .lock()
+        .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+
+    // Stop existing monitor if any
+    if monitor.is_some() {
+        *monitor = None;
+        // Give it a moment to clean up
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
+    // Start new monitor
+    let new_monitor =
+        AudioLevelMonitor::new().map_err(|e| format!("Failed to start audio monitor: {}", e))?;
+
+    *monitor = Some(new_monitor);
+    tracing::info!("Audio level monitor started");
+
+    Ok(())
+}
+
+/// Stop monitoring audio input levels
+#[tauri::command]
+async fn stop_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
+    let mut monitor = state
+        .audio_monitor
+        .lock()
+        .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+
+    if monitor.is_some() {
+        *monitor = None;
+        tracing::info!("Audio level monitor stopped");
+    }
+
+    Ok(())
+}
+
+/// Get current audio input levels
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AudioLevels {
+    loopback: f32,
+    microphone: f32,
+}
+
+#[tauri::command]
+async fn get_audio_levels(state: State<'_, AppState>) -> Result<AudioLevels, String> {
+    let monitor = state
+        .audio_monitor
+        .lock()
+        .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+
+    if let Some(ref m) = *monitor {
+        Ok(AudioLevels {
+            loopback: m.get_loopback_level(),
+            microphone: m.get_microphone_level(),
+        })
+    } else {
+        Ok(AudioLevels {
+            loopback: 0.0,
+            microphone: 0.0,
+        })
+    }
+}
+
+/// Generate waveform data from an audio file using ffmpeg
+#[tauri::command]
+async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<Vec<f32>, String> {
+    use std::path::Path;
+    use tokio::process::Command;
+
+    let path = Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // Default to 100 samples for the waveform
+    let num_samples = samples.unwrap_or(100);
+
+    tracing::info!(
+        "Generating waveform for: {} with {} samples",
+        file_path,
+        num_samples
+    );
+
+    // Use ffmpeg to extract audio data and calculate peak values
+    // We'll use ffmpeg to decode audio and output raw PCM data, then calculate peaks
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-i")
+        .arg(&file_path)
+        .arg("-ac")
+        .arg("1") // Convert to mono
+        .arg("-f")
+        .arg("f32le") // Output as 32-bit float PCM
+        .arg("-ar")
+        .arg("8000") // Downsample to 8kHz for faster processing
+        .arg("-");
+
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let output = cmd.output().await.map_err(|e| {
+        tracing::error!("Failed to run ffmpeg: {}", e);
+        format!(
+            "Failed to run ffmpeg: {}. Make sure ffmpeg is installed and in PATH.",
+            e
+        )
+    })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!("ffmpeg failed: {}", stderr);
+        return Err(format!("ffmpeg failed: {}", stderr));
+    }
+
+    // Parse the raw PCM data (f32 little-endian)
+    let raw_data = output.stdout;
+    let sample_count = raw_data.len() / 4; // 4 bytes per f32
+
+    if sample_count == 0 {
+        return Err("No audio data found in file".to_string());
+    }
+
+    // Convert bytes to f32 samples
+    let mut audio_samples: Vec<f32> = Vec::with_capacity(sample_count);
+    for chunk in raw_data.chunks_exact(4) {
+        let sample = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        audio_samples.push(sample.abs()); // Use absolute value for waveform
+    }
+
+    // Calculate peak values for visualization
+    let samples_per_bar = (sample_count as f32 / num_samples as f32).ceil() as usize;
+    let mut waveform: Vec<f32> = Vec::with_capacity(num_samples);
+
+    for i in 0..num_samples {
+        let start = i * samples_per_bar;
+        let end = ((i + 1) * samples_per_bar).min(sample_count);
+
+        if start >= sample_count {
+            waveform.push(0.0);
+            continue;
+        }
+
+        // Calculate peak (max) value in this chunk
+        let peak = audio_samples[start..end]
+            .iter()
+            .fold(0.0f32, |max, &sample| max.max(sample));
+
+        waveform.push(peak);
+    }
+
+    // Normalize waveform to 0.0-1.0 range
+    let max_peak = waveform.iter().fold(0.0f32, |max, &val| max.max(val));
+    if max_peak > 0.0 {
+        for val in &mut waveform {
+            *val /= max_peak;
+        }
+    }
+
+    tracing::info!(
+        "Waveform generated successfully with {} bars",
+        waveform.len()
+    );
+
+    Ok(waveform)
+}
+
+/// Set up system tray with menu
+fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let app_handle = app.handle();
+
+    // Create menu items
+    let show_hide = MenuItem::with_id(app, "show_hide", "Show/Hide Window", true, None::<&str>)?;
+    let separator1 = PredefinedMenuItem::separator(app)?;
+
+    // Quick recording submenu
+    let record_30s = MenuItem::with_id(app, "record_30s", "30 seconds", true, None::<&str>)?;
+    let record_1m = MenuItem::with_id(app, "record_1m", "1 minute", true, None::<&str>)?;
+    let record_5m = MenuItem::with_id(app, "record_5m", "5 minutes", true, None::<&str>)?;
+    let record_10m = MenuItem::with_id(app, "record_10m", "10 minutes", true, None::<&str>)?;
+
+    let quick_record_menu =
+        Submenu::with_items(app, "Quick Record", true, &[&record_30s, &record_1m, &record_5m, &record_10m])?;
+
+    let separator2 = PredefinedMenuItem::separator(app)?;
+    let open_recordings = MenuItem::with_id(app, "open_recordings", "Open Recordings Folder", true, None::<&str>)?;
+    let separator3 = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+
+    // Build menu
+    let menu = Menu::with_items(
+        app,
+        &[
+            &show_hide,
+            &separator1,
+            &quick_record_menu,
+            &separator2,
+            &open_recordings,
+            &separator3,
+            &quit,
+        ],
+    )?;
+
+    // Create tray icon
+    let _tray = TrayIconBuilder::with_id("main-tray")
+        .tooltip("Audio Recorder Manager")
+        .icon(app.default_window_icon().unwrap().clone())
+        .menu(&menu)
+        .on_menu_event(move |app, event| match event.id().as_ref() {
+            "show_hide" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+            "record_30s" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("tray-start-recording", serde_json::json!({"duration": 30}));
+                }
+            }
+            "record_1m" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("tray-start-recording", serde_json::json!({"duration": 60}));
+                }
+            }
+            "record_5m" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("tray-start-recording", serde_json::json!({"duration": 300}));
+                }
+            }
+            "record_10m" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("tray-start-recording", serde_json::json!({"duration": 600}));
+                }
+            }
+            "open_recordings" => {
+                let config = RecorderConfig::new();
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = std::process::Command::new("explorer")
+                        .arg(config.recordings_dir)
+                        .spawn();
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let _ = std::process::Command::new("xdg-open")
+                        .arg(config.recordings_dir)
+                        .spawn();
+                }
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(window) = app.get_webview_window("main") {
+                    if window.is_visible().unwrap_or(false) {
+                        let _ = window.hide();
+                    } else {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
 }
 
 /// Set up file watcher for status directory
@@ -794,7 +1120,9 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
                         if path.extension().map(|e| e == "json").unwrap_or(false) {
                             // Read and emit status update
                             if let Ok(content) = std::fs::read_to_string(&path) {
-                                if let Ok(status) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Ok(status) =
+                                    serde_json::from_str::<serde_json::Value>(&content)
+                                {
                                     let _ = app_handle.emit("recording-status-update", status);
                                 }
                             }
@@ -863,10 +1191,16 @@ fn main() {
     // Create native splash screen (shows instantly, no WebView2 dependency)
     #[cfg(windows)]
     let splash = {
-        tracing::info!("[TIMING] Creating native splash screen: {:?}", app_start.elapsed());
+        tracing::info!(
+            "[TIMING] Creating native splash screen: {:?}",
+            app_start.elapsed()
+        );
         match splash_screen::SplashScreen::new() {
             Ok(s) => {
-                tracing::info!("[TIMING] Native splash screen created and visible: {:?}", app_start.elapsed());
+                tracing::info!(
+                    "[TIMING] Native splash screen created and visible: {:?}",
+                    app_start.elapsed()
+                );
                 Some(s)
             }
             Err(e) => {
@@ -884,9 +1218,13 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_dialog::init());
     let builder = builder.manage(AppState {
         active_sessions: Mutex::new(Vec::new()),
+        audio_monitor: Mutex::new(None),
     });
 
-    tracing::info!("[TIMING] Configuring setup handler: {:?}", app_start.elapsed());
+    tracing::info!(
+        "[TIMING] Configuring setup handler: {:?}",
+        app_start.elapsed()
+    );
     let builder = builder.setup({
         let app_start_clone = app_start.clone();
         let splash_opt = splash;
@@ -904,6 +1242,23 @@ fn main() {
 
             // Set up status file watcher
             setup_status_watcher(app.handle().clone());
+
+            // Set up system tray
+            setup_system_tray(app)?;
+
+            // Handle window close event to minimize to tray instead of exiting
+            if let Some(window) = app.get_webview_window("main") {
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // Prevent default close behavior
+                        api.prevent_close();
+                        // Hide window instead
+                        if let Some(window) = api.window().app_handle().get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                    }
+                });
+            }
 
             // Close splash screen now that main window is ready
             #[cfg(windows)]
@@ -937,9 +1292,16 @@ fn main() {
         load_recorder_config,
         save_recorder_config,
         pick_folder,
+        start_audio_monitor,
+        stop_audio_monitor,
+        get_audio_levels,
+        generate_waveform,
     ]);
 
-    tracing::info!("[TIMING] Starting Tauri application run loop: {:?}", app_start.elapsed());
+    tracing::info!(
+        "[TIMING] Starting Tauri application run loop: {:?}",
+        app_start.elapsed()
+    );
     builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

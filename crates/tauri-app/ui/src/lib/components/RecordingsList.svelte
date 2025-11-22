@@ -16,6 +16,9 @@
   let viewingTranscript = null; // { path: string, name: string }
   let progressPollingIntervals = {};
   let selectedRecording = null; // Recording object for detail view
+  let renamingRecording = null; // filename of recording being renamed
+  let newName = '';
+  let renameError = null;
 
   // Check for transcripts whenever recordings change
   $: if ($recordings.length > 0) {
@@ -33,6 +36,52 @@
       console.error('Failed to load recordings:', error);
     } finally {
       isLoading = false;
+    }
+  }
+
+  function getFileNameWithoutExtension(filename) {
+    return filename.replace(/\.[^/.]+$/, "");
+  }
+
+  function startRename(recording, event) {
+    event.stopPropagation();
+    renamingRecording = recording.filename;
+    newName = getFileNameWithoutExtension(recording.filename);
+    renameError = null;
+  }
+
+  function cancelRename() {
+    renamingRecording = null;
+    newName = '';
+    renameError = null;
+  }
+
+  async function saveRename(recording, event) {
+    event.stopPropagation();
+
+    if (!newName || newName.trim() === '') {
+      renameError = 'Filename cannot be empty.';
+      return;
+    }
+
+    if (newName === getFileNameWithoutExtension(recording.filename)) {
+      cancelRename();
+      return;
+    }
+
+    renameError = null;
+    try {
+      await invoke('rename_recording', {
+        oldPath: recording.path,
+        newFilename: newName.trim(),
+      });
+
+      // Reload recordings to show updated name
+      await loadRecordings();
+      cancelRename();
+    } catch (error) {
+      console.error('Failed to rename recording:', error);
+      renameError = error;
     }
   }
 
@@ -241,115 +290,166 @@
     </div>
 
     {#if $recordings && $recordings.length > 0}
-      <div class="recordings-grid">
+      <div class="recordings-list">
         {#each $recordings as recording (recording.path)}
           <div
-            class="recording-card card"
+            class="recording-item"
             on:click={() => showRecordingDetail(recording)}
             on:keydown={(e) => e.key === 'Enter' && showRecordingDetail(recording)}
             role="button"
             tabindex="0"
           >
-            <div class="recording-header">
-              <div class="recording-icon {recording.format === 'wav' ? 'wav' : 'm4a'}">
-                {#if recording.format === 'wav'}
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+            <div class="recording-content">
+              <!-- Icon and Name -->
+              <div class="recording-main">
+                <div class="recording-icon {recording.format}">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
                   </svg>
-                {:else}
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                    <path d="M20 6v2h-2V6h2z" opacity="0.5"/>
+                </div>
+                <div class="recording-info">
+                  {#if renamingRecording === recording.filename}
+                    <!-- Rename input -->
+                    <div class="rename-container" on:click|stopPropagation>
+                      <input
+                        type="text"
+                        bind:value={newName}
+                        class="rename-input"
+                        on:keydown={(e) => {
+                          if (e.key === 'Enter') saveRename(recording, e);
+                          if (e.key === 'Escape') cancelRename();
+                        }}
+                        on:click|stopPropagation
+                        aria-label="New recording name"
+                        autofocus
+                      />
+                      <button class="btn-rename-save" on:click={(e) => saveRename(recording, e)} title="Save">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      </button>
+                      <button class="btn-rename-cancel" on:click|stopPropagation={cancelRename} title="Cancel">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                    {#if renameError}
+                      <div class="rename-error">{renameError}</div>
+                    {/if}
+                  {:else}
+                    <div class="recording-name" title={recording.filename}>
+                      {recording.filename}
+                    </div>
+                    <div class="recording-meta">
+                      <span class="format-badge {recording.format}">{recording.format.toUpperCase()}</span>
+                      <span class="meta-separator">•</span>
+                      <span>{formatFileSize(recording.size)}</span>
+                      <span class="meta-separator">•</span>
+                      <span>{recording.created}</span>
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Actions -->
+              {#if renamingRecording !== recording.filename}
+              <div class="recording-actions">
+                <button
+                  class="action-btn"
+                  on:click|stopPropagation={() => openRecording(recording.path)}
+                  title="Play in embedded player"
+                  aria-label="Play recording"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
                   </svg>
-                {/if}
+                </button>
+
+                <button
+                  class="action-btn {isTranscribing[recording.filename] ? 'loading' : ''}"
+                  on:click|stopPropagation={() => transcribeRecording(recording)}
+                  disabled={isTranscribing[recording.filename]}
+                  title="Transcribe recording"
+                  aria-label="Transcribe recording"
+                >
+                  {#if isTranscribing[recording.filename]}
+                    <svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                    </svg>
+                  {:else}
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                      <line x1="10" y1="9" x2="8" y2="9"/>
+                    </svg>
+                  {/if}
+                </button>
+
+                <button
+                  class="action-btn {transcriptPath[recording.filename] ? 'has-transcript' : ''}"
+                  on:click|stopPropagation={() => viewTranscript(recording)}
+                  disabled={!transcriptPath[recording.filename]}
+                  title="View transcript"
+                  aria-label="View transcript"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+
+                <button
+                  class="action-btn"
+                  on:click={(e) => startRename(recording, e)}
+                  title="Rename recording"
+                  aria-label="Rename recording"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+
+                <button
+                  class="action-btn danger"
+                  on:click|stopPropagation={() => deleteRecording(recording)}
+                  disabled={isDeleting[recording.filename]}
+                  title="Delete recording"
+                  aria-label="Delete recording"
+                >
+                  {#if isDeleting[recording.filename]}
+                    <svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                    </svg>
+                  {:else}
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                  {/if}
+                </button>
               </div>
-              <div class="format-badge {recording.format}">{recording.format.toUpperCase()}</div>
-            </div>
-
-          <div class="recording-info">
-            <div class="recording-name" title={recording.filename}>
-              {recording.filename}
-            </div>
-            <div class="recording-meta">
-              <span>{formatFileSize(recording.size)}</span>
-              <span>•</span>
-              <span>{recording.created}</span>
-            </div>
-          </div>
-
-          <div class="recording-actions">
-            <button
-              class="btn btn-primary btn-sm"
-              on:click|stopPropagation={() => openRecording(recording.path)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-              Play
-            </button>
-            <button
-              class="btn btn-success btn-sm"
-              on:click|stopPropagation={() => transcribeRecording(recording)}
-              disabled={isTranscribing[recording.filename]}
-            >
-              {#if isTranscribing[recording.filename]}
-                <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                </svg>
-                Transcribing...
-              {:else}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                  <line x1="10" y1="9" x2="8" y2="9"/>
-                </svg>
-                Transcribe
               {/if}
-            </button>
-            <button
-              class="btn btn-info btn-sm"
-              on:click|stopPropagation={() => viewTranscript(recording)}
-              disabled={!transcriptPath[recording.filename]}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-              View Transcript
-            </button>
-            <button
-              class="btn btn-danger btn-sm"
-              on:click|stopPropagation={() => deleteRecording(recording)}
-              disabled={isDeleting[recording.filename]}
-            >
-              {#if isDeleting[recording.filename]}
-                Deleting...
-              {:else}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                </svg>
-                Delete
-              {/if}
-            </button>
-          </div>
-
-          {#if transcriptionProgress[recording.filename]}
-            <div class="transcription-progress">
-              <div class="progress-header">
-                <span class="progress-step">{transcriptionProgress[recording.filename].step}</span>
-                <span class="progress-percentage">{transcriptionProgress[recording.filename].progress}%</span>
-              </div>
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: {transcriptionProgress[recording.filename].progress}%"></div>
-              </div>
-              <div class="progress-message">{transcriptionProgress[recording.filename].message}</div>
             </div>
-          {/if}
-        </div>
-      {/each}
-    </div>
+
+            {#if transcriptionProgress[recording.filename]}
+              <div class="transcription-progress">
+                <div class="progress-header">
+                  <span class="progress-step">{transcriptionProgress[recording.filename].step}</span>
+                  <span class="progress-percentage">{transcriptionProgress[recording.filename].progress}%</span>
+                </div>
+                <div class="progress-bar">
+                  <div class="progress-fill" style="width: {transcriptionProgress[recording.filename].progress}%"></div>
+                </div>
+                <div class="progress-message">{transcriptionProgress[recording.filename].message}</div>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
     {:else if $recordings.length === 0 && isLoading}
       <!-- Skeleton loading UI -->
       <div class="recordings-grid">
@@ -425,130 +525,249 @@
     }
   }
 
-  .recordings-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    gap: var(--spacing-lg);
-  }
-
-  .recording-card {
+  .recordings-list {
     display: flex;
     flex-direction: column;
-    padding: var(--spacing-xl);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
-    position: relative;
-    background: var(--gradient-surface);
+    gap: 1px;
+    background: var(--stroke-surface);
+    border-radius: var(--corner-radius-medium);
+    overflow: hidden;
   }
 
-  .recording-card::before {
+  .recording-item {
+    background: var(--card-background);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
+  }
+
+  .recording-item::before {
     content: '';
     position: absolute;
-    top: 0;
     left: 0;
-    right: 0;
-    height: 3px;
-    background: var(--gradient-primary);
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-default);
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity 0.15s ease;
   }
 
-  .recording-card:hover {
-    box-shadow: var(--shadow-lg), var(--shadow-glow-cyan);
-    transform: translateY(-4px) scale(1.01);
-    border-color: var(--accent-cyan);
+  .recording-item:hover {
+    background: var(--card-background-secondary);
   }
 
-  .recording-card:hover::before {
+  .recording-item:hover::before {
     opacity: 1;
   }
 
-  .recording-header {
+  .recording-item:active {
+    transform: scale(0.995);
+  }
+
+  .recording-content {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-lg);
+    justify-content: space-between;
+    padding: var(--spacing-md) var(--spacing-lg);
+    gap: var(--spacing-lg);
+  }
+
+  .recording-main {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex: 1;
+    min-width: 0;
   }
 
   .recording-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 72px;
-    height: 72px;
-    border-radius: var(--radius-lg);
+    width: 40px;
+    height: 40px;
+    border-radius: var(--corner-radius-medium);
     color: white;
-    box-shadow: var(--shadow-md);
-    transition: transform 0.3s;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
   }
 
-  .recording-card:hover .recording-icon {
-    transform: scale(1.1) rotate(5deg);
+  .recording-item:hover .recording-icon {
+    transform: scale(1.05);
   }
 
   .recording-icon.wav {
-    background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-magenta) 100%);
+    background: linear-gradient(135deg, #0067C0 0%, #00A3E0 100%);
   }
 
   .recording-icon.m4a {
-    background: linear-gradient(135deg, var(--accent-magenta) 0%, var(--rec-active) 100%);
-  }
-
-  .format-badge {
-    padding: 6px 12px;
-    border-radius: var(--radius-sm);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    border: 1px solid currentColor;
-  }
-
-  .format-badge.wav {
-    background: var(--info-bg);
-    color: var(--info);
-  }
-
-  .format-badge.m4a {
-    background: var(--success-bg);
-    color: var(--success);
+    background: linear-gradient(135deg, #FF3B30 0%, #FF6B6B 100%);
   }
 
   .recording-info {
     flex: 1;
-    margin-bottom: var(--spacing-lg);
+    min-width: 0;
   }
 
   .recording-name {
-    font-size: 15px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    letter-spacing: -0.01em;
   }
 
   .recording-meta {
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--text-tertiary);
     display: flex;
-    gap: 8px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-weight: 500;
+    align-items: center;
+    gap: var(--spacing-xs);
+  }
+
+  .format-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .format-badge.wav {
+    background: rgba(0, 103, 192, 0.1);
+    color: #0067C0;
+  }
+
+  .format-badge.m4a {
+    background: rgba(255, 59, 48, 0.1);
+    color: #FF3B30;
+  }
+
+  .meta-separator {
+    color: var(--stroke-surface);
   }
 
   .recording-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    flex-shrink: 0;
   }
 
-  .btn-sm {
-    padding: var(--spacing-sm) var(--spacing-md);
+  .action-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--corner-radius-small);
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    background: var(--accent-default);
+    color: white;
+    transform: scale(1.1);
+  }
+
+  .action-btn:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .action-btn.has-transcript {
+    color: var(--success);
+  }
+
+  .action-btn.has-transcript:hover:not(:disabled) {
+    background: var(--success);
+    color: white;
+  }
+
+  .action-btn.danger:hover:not(:disabled) {
+    background: var(--danger);
+    color: white;
+  }
+
+  .action-btn.loading {
+    cursor: not-allowed;
+  }
+
+  .rename-container {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    width: 100%;
+  }
+
+  .rename-input {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border: 1px solid var(--accent-default);
+    border-radius: var(--corner-radius-small);
+    background: var(--card-background);
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .rename-input:focus {
+    border-color: var(--accent-secondary);
+    box-shadow: 0 0 0 2px rgba(0, 103, 192, 0.1);
+  }
+
+  .btn-rename-save,
+  .btn-rename-cancel {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--corner-radius-small);
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .btn-rename-save {
+    color: var(--success);
+  }
+
+  .btn-rename-save:hover {
+    background: var(--success);
+    color: white;
+  }
+
+  .btn-rename-cancel {
+    color: var(--text-secondary);
+  }
+
+  .btn-rename-cancel:hover {
+    background: var(--danger);
+    color: white;
+  }
+
+  .rename-error {
+    color: var(--danger);
     font-size: 11px;
-    letter-spacing: 0.05em;
+    margin-top: 4px;
   }
 
   .empty-state {
@@ -576,9 +795,9 @@
   }
 
   .transcription-progress {
-    margin-top: var(--spacing-md);
-    padding-top: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-lg);
     border-top: 1px solid var(--stroke-surface);
+    background: var(--card-background-secondary);
   }
 
   .progress-header {
@@ -589,23 +808,23 @@
   }
 
   .progress-step {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--accent-default);
     text-transform: capitalize;
   }
 
   .progress-percentage {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--text-secondary);
   }
 
   .progress-bar {
     width: 100%;
-    height: 6px;
+    height: 4px;
     background-color: rgba(0, 103, 192, 0.1);
-    border-radius: 3px;
+    border-radius: 2px;
     overflow: hidden;
     margin-bottom: var(--spacing-xs);
   }
@@ -613,12 +832,12 @@
   .progress-fill {
     height: 100%;
     background: linear-gradient(90deg, var(--accent-default) 0%, var(--accent-secondary) 100%);
-    border-radius: 3px;
+    border-radius: 2px;
     transition: width 0.3s ease;
   }
 
   .progress-message {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-tertiary);
   }
 
@@ -695,13 +914,6 @@
   }
 
   /* Responsive Design */
-  @media (max-width: 1024px) {
-    .recordings-grid {
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: var(--spacing-lg);
-    }
-  }
-
   @media (max-width: 768px) {
     .recordings-container {
       padding: 0;
@@ -723,44 +935,19 @@
       justify-content: center;
     }
 
-    .recordings-grid {
-      grid-template-columns: 1fr;
+    .recording-content {
+      padding: var(--spacing-sm) var(--spacing-md);
       gap: var(--spacing-md);
     }
 
-    .recording-actions {
-      grid-template-columns: 1fr 1fr;
-      gap: var(--spacing-xs);
-    }
-
-    .btn-sm {
-      padding: var(--spacing-xs) var(--spacing-sm);
-      font-size: 12px;
-    }
-
-    .btn-sm svg {
-      width: 14px;
-      height: 14px;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .header h2 {
-      font-size: 18px;
-    }
-
-    .recording-card {
-      padding: var(--spacing-md);
-    }
-
     .recording-icon {
-      width: 48px;
-      height: 48px;
+      width: 36px;
+      height: 36px;
     }
 
     .recording-icon svg {
-      width: 24px;
-      height: 24px;
+      width: 18px;
+      height: 18px;
     }
 
     .recording-name {
@@ -769,20 +956,55 @@
 
     .recording-meta {
       font-size: 11px;
+      flex-wrap: wrap;
     }
 
-    .format-badge {
-      font-size: 10px;
-      padding: 3px var(--spacing-xs);
+    .action-btn {
+      width: 28px;
+      height: 28px;
+    }
+
+    .action-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .header h2 {
+      font-size: 18px;
+    }
+
+    .recording-content {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-sm);
+    }
+
+    .recording-main {
+      width: 100%;
     }
 
     .recording-actions {
-      grid-template-columns: 1fr;
+      width: 100%;
+      justify-content: flex-end;
+      padding-top: var(--spacing-xs);
+      border-top: 1px solid var(--stroke-surface);
     }
 
-    .btn-sm {
-      width: 100%;
-      justify-content: center;
+    .action-btn {
+      width: 36px;
+      height: 36px;
+    }
+
+    .action-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .format-badge {
+      font-size: 9px;
+      padding: 2px 4px;
     }
 
     .empty-state {
@@ -800,6 +1022,10 @@
 
     .empty-state small {
       font-size: 13px;
+    }
+
+    .transcription-progress {
+      padding: var(--spacing-sm) var(--spacing-md);
     }
   }
 </style>

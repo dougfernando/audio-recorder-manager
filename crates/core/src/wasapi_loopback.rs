@@ -34,14 +34,10 @@ pub mod windows_loopback {
                     .ok()
                     .context("Failed to initialize COM")?;
 
-                let device_enumerator: IMMDeviceEnumerator = CoCreateInstance(
-                    &MMDeviceEnumerator,
-                    None,
-                    CLSCTX_ALL,
-                )?;
+                let device_enumerator: IMMDeviceEnumerator =
+                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
 
-                let device = device_enumerator
-                    .GetDefaultAudioEndpoint(eRender, eConsole)?;
+                let device = device_enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?;
 
                 let audio_client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
                 let mix_format = audio_client.GetMixFormat()?;
@@ -85,14 +81,10 @@ pub mod windows_loopback {
                     .context("Failed to initialize COM in recording thread")?;
 
                 // Get default audio endpoint for rendering (speakers/output)
-                let device_enumerator: IMMDeviceEnumerator = CoCreateInstance(
-                    &MMDeviceEnumerator,
-                    None,
-                    CLSCTX_ALL,
-                )?;
+                let device_enumerator: IMMDeviceEnumerator =
+                    CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
 
-                let device = device_enumerator
-                    .GetDefaultAudioEndpoint(eRender, eConsole)?;
+                let device = device_enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?;
 
                 // Activate audio client
                 let audio_client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
@@ -109,14 +101,15 @@ pub mod windows_loopback {
 
                 // WASAPI usually returns WAVEFORMATEXTENSIBLE (0xFFFE) for modern formats
                 // We need to check the SubFormat GUID to determine actual format
-                let is_float = if format_tag == 0xFFFE {  // WAVE_FORMAT_EXTENSIBLE
+                let is_float = if format_tag == 0xFFFE {
+                    // WAVE_FORMAT_EXTENSIBLE
                     // For WAVEFORMATEXTENSIBLE, check SubFormat GUID
                     // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT ends with 00 00 10 00 ...
                     // KSDATAFORMAT_SUBTYPE_PCM ends with 01 00 10 00 ...
                     // The format is typically 32-bit float for loopback
-                    bits_per_sample == 32  // Assume 32-bit is float in loopback
+                    bits_per_sample == 32 // Assume 32-bit is float in loopback
                 } else {
-                    format_tag == 3  // WAVE_FORMAT_IEEE_FLOAT
+                    format_tag == 3 // WAVE_FORMAT_IEEE_FLOAT
                 };
 
                 tracing::info!(
@@ -156,7 +149,11 @@ pub mod windows_loopback {
                 audio_client.Start()?;
 
                 let is_32bit = bits_per_sample == 32;
-                tracing::info!("Recording with: {} bit, {}", bits_per_sample, if is_float { "float" } else { "int" });
+                tracing::info!(
+                    "Recording with: {} bit, {}",
+                    bits_per_sample,
+                    if is_float { "float" } else { "int" }
+                );
 
                 // Recording loop
                 while is_recording.load(Ordering::Relaxed) {
@@ -212,7 +209,8 @@ pub mod windows_loopback {
                                     // Convert and write to 16-bit
                                     if let Some(writer) = writer.as_mut() {
                                         for &sample in samples {
-                                            let sample_i16 = (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
+                                            let sample_i16 =
+                                                (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
                                             let _ = writer.write_sample(sample_i16);
                                         }
                                     }
@@ -226,7 +224,8 @@ pub mod windows_loopback {
                                     // Detect audio
                                     if !has_audio.load(Ordering::Relaxed) {
                                         let rms = calculate_rms_i32(samples);
-                                        if rms > 100000.0 {  // Adjusted threshold for 32-bit
+                                        if rms > 100000.0 {
+                                            // Adjusted threshold for 32-bit
                                             has_audio.store(true, Ordering::Relaxed);
                                             tracing::info!("Audio detected! Level: {:.2}", rms);
                                         }
@@ -266,7 +265,11 @@ pub mod windows_loopback {
                                         }
                                     }
                                 } else {
-                                    tracing::warn!("Unsupported audio format: {} bits, float={}", bits_per_sample, is_float);
+                                    tracing::warn!(
+                                        "Unsupported audio format: {} bits, float={}",
+                                        bits_per_sample,
+                                        is_float
+                                    );
                                 }
                             }
                         }

@@ -19,9 +19,7 @@ pub async fn execute(session_id: Option<String>, config: RecorderConfig) -> Resu
     };
 
     // Create stop signal
-    let signal_path = config
-        .signals_dir
-        .join(format!("{}.stop", target_session));
+    let signal_path = config.signals_dir.join(format!("{}.stop", target_session));
     std::fs::write(&signal_path, "")
         .with_context(|| format!("Failed to create stop signal file: {:?}", signal_path))?;
 
