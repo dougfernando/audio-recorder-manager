@@ -796,14 +796,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.3);
+    box-shadow: var(--shadow-sm);
     transition: all 0.2s ease;
     flex-shrink: 0;
   }
 
   .btn-play:hover {
     background: var(--accent-secondary);
-    box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4);
+    box-shadow: var(--shadow-md);
     transform: scale(1.05);
   }
 
@@ -958,8 +958,8 @@
   /* Transcript Preview Card */
   .transcript-preview-card {
     padding: var(--spacing-lg);
-    background: linear-gradient(135deg, rgba(0, 103, 192, 0.05) 0%, rgba(0, 103, 192, 0.02) 100%);
-    border: 2px solid rgba(0, 103, 192, 0.2);
+    background: linear-gradient(135deg, rgba(91, 157, 255, 0.10) 0%, rgba(91, 157, 255, 0.04) 100%);
+    border: 1px solid rgba(91, 157, 255, 0.3);
   }
 
   .transcript-preview-content {
@@ -975,12 +975,12 @@
     width: 56px;
     height: 56px;
     border-radius: var(--corner-radius-medium);
-    background: linear-gradient(135deg, var(--accent-default) 0%, var(--accent-secondary) 100%);
+    background: var(--gradient-primary);
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    box-shadow: 0 4px 12px rgba(0, 103, 192, 0.2);
+    box-shadow: var(--shadow-sm);
   }
 
   .transcript-preview-text {

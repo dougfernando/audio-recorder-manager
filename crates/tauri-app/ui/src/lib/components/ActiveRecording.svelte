@@ -418,13 +418,13 @@
     font-family: 'Consolas', 'Monaco', monospace;
   }
 
-  /* Timer Card - Large & Monospace */
+  /* Timer Card - Balanced & Readable */
   .timer-card {
     background: var(--bg-surface);
     border: 2px solid var(--border-subtle);
     border-radius: var(--radius-lg);
-    padding: var(--spacing-xxxl);
-    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-xxl);
+    margin-bottom: var(--spacing-lg);
     text-align: center;
     position: relative;
     overflow: hidden;
@@ -444,10 +444,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--spacing-lg);
-    font-size: 72px;
+    gap: var(--spacing-md);
+    font-size: 48px;
     font-weight: 700;
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: var(--spacing-lg);
     font-family: 'IBM Plex Mono', monospace;
     line-height: 1;
   }
@@ -486,11 +486,11 @@
   }
 
   .progress-bar {
-    height: 8px;
+    height: 6px;
     background: var(--bg-elevated);
-    border-radius: 4px;
+    border-radius: 3px;
     overflow: hidden;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
     position: relative;
     border: 1px solid var(--border-subtle);
   }
@@ -535,18 +535,21 @@
   .channels-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--spacing-lg);
-    margin-bottom: var(--spacing-xl);
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
   }
 
   .channel-card {
     background: var(--gradient-surface);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-xl);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
     border: 2px solid var(--border-subtle);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
   }
 
   .channel-card::before {
@@ -576,14 +579,15 @@
   }
 
   .channel-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: var(--radius-lg);
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
     box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
   }
 
   .channel-icon.system {
@@ -594,6 +598,12 @@
   .channel-icon.mic {
     background: linear-gradient(135deg, var(--accent-magenta) 0%, var(--rec-active) 100%);
     color: white;
+  }
+
+  .channel-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
   }
 
   .channel-header {
@@ -632,19 +642,20 @@
     align-items: center;
     gap: 6px;
     font-family: 'Consolas', 'Monaco', monospace;
-    margin-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
   }
 
   .channel-stats svg {
     opacity: 0.5;
+    flex-shrink: 0;
   }
 
   .frames-count {
     font-weight: 600;
-    font-size: 18px;
+    font-size: 16px;
     color: var(--accent-default);
     transition: all 0.3s ease;
-    min-width: 80px;
+    min-width: 70px;
     text-align: left;
   }
 
@@ -662,13 +673,14 @@
   .waveform {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 3px;
-    height: 32px;
+    height: 28px;
+    margin-top: auto;
   }
 
   .bar {
-    width: 4px;
+    width: 3px;
     background: linear-gradient(180deg, var(--success), var(--success) 50%, transparent 50%);
     border-radius: 2px;
     animation: wave 1s ease-in-out infinite;
@@ -677,10 +689,10 @@
 
   @keyframes wave {
     0%, 100% {
-      height: 8px;
+      height: 6px;
     }
     50% {
-      height: 32px;
+      height: 28px;
     }
   }
 
