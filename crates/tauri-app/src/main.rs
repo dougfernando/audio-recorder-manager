@@ -17,7 +17,7 @@ use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watche
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Mutex;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -521,7 +521,7 @@ async fn delete_recording(file_path: String) -> Result<String, String> {
 /// Rename a recording file
 #[tauri::command]
 async fn rename_recording(old_path: String, new_filename: String) -> Result<RecordingFile, String> {
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     let old_path = Path::new(&old_path);
 
@@ -801,14 +801,24 @@ async fn pick_folder(
 /// Start monitoring audio input levels
 #[tauri::command]
 async fn start_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
-    let mut monitor = state
-        .audio_monitor
-        .lock()
-        .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+    // Check if we need to clean up existing monitor
+    let needs_cleanup = {
+        let monitor = state
+            .audio_monitor
+            .lock()
+            .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+        monitor.is_some()
+    };
 
     // Stop existing monitor if any
-    if monitor.is_some() {
-        *monitor = None;
+    if needs_cleanup {
+        {
+            let mut monitor = state
+                .audio_monitor
+                .lock()
+                .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+            *monitor = None;
+        }
         // Give it a moment to clean up
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
@@ -817,7 +827,13 @@ async fn start_audio_monitor(state: State<'_, AppState>) -> Result<(), String> {
     let new_monitor =
         AudioLevelMonitor::new().map_err(|e| format!("Failed to start audio monitor: {}", e))?;
 
-    *monitor = Some(new_monitor);
+    {
+        let mut monitor = state
+            .audio_monitor
+            .lock()
+            .map_err(|e| format!("Failed to lock audio_monitor mutex: {}", e))?;
+        *monitor = Some(new_monitor);
+    }
     tracing::info!("Audio level monitor started");
 
     Ok(())
@@ -1248,14 +1264,13 @@ fn main() {
 
             // Handle window close event to minimize to tray instead of exiting
             if let Some(window) = app.get_webview_window("main") {
+                let window_clone = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         // Prevent default close behavior
                         api.prevent_close();
                         // Hide window instead
-                        if let Some(window) = api.window().app_handle().get_webview_window("main") {
-                            let _ = window.hide();
-                        }
+                        let _ = window_clone.hide();
                     }
                 });
             }

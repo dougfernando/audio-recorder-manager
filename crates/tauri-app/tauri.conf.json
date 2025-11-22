@@ -51,7 +51,7 @@
             "core:default",
             "dialog:default",
             "shell:default",
-            "tray:default"
+            "core:tray:default"
           ]
         }
       ]
