@@ -485,6 +485,38 @@ async fn open_recording(file_path: String) -> Result<String, String> {
     Ok(format!("Opened: {}", file_path))
 }
 
+/// Open the folder containing a recording file
+#[tauri::command]
+async fn open_folder(file_path: String) -> Result<String, String> {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+
+    // Get the parent directory
+    let folder = if path.is_dir() {
+        path
+    } else {
+        path.parent().ok_or_else(|| "Failed to get parent directory".to_string())?
+    };
+
+    // Open the folder
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("explorer");
+        cmd.arg(folder);
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("Opening folders is only supported on Windows".to_string());
+    }
+
+    Ok(format!("Opened folder: {}", folder.display()))
+}
+
 /// Delete a recording file
 #[tauri::command]
 async fn delete_recording(file_path: String) -> Result<String, String> {
@@ -754,6 +786,12 @@ async fn get_transcription_status(session_id: String) -> Result<Option<serde_jso
             tracing::error!(error = %e, session_id = %session_id, "Failed to read transcription status");
             e.to_string()
         })
+}
+
+/// Get transcription progress for a session (alias for get_transcription_status)
+#[tauri::command]
+async fn get_transcription_progress(session_id: String) -> Result<Option<serde_json::Value>, String> {
+    get_transcription_status(session_id).await
 }
 
 /// Load recorder configuration (paths for recordings and transcriptions)
@@ -1295,6 +1333,7 @@ fn main() {
         get_recording,
         get_active_sessions,
         open_recording,
+        open_folder,
         delete_recording,
         rename_recording,
         load_transcription_config,
@@ -1304,6 +1343,7 @@ fn main() {
         check_transcript_exists,
         get_transcript_path,
         get_transcription_status,
+        get_transcription_progress,
         load_recorder_config,
         save_recorder_config,
         pick_folder,

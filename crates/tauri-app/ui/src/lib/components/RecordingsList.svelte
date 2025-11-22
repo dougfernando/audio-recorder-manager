@@ -178,7 +178,8 @@
     const mdPath = transcriptPath[recording.filename] || recording.path.replace(/\.(wav|m4a)$/i, '.md');
     viewingTranscript = {
       path: mdPath,
-      name: recording.filename
+      name: recording.filename,
+      recordingPath: recording.path
     };
   }
 
@@ -367,40 +368,43 @@
                   </svg>
                 </button>
 
-                <button
-                  class="action-btn {isTranscribing[recording.filename] ? 'loading' : ''}"
-                  on:click|stopPropagation={() => transcribeRecording(recording)}
-                  disabled={isTranscribing[recording.filename]}
-                  title="Transcribe recording"
-                  aria-label="Transcribe recording"
-                >
-                  {#if isTranscribing[recording.filename]}
-                    <svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                    </svg>
-                  {:else}
+                {#if transcriptPath[recording.filename]}
+                  <!-- View Transcript Button -->
+                  <button
+                    class="action-btn has-transcript"
+                    on:click|stopPropagation={() => viewTranscript(recording)}
+                    title="View transcript"
+                    aria-label="View transcript"
+                  >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                      <line x1="10" y1="9" x2="8" y2="9"/>
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
                     </svg>
-                  {/if}
-                </button>
-
-                <button
-                  class="action-btn {transcriptPath[recording.filename] ? 'has-transcript' : ''}"
-                  on:click|stopPropagation={() => viewTranscript(recording)}
-                  disabled={!transcriptPath[recording.filename]}
-                  title="View transcript"
-                  aria-label="View transcript"
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
+                  </button>
+                {:else}
+                  <!-- Transcribe Button -->
+                  <button
+                    class="action-btn {isTranscribing[recording.filename] ? 'loading' : ''}"
+                    on:click|stopPropagation={() => transcribeRecording(recording)}
+                    disabled={isTranscribing[recording.filename]}
+                    title="Transcribe recording"
+                    aria-label="Transcribe recording"
+                  >
+                    {#if isTranscribing[recording.filename]}
+                      <svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                      </svg>
+                    {:else}
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <line x1="10" y1="9" x2="8" y2="9"/>
+                      </svg>
+                    {/if}
+                  </button>
+                {/if}
 
                 <button
                   class="action-btn"
@@ -489,7 +493,12 @@
   <TranscriptViewer
     transcriptPath={viewingTranscript.path}
     recordingName={viewingTranscript.name}
+    recordingPath={viewingTranscript.recordingPath}
     onClose={closeTranscriptViewer}
+    onTranscribed={async () => {
+      await loadRecordings();
+      await checkForTranscripts();
+    }}
   />
 {/if}
 

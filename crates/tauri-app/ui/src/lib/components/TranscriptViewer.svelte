@@ -1,17 +1,23 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
+  import { ask } from '@tauri-apps/plugin-dialog';
   import { onMount } from 'svelte';
   import { marked } from 'marked';
 
   export let transcriptPath = '';
   export let recordingName = '';
+  export let recordingPath = ''; // Audio file path for re-transcription
   export let onClose = () => {};
+  export let onTranscribed = null; // Optional callback after re-transcription
 
   let transcriptContent = '';
   let renderedHtml = '';
   let isLoading = true;
   let errorMessage = '';
   let viewMode = 'rendered'; // 'rendered' or 'raw'
+  let isTranscribing = false;
+  let transcriptionProgress = null;
+  let progressPollingInterval = null;
 
   onMount(async () => {
     await loadTranscript();
@@ -29,6 +35,74 @@
     } finally {
       isLoading = false;
     }
+  }
+
+  async function retranscribe() {
+    if (!recordingPath) {
+      alert('Recording path not provided. Cannot re-transcribe.');
+      return;
+    }
+
+    const confirmed = await ask(
+      'Are you sure you want to re-transcribe this recording? This will overwrite the existing transcript.',
+      {
+        title: 'Re-transcribe Recording',
+        type: 'warning'
+      }
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const sessionId = `transcribe_${Date.now()}`;
+
+    try {
+      isTranscribing = true;
+      startProgressPolling(sessionId);
+
+      const result = await invoke('transcribe_recording', {
+        filePath: recordingPath,
+        sessionId: sessionId,
+      });
+
+      console.log('Re-transcription complete:', result);
+
+      // Reload the transcript
+      await loadTranscript();
+
+      // Notify parent if callback provided
+      if (onTranscribed) {
+        onTranscribed(result);
+      }
+    } catch (error) {
+      console.error('Failed to re-transcribe:', error);
+      alert(`Re-transcription failed: ${error}`);
+    } finally {
+      isTranscribing = false;
+      stopProgressPolling();
+    }
+  }
+
+  function startProgressPolling(sessionId) {
+    progressPollingInterval = setInterval(async () => {
+      try {
+        const progress = await invoke('get_transcription_progress', { sessionId });
+        if (progress) {
+          transcriptionProgress = progress;
+        }
+      } catch (error) {
+        console.error('Failed to get progress:', error);
+      }
+    }, 500);
+  }
+
+  function stopProgressPolling() {
+    if (progressPollingInterval) {
+      clearInterval(progressPollingInterval);
+      progressPollingInterval = null;
+    }
+    transcriptionProgress = null;
   }
 
   async function openInEditor() {
@@ -90,6 +164,24 @@
             Markdown
           </button>
         </div>
+        {#if recordingPath}
+          <button
+            class="btn btn-secondary btn-sm"
+            on:click={retranscribe}
+            disabled={isTranscribing}
+            title="Re-transcribe recording"
+          >
+            {#if isTranscribing}
+              <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+            {:else}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"/>
+              </svg>
+            {/if}
+          </button>
+        {/if}
         <button class="btn btn-secondary btn-sm" on:click={openInEditor} title="Open in external editor">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -120,7 +212,20 @@
     </div>
 
     <div class="viewer-content">
-      {#if isLoading}
+      {#if isTranscribing}
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Re-transcribing...</p>
+          {#if transcriptionProgress}
+            <div class="progress-info">
+              <p class="progress-step">{transcriptionProgress.step}</p>
+              {#if transcriptionProgress.message}
+                <p class="progress-message">{transcriptionProgress.message}</p>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {:else if isLoading}
         <div class="loading-state">
           <div class="spinner"></div>
           <p>Loading transcript...</p>
@@ -258,8 +363,29 @@
     animation: spin 0.8s linear infinite;
   }
 
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  .progress-info {
+    margin-top: var(--spacing-md);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .progress-step {
+    color: var(--text-primary);
+    font-weight: 500;
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .progress-message {
+    color: var(--text-tertiary);
+    font-size: 12px;
   }
 
   .error-state {

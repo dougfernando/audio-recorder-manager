@@ -41,11 +41,19 @@
   // Initialize audio source when recording changes
   function initializeAudioSrc() {
     if (recording && recording.path) {
-      audioSrc = convertFileSrc(recording.path);
+      const newSrc = convertFileSrc(recording.path);
+      console.log('Initializing audio source:', newSrc);
+      console.log('Original path:', recording.path);
+      audioSrc = newSrc;
       // Reset player state
       isPlaying = false;
       currentTime = 0;
       duration = 0;
+
+      // Force reload of audio element
+      if (audioElement) {
+        audioElement.load();
+      }
     }
   }
 
@@ -73,13 +81,17 @@
   }
 
   // Audio player functions
-  function togglePlayPause() {
+  async function togglePlayPause() {
     if (!audioElement) return;
 
-    if (isPlaying) {
-      audioElement.pause();
-    } else {
-      audioElement.play();
+    try {
+      if (isPlaying) {
+        audioElement.pause();
+      } else {
+        await audioElement.play();
+      }
+    } catch (error) {
+      console.error('Error playing audio:', error);
     }
   }
 
@@ -96,12 +108,18 @@
   function handleLoadedMetadata() {
     if (audioElement) {
       duration = audioElement.duration;
+      console.log('Audio duration loaded:', duration);
     }
   }
 
   function handleEnded() {
     isPlaying = false;
     currentTime = 0;
+  }
+
+  function handleError(event) {
+    console.error('Audio loading error:', event);
+    console.error('Audio element error:', audioElement?.error);
   }
 
   function handleSeek(event) {
@@ -334,13 +352,20 @@
     if (transcriptPath) {
       viewingTranscript = {
         path: transcriptPath,
-        name: recording.filename
+        name: recording.filename,
+        recordingPath: recording.path
       };
     }
   }
 
   function closeTranscriptViewer() {
     viewingTranscript = null;
+  }
+
+  async function handleTranscribed() {
+    // Reload transcript after re-transcription
+    await checkForTranscript();
+    await loadTranscriptPreview();
   }
 
   async function openInEditor() {
@@ -404,6 +429,7 @@
       on:timeupdate={handleTimeUpdate}
       on:loadedmetadata={handleLoadedMetadata}
       on:ended={handleEnded}
+      on:error={handleError}
       preload="metadata"
     ></audio>
 
@@ -655,7 +681,9 @@
   <TranscriptViewer
     transcriptPath={viewingTranscript.path}
     recordingName={viewingTranscript.name}
+    recordingPath={viewingTranscript.recordingPath}
     onClose={closeTranscriptViewer}
+    onTranscribed={handleTranscribed}
   />
 {/if}
 
