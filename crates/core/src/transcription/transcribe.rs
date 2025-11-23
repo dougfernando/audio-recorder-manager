@@ -269,10 +269,18 @@ pub async fn transcribe_audio(
         bail!("File upload failed: {}", error_text);
     }
 
-    let upload_result: FileUploadResponse = upload_response
-        .json()
-        .await
-        .context("Failed to parse upload response")?;
+    let upload_text = upload_response.text().await?;
+    let upload_result: FileUploadResponse = serde_json::from_str(&upload_text).map_err(|e| {
+        tracing::error!(
+            "Failed to parse upload response. Parse error: {}",
+            e
+        );
+        tracing::error!(
+            "Upload response text that failed to parse: {}",
+            &upload_text[..upload_text.len().min(1000)]
+        );
+        anyhow::anyhow!("Failed to parse upload response: {}. See logs for details.", e)
+    })?;
 
     tracing::info!(
         "File uploaded successfully: {} (state: {})",
@@ -312,6 +320,10 @@ pub async fn transcribe_audio(
                 file_info.state = state.to_string();
                 tracing::debug!("File state: {}", state);
             }
+            // Log any error information from the response
+            if let Some(error) = response_json["file"]["error"].as_object() {
+                tracing::error!("File processing error details: {:?}", error);
+            }
         }
         attempts += 1;
     }
@@ -320,9 +332,16 @@ pub async fn transcribe_audio(
 
     if file_info.state == "FAILED" {
         tracing::error!(
-            "File processing failed after {:.2}s",
-            processing_duration.as_secs_f64()
+            "File processing failed after {:.2}s. File name: {}",
+            processing_duration.as_secs_f64(),
+            file_info.name
         );
+        // Try to get more error details
+        let error_response = client.get(&get_file_url).send().await?;
+        if error_response.status().is_success() {
+            let error_json: serde_json::Value = error_response.json().await?;
+            tracing::error!("Full file status response: {}", serde_json::to_string_pretty(&error_json).unwrap_or_else(|_| "Failed to serialize".to_string()));
+        }
         bail!("File processing failed");
     }
 
@@ -419,15 +438,44 @@ pub async fn transcribe_audio(
         &response_text[..response_text.len().min(500)]
     );
 
-    let result: GenerateContentResponse =
-        serde_json::from_str(&response_text).context("Failed to parse generation response")?;
+    let result: GenerateContentResponse = serde_json::from_str(&response_text).map_err(|e| {
+        tracing::error!(
+            "Failed to parse generation response. Parse error: {}",
+            e
+        );
+        tracing::error!(
+            "Full response text that failed to parse (first 2000 chars): {}",
+            &response_text[..response_text.len().min(2000)]
+        );
+        if response_text.len() > 2000 {
+            tracing::error!(
+                "Response was truncated. Total length: {} chars",
+                response_text.len()
+            );
+        }
+        anyhow::anyhow!("Failed to parse generation response: {}. See logs for full response details.", e)
+    })?;
 
     let transcript = result
         .candidates
         .first()
         .and_then(|c| c.content.parts.first())
         .map(|p| p.text.clone())
-        .context("No transcript in response")?;
+        .ok_or_else(|| {
+            tracing::error!("No transcript text found in API response");
+            tracing::error!("Number of candidates: {}", result.candidates.len());
+            if let Some(candidate) = result.candidates.first() {
+                tracing::error!(
+                    "First candidate has {} parts",
+                    candidate.content.parts.len()
+                );
+                if let Some(part) = candidate.content.parts.first() {
+                    tracing::error!("First part text length: {}", part.text.len());
+                    tracing::error!("First part text preview: {:?}", &part.text[..part.text.len().min(200)]);
+                }
+            }
+            anyhow::anyhow!("No transcript in response")
+        })?;
 
     tracing::info!(
         "Transcription completed in {:.2}s, length: {} chars ({} words approx)",
