@@ -116,7 +116,12 @@ pub fn init_cli_logging(
 
     // Layer 1: File output with daily rotation
     if log_to_file {
-        let file_appender = tracing_appender::rolling::daily(&log_dir, "cli.log");
+        let file_appender = tracing_appender::rolling::RollingFileAppender::builder()
+            .rotation(tracing_appender::rolling::Rotation::DAILY)
+            .filename_prefix("")
+            .filename_suffix("-cli.log")
+            .build(&log_dir)
+            .expect("Failed to create rolling file appender");
         let file_layer = tracing_subscriber::fmt::layer()
             .with_writer(file_appender)
             .with_ansi(false)
@@ -176,7 +181,12 @@ pub fn init_tauri_logging(
     let mut layers = Vec::new();
 
     // Layer 1: File output with daily rotation (compact format)
-    let file_appender = tracing_appender::rolling::daily(&log_dir, "app.log");
+    let file_appender = tracing_appender::rolling::RollingFileAppender::builder()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("")
+        .filename_suffix("-app.log")
+        .build(&log_dir)
+        .expect("Failed to create rolling file appender");
     let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(file_appender)
         .with_ansi(false)

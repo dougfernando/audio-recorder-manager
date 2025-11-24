@@ -216,8 +216,8 @@ Recovery output example:
     "recovered": [
       {
         "session_id": "rec-20250109_120000",
-        "output_file": "recording_20250109_120000.wav",
-        "output_path": "storage/recordings/recording_20250109_120000.wav"
+        "output_file": "2025-01-09-12-00-recording.wav",
+        "output_path": "storage/recordings/2025-01-09-12-00-recording.wav"
       }
     ]
   }
@@ -246,8 +246,8 @@ All commands return JSON for easy integration with frontends:
   "status": "success",
   "data": {
     "session_id": "rec-20250107_123456",
-    "file_path": "storage/recordings/recording_20250107_123456.wav",
-    "filename": "recording_20250107_123456.wav",
+    "file_path": "storage/recordings/2025-01-07-12-34-recording.wav",
+    "filename": "2025-01-07-12-34-recording.wav",
     "duration": 30,
     "message": "Recording started successfully"
   }
@@ -262,7 +262,7 @@ Recording status is written to `storage/status/{session_id}.json` every second:
 {
   "status": "recording",
   "session_id": "rec-20250107_123456",
-  "filename": "recording_20250107_123456.wav",
+  "filename": "2025-01-07-12-34-recording.wav",
   "duration": 30,
   "elapsed": 15,
   "progress": 50,

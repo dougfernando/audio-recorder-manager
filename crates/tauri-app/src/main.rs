@@ -132,17 +132,19 @@ async fn start_recording(
     };
 
     // Start recording in background task
-    let session_id = chrono::Local::now().format("rec-%Y%m%d_%H%M%S").to_string();
+    let now = chrono::Local::now();
+    let session_id = now.format("rec-%Y%m%d_%H%M%S").to_string();
     let session_id_clone = session_id.clone();
     let session_id_clone2 = session_id.clone();
 
     // Get file path before moving config
+    let timestamp = now.format("%Y-%m-%d-%H-%M");
     let file_path = config
         .recordings_dir
-        .join(format!("recording_{}.{}", session_id, format))
+        .join(format!("{}-recording.{}", timestamp, format))
         .to_string_lossy()
         .to_string();
-    let filename = format!("recording_{}.{}", session_id_clone, format);
+    let filename = format!("{}-recording.{}", timestamp, format);
 
     // Add to active sessions
     {

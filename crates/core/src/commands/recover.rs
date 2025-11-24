@@ -204,7 +204,24 @@ async fn recover_recording(
     let quality = RecordingQuality::professional();
 
     // Create output filename based on timestamp
-    let output_filename = format!("recording_{}.wav", recording.timestamp);
+    // Convert old timestamp format (YYYYMMDD_HHMMSS) to new format (YYYY-MM-DD-HH-MM)
+    let formatted_timestamp = if recording.timestamp.len() == 15 && recording.timestamp.contains('_') {
+        // Old format: YYYYMMDD_HHMMSS -> YYYY-MM-DD-HH-MM
+        let parts: Vec<&str> = recording.timestamp.split('_').collect();
+        if parts.len() == 2 && parts[0].len() == 8 && parts[1].len() >= 4 {
+            let date = parts[0];
+            let time = parts[1];
+            format!("{}-{}-{}-{}-{}",
+                &date[0..4], &date[4..6], &date[6..8],
+                &time[0..2], &time[2..4]
+            )
+        } else {
+            recording.timestamp.clone()
+        }
+    } else {
+        recording.timestamp.clone()
+    };
+    let output_filename = format!("{}-recording.wav", formatted_timestamp);
     let output_path = config.recordings_dir.join(&output_filename);
 
     // Check if output already exists
