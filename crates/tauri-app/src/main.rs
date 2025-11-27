@@ -1113,6 +1113,25 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
                 }
             }
             "quit" => {
+                // Properly cleanup resources before exiting to avoid Chrome window class errors
+
+                // Stop audio monitor if running
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Ok(mut monitor) = state.audio_monitor.lock() {
+                        *monitor = None;
+                        tracing::info!("Audio monitor stopped during app quit");
+                    }
+                }
+
+                // Destroy the window properly instead of just closing
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.destroy();
+                }
+
+                // Give resources a moment to clean up
+                std::thread::sleep(std::time::Duration::from_millis(100));
+
+                tracing::info!("Application quitting via tray menu");
                 app.exit(0);
             }
             _ => {}
@@ -1280,7 +1299,6 @@ fn main() {
         app_start.elapsed()
     );
     let builder = builder.setup({
-        let app_start_clone = app_start.clone();
         let splash_opt = splash;
         move |app| {
 
