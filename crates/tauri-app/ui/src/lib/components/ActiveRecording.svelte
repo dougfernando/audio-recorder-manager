@@ -6,10 +6,13 @@
     currentSession,
     recordingStatus,
     formatTime,
+    formatFileSize,
   } from '../stores';
 
   let isStopping = false;
   let pollInterval;
+  let processingStepStartTime = null;
+  let previousStep = null;
 
   // Reactive statement: start/stop polling based on recording state
   $: {
@@ -30,15 +33,28 @@
           console.log('Polled status:', status);
           if (status) {
             recordingStatus.set(status);
-            // If completed, stop recording state
+
+            // Track step transitions for minimum display time
+            if (status.status === 'processing' && status.step !== previousStep) {
+              processingStepStartTime = Date.now();
+              previousStep = status.step;
+            }
+
+            // If completed, ensure minimum display time before transitioning
             if (status.status === 'completed') {
+              const minDisplayTime = 800; // milliseconds
+              const elapsed = processingStepStartTime
+                ? Date.now() - processingStepStartTime
+                : minDisplayTime;
+              const remainingTime = Math.max(0, minDisplayTime - elapsed);
+
               setTimeout(() => {
                 isRecording.set(false);
                 currentSession.set(null);
                 if (pollInterval) {
                   clearInterval(pollInterval);
                 }
-              }, 5000); // Show completion for 5 seconds
+              }, remainingTime + 5000); // +5000 for the existing 5s completion display
             }
           }
         } catch (error) {
@@ -97,17 +113,83 @@
 </script>
 
 {#if $isRecording && $recordingStatus}
-  <!-- Processing Status Header -->
+  <!-- Enhanced Processing Status UI -->
   {#if $recordingStatus.status === 'processing'}
-    <div class="processing-header">
-      <div class="processing-indicator">
-        <div class="spinner"></div>
-        <span class="processing-text">PROCESSING</span>
+    <div class="processing-header-v2">
+      <div class="processing-pulse-border"></div>
+
+      <div class="processing-content">
+        <!-- Step Indicator Badge -->
+        <div class="step-indicator">
+          {#if $recordingStatus.step && $recordingStatus.total_steps}
+            <span class="step-number">STEP {$recordingStatus.step} OF {$recordingStatus.total_steps}</span>
+          {:else}
+            <span class="step-number">PROCESSING</span>
+          {/if}
+        </div>
+
+        <!-- Large Dual-Ring Spinner (64px) -->
+        <div class="spinner-large">
+          <div class="spinner-ring"></div>
+          <div class="spinner-ring-secondary"></div>
+        </div>
+
+        <!-- Processing Message -->
+        <div class="processing-title">
+          {$recordingStatus.message || 'Processing audio...'}
+        </div>
+
+        <!-- File Metadata -->
+        <div class="processing-metadata">
+          {#if $recordingStatus.duration_secs}
+            <span class="metadata-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
+              </svg>
+              {formatTime($recordingStatus.duration_secs)} duration
+            </span>
+          {/if}
+
+          {#if $recordingStatus.file_size_bytes}
+            <span class="metadata-item">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V9l-7-7zm4 18H7V4h5v5h5v11z"/>
+              </svg>
+              {formatFileSize($recordingStatus.file_size_bytes)}
+            </span>
+          {/if}
+
+          {#if $recordingStatus.processing_type}
+            <span class="metadata-item metadata-type">
+              {$recordingStatus.processing_type === 'merge' ? 'Merging Channels' : 'Format Conversion'}
+            </span>
+          {/if}
+        </div>
+
+        <!-- Progress Bar (Step-based or Indeterminate) -->
+        {#if $recordingStatus.step && $recordingStatus.total_steps}
+          <div class="processing-progress-bar">
+            <div
+              class="processing-progress-fill"
+              style="width: {($recordingStatus.step / $recordingStatus.total_steps) * 100}%"
+            >
+              <div class="processing-progress-shine"></div>
+            </div>
+          </div>
+          <div class="progress-percentage">
+            {Math.round(($recordingStatus.step / $recordingStatus.total_steps) * 100)}% Complete
+          </div>
+        {:else}
+          <div class="processing-progress-bar">
+            <div class="processing-progress-fill-indeterminate">
+              <div class="processing-progress-shine"></div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Session ID (small) -->
+        <div class="session-id-small">{$recordingStatus.session_id || 'N/A'}</div>
       </div>
-      <span class="session-id">{$recordingStatus.session_id || 'N/A'}</span>
-    </div>
-    <div class="processing-message">
-      {$recordingStatus.message || 'Processing audio...'}
     </div>
   {:else if $recordingStatus.status === 'completed'}
     <!-- Completion Header -->
@@ -726,53 +808,218 @@
     color: var(--text-secondary);
   }
 
-  /* Processing Header */
-  .processing-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-lg);
-    background: linear-gradient(135deg, var(--warning) 0%, #F59E0B 100%);
-    border-radius: var(--corner-radius-medium) var(--corner-radius-medium) 0 0;
-    margin: calc(var(--spacing-lg) * -1) calc(var(--spacing-lg) * -1) var(--spacing-lg);
+  /* Enhanced Processing UI - Prominent & Informative */
+  .processing-header-v2 {
+    position: relative;
+    background: var(--gradient-surface);
+    border: 3px solid var(--warning);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xxl);
+    margin-bottom: var(--spacing-lg);
+    overflow: hidden;
   }
 
-  .processing-indicator {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
+  /* Pulsing Border Animation */
+  .processing-pulse-border {
+    position: absolute;
+    inset: -3px;
+    border: 3px solid var(--warning);
+    border-radius: var(--radius-lg);
+    opacity: 0.5;
+    animation: borderPulse 2s ease-in-out infinite;
+    pointer-events: none;
   }
 
-  .spinner {
-    width: 16px;
-    height: 16px;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    border-top-color: white;
+  @keyframes borderPulse {
+    0%, 100% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.01);
+    }
+  }
+
+  .processing-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-lg);
+  }
+
+  /* Step Indicator */
+  .step-indicator {
+    width: 100%;
+    text-align: center;
+  }
+
+  .step-number {
+    display: inline-block;
+    padding: var(--spacing-sm) var(--spacing-xl);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--warning);
+  }
+
+  /* Large Animated Spinner */
+  .spinner-large {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    margin: var(--spacing-md) 0;
+  }
+
+  .spinner-ring {
+    position: absolute;
+    inset: 0;
+    border: 4px solid transparent;
+    border-top-color: var(--warning);
+    border-right-color: var(--warning);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: spinLarge 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
   }
 
-  @keyframes spin {
-    to {
+  .spinner-ring-secondary {
+    position: absolute;
+    inset: 8px;
+    border: 3px solid transparent;
+    border-bottom-color: var(--accent-yellow);
+    border-left-color: var(--accent-yellow);
+    border-radius: 50%;
+    animation: spinLarge 1.5s cubic-bezier(0.5, 0, 0.5, 1) infinite reverse;
+    opacity: 0.6;
+  }
+
+  @keyframes spinLarge {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
       transform: rotate(360deg);
     }
   }
 
-  .processing-text {
-    color: white;
-    font-size: 16px;
+  /* Processing Title */
+  .processing-title {
+    font-size: 20px;
     font-weight: 700;
-    letter-spacing: 1px;
+    color: var(--text-primary);
+    text-align: center;
+    line-height: 1.4;
   }
 
-  .processing-message {
-    padding: var(--spacing-lg);
-    background-color: var(--warning-bg);
+  /* File Metadata */
+  .processing-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .metadata-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .metadata-item svg {
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+
+  .metadata-type {
+    padding: 4px var(--spacing-sm);
+    background: var(--warning-bg);
     color: var(--warning);
-    border-radius: var(--corner-radius-medium);
-    margin-bottom: var(--spacing-lg);
-    text-align: center;
+    border-radius: var(--radius-sm);
     font-weight: 600;
+  }
+
+  /* Progress Bar - Step Based */
+  .processing-progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+  }
+
+  .processing-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 16px rgba(255, 184, 77, 0.4);
+  }
+
+  .processing-progress-fill-indeterminate {
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    position: absolute;
+    animation: indeterminateProgress 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    box-shadow: 0 0 16px rgba(255, 184, 77, 0.4);
+  }
+
+  @keyframes indeterminateProgress {
+    0% {
+      left: -40%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+
+  .processing-progress-shine {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.3) 50%,
+      transparent 100%
+    );
+    animation: progressShine 2s linear infinite;
+  }
+
+  @keyframes progressShine {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(200%);
+    }
+  }
+
+  .progress-percentage {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--warning);
+    margin-top: var(--spacing-sm);
+  }
+
+  .session-id-small {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-family: 'Consolas', 'Monaco', monospace;
+    opacity: 0.7;
   }
 
   /* Completion Header */

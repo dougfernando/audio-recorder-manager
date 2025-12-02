@@ -245,10 +245,16 @@ async fn record_worker(
             async {
                 output.prefixed("Merging", "Merging audio channels...");
 
-                // Write processing status
-                let _ = observer.write_processing_status(
+                // Write processing status with enhanced metadata
+                let total_steps = if matches!(session.format, AudioFormat::M4a) { 2 } else { 1 };
+                let _ = observer.write_processing_status_v2(
                     session.id.as_str(),
-                    "Merging audio channels..."
+                    "Merging audio channels...",
+                    Some(1),  // Step 1
+                    Some(total_steps),
+                    Some("merge"),
+                    None,  // file_size_bytes not known yet
+                    Some(session.duration.to_api_value() as u64),
                 );
 
                 // Wait a moment for files to be fully written
@@ -344,10 +350,16 @@ async fn record_worker(
         tracing::info!("Converting WAV to M4A...");
         output.prefixed("Converting", "WAV to M4A format...");
 
-        // Write processing status
-        let _ = observer.write_processing_status(
+        // Write processing status with enhanced metadata
+        let file_size = std::fs::metadata(&filepath).map(|m| m.len()).unwrap_or(0);
+        let _ = observer.write_processing_status_v2(
             session.id.as_str(),
-            "Converting to M4A format..."
+            "Converting to M4A format...",
+            Some(2),  // Step 2
+            Some(2),  // Total steps
+            Some("convert"),
+            Some(file_size),
+            Some(session.duration.to_api_value() as u64),
         );
 
         let m4a_path = filepath.with_extension("m4a");
