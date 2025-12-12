@@ -5,8 +5,11 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use chrono::Local;
 use tracing::Level;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
+use std::io::Write;
 
 /// Default number of days to keep log files
 const DEFAULT_LOG_RETENTION_DAYS: u64 = 7;
@@ -89,6 +92,88 @@ pub fn parse_log_level(level: &str) -> Option<Level> {
     }
 }
 
+/// Custom rolling daily file appender with custom naming pattern
+/// Creates files with pattern: `{base}-YYYY-MM-DD.log`
+struct CustomDailyRollingWriter {
+    directory: PathBuf,
+    base_name: String,
+    current_file: Arc<Mutex<std::fs::File>>,
+    current_date: Arc<Mutex<String>>,
+}
+
+impl CustomDailyRollingWriter {
+    fn new(directory: PathBuf, base_name: &str) -> std::io::Result<Self> {
+        let current_date = Local::now().format("%Y-%m-%d").to_string();
+        let filename = format!("{}-{}.log", base_name, current_date);
+        let file_path = directory.join(&filename);
+
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(file_path)?;
+
+        Ok(Self {
+            directory,
+            base_name: base_name.to_string(),
+            current_file: Arc::new(Mutex::new(file)),
+            current_date: Arc::new(Mutex::new(current_date)),
+        })
+    }
+
+    fn rotate_if_needed(&self) -> std::io::Result<()> {
+        let now_date = Local::now().format("%Y-%m-%d").to_string();
+        let mut current_date = self.current_date.lock().unwrap();
+
+        if *current_date != now_date {
+            // Date has changed, rotate the file
+            let filename = format!("{}-{}.log", self.base_name, now_date);
+            let file_path = self.directory.join(filename);
+            let new_file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(file_path)?;
+
+            let mut current_file = self.current_file.lock().unwrap();
+            *current_file = new_file;
+            *current_date = now_date;
+        }
+
+        Ok(())
+    }
+}
+
+/// Newtype wrapper to implement MakeWriter for CustomDailyRollingWriter
+struct DailyRollingAppender(Arc<CustomDailyRollingWriter>);
+
+/// Guard for writing to the custom rolling writer
+struct DailyRollingWriterGuard {
+    writer: Arc<CustomDailyRollingWriter>,
+}
+
+impl Write for DailyRollingWriterGuard {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.writer.rotate_if_needed()?;
+        let mut file = self.writer.current_file.lock().unwrap();
+        file.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        let mut file = self.writer.current_file.lock().unwrap();
+        file.flush()
+    }
+}
+
+/// MakeWriter implementation for DailyRollingAppender
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for DailyRollingAppender {
+    type Writer = DailyRollingWriterGuard;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        DailyRollingWriterGuard {
+            writer: Arc::clone(&self.0),
+        }
+    }
+}
+
 /// Initialize dual-output logging for CLI applications
 ///
 /// Sets up logging to both file (with rotation) and terminal (stderr)
@@ -116,9 +201,10 @@ pub fn init_cli_logging(
 
     // Layer 1: File output with daily rotation
     if log_to_file {
-        let file_appender = tracing_appender::rolling::daily(&log_dir, "cli.log");
+        let file_appender = CustomDailyRollingWriter::new(log_dir.clone(), "cli")
+            .expect("Failed to create log file appender");
         let file_layer = tracing_subscriber::fmt::layer()
-            .with_writer(file_appender)
+            .with_writer(DailyRollingAppender(Arc::new(file_appender)))
             .with_ansi(false)
             .with_target(true)
             .with_thread_ids(true)
@@ -176,9 +262,10 @@ pub fn init_tauri_logging(
     let mut layers = Vec::new();
 
     // Layer 1: File output with daily rotation (compact format)
-    let file_appender = tracing_appender::rolling::daily(&log_dir, "app.log");
+    let file_appender = CustomDailyRollingWriter::new(log_dir.clone(), "app")
+        .expect("Failed to create log file appender");
     let file_layer = tracing_subscriber::fmt::layer()
-        .with_writer(file_appender)
+        .with_writer(DailyRollingAppender(Arc::new(file_appender)))
         .with_ansi(false)
         .with_target(true)
         .with_thread_ids(false)

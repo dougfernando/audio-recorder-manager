@@ -5,6 +5,7 @@ pub mod config;
 pub mod devices;
 pub mod domain;
 pub mod error;
+pub mod ffmpeg_encoder;
 pub mod logging;
 pub mod output;
 pub mod recorder;

@@ -402,50 +402,9 @@ impl RecordingHandle {
     }
 }
 
-/// Convert WAV file to M4A using FFmpeg
+/// Convert WAV file to M4A using FFmpeg with hardware acceleration and optimizations
 pub async fn convert_wav_to_m4a(wav_path: &PathBuf, m4a_path: &PathBuf) -> Result<()> {
-    use tokio::process::Command;
-
-    tracing::info!("Converting WAV to M4A: {:?} -> {:?}", wav_path, m4a_path);
-
-    // Check if FFmpeg is available
-    let mut ffmpeg_check = Command::new("ffmpeg");
-    ffmpeg_check.arg("-version");
-
-    #[cfg(windows)]
-    ffmpeg_check.creation_flags(0x08000000); // CREATE_NO_WINDOW
-
-    let check_result = ffmpeg_check.output().await;
-
-    if check_result.is_err() {
-        anyhow::bail!(
-            "FFmpeg is not installed or not in PATH. Please install FFmpeg to use M4A encoding."
-        );
-    }
-
-    // Convert using FFmpeg with AAC codec
-    let mut cmd = Command::new("ffmpeg");
-    cmd.arg("-i")
-        .arg(wav_path)
-        .arg("-c:a")
-        .arg("aac")
-        .arg("-b:a")
-        .arg("256k")
-        .arg("-y") // Overwrite output file
-        .arg(m4a_path);
-
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-
-    let output = cmd.output().await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("FFmpeg conversion failed: {}", stderr);
-    }
-
-    tracing::info!("Successfully converted to M4A");
-    Ok(())
+    crate::ffmpeg_encoder::convert_wav_to_m4a_optimized(wav_path, m4a_path).await
 }
 
 /// Merge two audio streams (loopback and microphone) into a single stereo WAV file
@@ -460,12 +419,22 @@ pub async fn merge_audio_streams_smart(
     quality: &RecordingQuality,
 ) -> Result<()> {
     use tokio::process::Command;
+    use std::time::Instant;
 
+    tracing::info!("═══════════════════════════════════════════════════════════");
+    tracing::info!("🎧 AUDIO MERGE PROCESS STARTED");
+    tracing::info!("═══════════════════════════════════════════════════════════");
+    tracing::info!("📊 Merge Configuration:");
     tracing::info!(
-        "Merging audio streams - Loopback: {}, Mic: {}",
-        loopback_has_audio,
-        mic_has_audio
+        "    • Loopback (System Audio): {}",
+        if loopback_has_audio { "✓ Present" } else { "✗ Silent" }
     );
+    tracing::info!(
+        "    • Microphone (User Audio):  {}",
+        if mic_has_audio { "✓ Present" } else { "✗ Silent" }
+    );
+    tracing::info!("    • Output Sample Rate:     {} Hz", quality.sample_rate);
+    tracing::info!("    • Output Channels:        {} (Stereo)", quality.channels);
 
     // Check if FFmpeg is available
     let mut ffmpeg_check = Command::new("ffmpeg");
@@ -496,25 +465,34 @@ pub async fn merge_audio_streams_smart(
     }
 
     // Determine merge strategy based on audio detection flags
+    tracing::info!("───────────────────────────────────────────────────────────");
+    tracing::info!("⏳ Starting merge operation...");
+
+    let start_time = Instant::now();
     let output = if loopback_has_audio && mic_has_audio {
         // Scenario A: Both have audio - Create dual-mono stereo (L=loopback, R=mic)
         // Convert mic mono to stereo first, then merge with amerge
-        tracing::info!("Merging both channels (dual-mono stereo)");
+        tracing::info!("📋 Merge Strategy: Dual-mono stereo (L=loopback, R=microphone)");
         setup_ffmpeg_command()
+            .arg("-hide_banner")
+            .arg("-loglevel").arg("error")
             .arg("-i").arg(loopback_wav)
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=stereo[left];[1:a]aformat=channel_layouts=mono,asplit=2[ml][mr];[left][ml][mr]amerge=inputs=3,pan=stereo|c0<c0+c2|c1<c1+c2[aout]")
             .arg("-map").arg("[aout]")
             .arg("-ar").arg(&target_sample_rate)
+            .arg("-threads").arg("auto")
             .arg("-y")
             .arg(output_wav)
             .output()
             .await?
     } else if loopback_has_audio && !mic_has_audio {
         // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
-        tracing::info!("Using loopback only (microphone was silent)");
+        tracing::info!("📋 Merge Strategy: Using loopback only (duplicate system audio to stereo)");
         setup_ffmpeg_command()
+            .arg("-hide_banner")
+            .arg("-loglevel").arg("error")
             .arg("-i")
             .arg(loopback_wav)
             .arg("-filter_complex")
@@ -523,27 +501,33 @@ pub async fn merge_audio_streams_smart(
             .arg("[aout]")
             .arg("-ar")
             .arg(&target_sample_rate)
+            .arg("-threads").arg("auto")
             .arg("-y")
             .arg(output_wav)
             .output()
             .await?
     } else if !loopback_has_audio && mic_has_audio {
         // Scenario C: Mic only - Convert mono to stereo (duplicate to both channels)
-        tracing::info!("Using microphone only (system audio was silent)");
+        tracing::info!("📋 Merge Strategy: Using microphone only (duplicate user audio to stereo)");
         setup_ffmpeg_command()
+            .arg("-hide_banner")
+            .arg("-loglevel").arg("error")
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=mono,asplit=2[l][r];[l][r]amerge=inputs=2,pan=stereo|c0=c0|c1=c1[aout]")
             .arg("-map").arg("[aout]")
             .arg("-ar").arg(&target_sample_rate)
+            .arg("-threads").arg("auto")
             .arg("-y")
             .arg(output_wav)
             .output()
             .await?
     } else {
         // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
-        tracing::info!("Both channels were silent, creating silent stereo file");
+        tracing::info!("📋 Merge Strategy: Both channels silent (creating silent stereo file)");
         setup_ffmpeg_command()
+            .arg("-hide_banner")
+            .arg("-loglevel").arg("error")
             .arg("-i")
             .arg(loopback_wav)
             .arg("-filter_complex")
@@ -552,11 +536,14 @@ pub async fn merge_audio_streams_smart(
             .arg("[aout]")
             .arg("-ar")
             .arg(&target_sample_rate)
+            .arg("-threads").arg("auto")
             .arg("-y")
             .arg(output_wav)
             .output()
             .await?
     };
+
+    let elapsed = start_time.elapsed();
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -573,6 +560,18 @@ pub async fn merge_audio_streams_smart(
         tracing::debug!("FFmpeg stderr: {}", ffmpeg_stderr);
     }
 
-    tracing::info!("Successfully merged audio streams");
+    // Get output file information
+    let output_metadata = std::fs::metadata(output_wav)?;
+    let output_size_mb = output_metadata.len() as f64 / (1024.0 * 1024.0);
+
+    tracing::info!("───────────────────────────────────────────────────────────");
+    tracing::info!("✓ AUDIO MERGE COMPLETED SUCCESSFULLY");
+    tracing::info!("═══════════════════════════════════════════════════════════");
+    tracing::info!("📊 Merge Results:");
+    tracing::info!("    • Output file:     {:?}", output_wav.file_name().unwrap_or_default());
+    tracing::info!("    • Output size:     {:.2} MB", output_size_mb);
+    tracing::info!("    • Time elapsed:    {:.2}s", elapsed.as_secs_f64());
+    tracing::info!("    • Sample rate:     {} Hz", quality.sample_rate);
+    tracing::info!("═══════════════════════════════════════════════════════════");
     Ok(())
 }
