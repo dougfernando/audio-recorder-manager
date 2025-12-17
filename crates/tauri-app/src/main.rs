@@ -6,7 +6,7 @@ mod splash_screen;
 
 use audio_recorder_manager_core::{
     audio_monitor::windows_monitor::AudioLevelMonitor,
-    commands::{record, recover, status, stop},
+    commands::{cancel, record, recover, status, stop},
     config::RecorderConfig,
     domain::{AudioFormat, RecordingDuration},
     logging,
@@ -214,6 +214,46 @@ async fn stop_recording(
         duration: None,
         quality: None,
         message: "Recording stopped successfully".to_string(),
+        error: None,
+    })
+}
+
+/// Cancel an active recording without processing
+#[tauri::command]
+async fn cancel_recording(
+    session_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<RecordingResponse, String> {
+    let config = RecorderConfig::new();
+
+    // Execute cancel command
+    cancel::execute(session_id.clone(), config)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Remove from active sessions
+    match state.active_sessions.lock() {
+        Ok(mut sessions) => {
+            if let Some(sid) = &session_id {
+                sessions.retain(|s| s != sid);
+            } else {
+                sessions.clear();
+            }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to lock active_sessions mutex in cancel_recording");
+            // Continue anyway since cancel command already executed
+        }
+    }
+
+    Ok(RecordingResponse {
+        status: "success".to_string(),
+        session_id,
+        file_path: None,
+        filename: None,
+        duration: None,
+        quality: None,
+        message: "Recording cancelled successfully".to_string(),
         error: None,
     })
 }
@@ -920,6 +960,29 @@ async fn get_audio_levels(state: State<'_, AppState>) -> Result<AudioLevels, Str
     }
 }
 
+/// Quit the application
+#[tauri::command]
+async fn quit_app(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    // Stop audio monitor if running
+    if let Ok(mut monitor) = state.audio_monitor.lock() {
+        *monitor = None;
+        tracing::info!("Audio monitor stopped during app quit");
+    }
+
+    // Destroy the window properly instead of just closing
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.destroy();
+    }
+
+    // Give resources a moment to clean up
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+    tracing::info!("Application quitting via quit command");
+    app.exit(0);
+
+    Ok(())
+}
+
 /// Generate waveform data from an audio file using ffmpeg
 #[tauri::command]
 async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<Vec<f32>, String> {
@@ -1344,6 +1407,7 @@ fn main() {
     let builder = builder.invoke_handler(tauri::generate_handler![
         start_recording,
         stop_recording,
+        cancel_recording,
         get_status,
         recover_recordings,
         get_recording_status,
@@ -1369,6 +1433,7 @@ fn main() {
         stop_audio_monitor,
         get_audio_levels,
         generate_waveform,
+        quit_app,
     ]);
 
     tracing::info!(
