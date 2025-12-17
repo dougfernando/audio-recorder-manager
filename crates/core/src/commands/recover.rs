@@ -7,7 +7,9 @@ use crate::config::RecorderConfig;
 use crate::domain::AudioFormat;
 use crate::error::Result;
 use crate::output::UserOutput;
-use crate::recorder::{convert_wav_to_m4a, merge_audio_streams_smart, RecordingQuality};
+use crate::recorder::{merge_audio_streams_smart, RecordingQuality};
+#[cfg(not(windows))]
+use crate::recorder::convert_wav_to_m4a;
 
 /// Execute the recover command to finish interrupted recordings
 pub async fn execute(

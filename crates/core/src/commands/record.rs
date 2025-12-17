@@ -10,7 +10,9 @@ use crate::error::Result;
 use crate::output::UserOutput;
 #[cfg(not(windows))]
 use crate::recorder::AudioRecorder;
-use crate::recorder::{convert_wav_to_m4a, merge_audio_streams_smart, RecordingQuality};
+use crate::recorder::{merge_audio_streams_smart, RecordingQuality};
+#[cfg(not(windows))]
+use crate::recorder::convert_wav_to_m4a;
 use crate::status::{JsonFileObserver, RecordingResult, RecordingStatus, StatusObserver};
 use crate::wasapi_loopback::windows_loopback::WasapiLoopbackRecorder;
 use crate::wasapi_microphone::windows_microphone::WasapiMicrophoneRecorder;
@@ -182,8 +184,11 @@ async fn record_worker(
                 observer.on_complete(RecordingResult {
                     session_id: session.id.as_str().to_string(),
                     filename: "".to_string(),
-                    file_path: "".to_string(),
-                    file_size_mb: 0.0,
+                    file_path: None,
+                    duration: 0,
+                    file_size_mb: "0 MB".to_string(),
+                    format: session.format.to_string(),
+                    codec: "".to_string(),
                     status: "cancelled".to_string(),
                     message: "Recording cancelled by user".to_string(),
                 })?;
