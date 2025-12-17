@@ -78,6 +78,9 @@ async fn record_worker(
         let observer = JsonFileObserver::new(config.status_dir.clone());
         let effective_duration = session.duration.effective_duration();
 
+        // Track the final output file path (will be updated based on format and platform)
+        let mut final_filepath = filepath.clone();
+
     // Use WASAPI dual-channel recording on Windows (loopback + microphone)
     #[cfg(windows)]
     {
@@ -237,22 +240,33 @@ async fn record_worker(
         tracing::info!("Recording completed, starting merge process");
         output.success("Recording completed successfully!");
 
-        // Merge audio channels in a span for better tracing
+        // Merge audio channels (and encode to M4A if requested) in a span for better tracing
         {
             let loopback_has_audio_flag = loopback_recorder.has_audio_detected();
             let mic_has_audio_flag = mic_recorder.as_ref().map(|m| m.has_audio_detected()).unwrap_or(false);
 
             async {
-                output.prefixed("Merging", "Merging audio channels...");
+                // Determine output file based on format
+                let merge_output_path = if matches!(session.format, AudioFormat::M4a) {
+                    output.prefixed("Processing", "Merging and encoding to M4A (one-pass optimization)...");
+                    filepath.with_extension("m4a")
+                } else {
+                    output.prefixed("Merging", "Merging audio channels...");
+                    filepath.clone()
+                };
 
                 // Write processing status with enhanced metadata
-                let total_steps = if matches!(session.format, AudioFormat::M4a) { 2 } else { 1 };
+                // With one-pass merge+encode, M4A only needs 1 step (not 2)
                 let _ = observer.write_processing_status_v2(
                     session.id.as_str(),
-                    "Merging audio channels...",
+                    if matches!(session.format, AudioFormat::M4a) {
+                        "Merging and encoding to M4A..."
+                    } else {
+                        "Merging audio channels..."
+                    },
                     Some(1),  // Step 1
-                    Some(total_steps),
-                    Some("merge"),
+                    Some(1),  // Total steps (only 1 now!)
+                    Some(if matches!(session.format, AudioFormat::M4a) { "merge+encode" } else { "merge" }),
                     None,  // file_size_bytes not known yet
                     Some(session.duration.to_api_value() as u64),
                 );
@@ -266,19 +280,24 @@ async fn record_worker(
                     .map(|m| m.has_audio_detected())
                     .unwrap_or(false);
 
-                // Merge audio streams using FFmpeg
+                // Merge audio streams using FFmpeg (with direct M4A encoding if requested)
                 merge_audio_streams_smart(
                     &loopback_temp,
                     &mic_temp,
-                    &filepath,
+                    &merge_output_path,
                     loopback_has_audio,
                     mic_has_audio,
                     &session.quality,
+                    session.format,
                 )
                 .await?;
 
-                tracing::info!("Audio merge completed: {:?}", filepath);
-                output.success("Successfully merged audio channels!");
+                tracing::info!("Audio processing completed: {:?}", merge_output_path);
+                if matches!(session.format, AudioFormat::M4a) {
+                    output.success("Successfully merged and encoded to M4A!");
+                } else {
+                    output.success("Successfully merged audio channels!");
+                }
                 Ok::<(), crate::error::RecorderError>(())
             }
             .instrument(tracing::info_span!(
@@ -293,6 +312,15 @@ async fn record_worker(
         let _ = std::fs::remove_file(&loopback_temp);
         let _ = std::fs::remove_file(&mic_temp);
         tracing::info!("Temporary files cleaned up");
+
+        // Update filepath to point to the merged output
+        // For M4A, we already have the final file (merge+encode was done in one pass)
+        // For WAV, filepath is already correct
+        if matches!(session.format, AudioFormat::M4a) {
+            final_filepath = filepath.with_extension("m4a");
+        } else {
+            final_filepath = filepath.clone();
+        }
     }
 
     #[cfg(not(windows))]
@@ -344,8 +372,9 @@ async fn record_worker(
         tracing::info!("Recording completed: {:?}", filepath);
     }
 
-    // Convert to M4A if requested
-    let mut final_filepath = filepath.clone();
+    // Convert to M4A if requested (only for non-Windows platforms)
+    // On Windows, M4A encoding is done during merge (one-pass optimization)
+    #[cfg(not(windows))]
     if matches!(session.format, AudioFormat::M4a) {
         tracing::info!("Converting WAV to M4A...");
         output.prefixed("Converting", "WAV to M4A format...");

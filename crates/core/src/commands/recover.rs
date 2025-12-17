@@ -203,8 +203,9 @@ async fn recover_recording(
     // Use professional quality as default for recovery
     let quality = RecordingQuality::professional();
 
-    // Create output filename based on timestamp
-    let output_filename = format!("recording_{}.wav", recording.timestamp);
+    // Create output filename based on timestamp and format
+    let output_extension = format.extension();
+    let output_filename = format!("recording_{}.{}", recording.timestamp, output_extension);
     let output_path = config.recordings_dir.join(&output_filename);
 
     // Check if output already exists
@@ -229,9 +230,13 @@ async fn recover_recording(
             .join(format!("{}_mic.wav", recording.session_id))
     });
 
-    output.prefixed("Merging", "Merging audio channels...");
+    // Merge audio streams (with direct M4A encoding if requested - one-pass optimization)
+    if matches!(format, AudioFormat::M4a) {
+        output.prefixed("Processing", "Merging and encoding to M4A (one-pass optimization)...");
+    } else {
+        output.prefixed("Merging", "Merging audio channels...");
+    }
 
-    // Merge audio streams
     merge_audio_streams_smart(
         &loopback_path,
         &mic_path,
@@ -239,31 +244,18 @@ async fn recover_recording(
         loopback_has_audio,
         mic_has_audio,
         &quality,
+        format,
     )
     .await
     .context("Failed to merge audio streams")?;
 
-    output.success("Successfully merged audio channels!");
-
-    // Convert to M4A if requested
-    let mut final_path = output_path.clone();
     if matches!(format, AudioFormat::M4a) {
-        output.prefixed("Converting", "WAV to M4A format...");
-        let m4a_path = output_path.with_extension("m4a");
-
-        convert_wav_to_m4a(&output_path, &m4a_path)
-            .await
-            .context("Failed to convert to M4A")?;
-
-        output.success("Successfully converted to M4A format!");
-
-        // Delete temporary WAV file
-        if let Err(e) = std::fs::remove_file(&output_path) {
-            tracing::warn!("Failed to delete temporary WAV file: {}", e);
-        }
-
-        final_path = m4a_path;
+        output.success("Successfully merged and encoded to M4A!");
+    } else {
+        output.success("Successfully merged audio channels!");
     }
+
+    let final_path = output_path;
 
     // Cleanup temporary files
     if let Some(ref loopback) = recording.loopback_file {
