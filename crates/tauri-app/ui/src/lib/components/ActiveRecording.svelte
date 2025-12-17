@@ -10,6 +10,7 @@
   } from '../stores';
 
   let isStopping = false;
+  let isCancelling = false;
   let pollInterval;
   let processingStepStartTime = null;
   let previousStep = null;
@@ -94,6 +95,37 @@
       }
     } finally {
       isStopping = false;
+    }
+  }
+
+  async function cancelRecording() {
+    if (!$isRecording) return;
+
+    isCancelling = true;
+    try {
+      await invoke('cancel_recording', {
+        sessionId: $currentSession,
+      });
+
+      console.log('Cancel signal sent, recording will be discarded...');
+      // Clean up immediately since we're not waiting for processing
+      isRecording.set(false);
+      currentSession.set(null);
+      recordingStatus.set(null);
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    } catch (error) {
+      console.error('Failed to cancel recording:', error);
+      // On error, clean up anyway
+      isRecording.set(false);
+      currentSession.set(null);
+      recordingStatus.set(null);
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    } finally {
+      isCancelling = false;
     }
   }
 
@@ -338,25 +370,44 @@
   </div>
   {/if}
 
-  <!-- Stop Button (only show during recording) -->
+  <!-- Action Buttons (only show during recording) -->
   {#if $recordingStatus.status === 'recording'}
-  <button
-    class="btn btn-danger btn-lg stop-btn"
-    on:click={stopRecording}
-    disabled={isStopping}
-  >
-    {#if isStopping}
-      <svg class="spin" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="12" r="2"/>
-      </svg>
-      Stopping...
-    {:else}
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-        <rect x="6" y="6" width="12" height="12" rx="2"/>
-      </svg>
-      Stop Recording
-    {/if}
-  </button>
+  <div class="action-buttons">
+    <button
+      class="btn btn-secondary btn-lg cancel-btn"
+      on:click={cancelRecording}
+      disabled={isCancelling || isStopping}
+    >
+      {#if isCancelling}
+        <svg class="spin" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="2"/>
+        </svg>
+        Cancelling...
+      {:else}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+        Cancel
+      {/if}
+    </button>
+    <button
+      class="btn btn-danger btn-lg stop-btn"
+      on:click={stopRecording}
+      disabled={isStopping || isCancelling}
+    >
+      {#if isStopping}
+        <svg class="spin" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="2"/>
+        </svg>
+        Stopping...
+      {:else}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="2"/>
+        </svg>
+        Stop Recording
+      {/if}
+    </button>
+  </div>
   {/if}
 {:else}
   <!-- Idle State -->
@@ -778,9 +829,26 @@
     }
   }
 
-  /* Stop Button */
-  .stop-btn {
+  /* Action Buttons */
+  .action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: var(--spacing-md);
     width: 100%;
+  }
+
+  .cancel-btn {
+    background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+    box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+  }
+
+  .cancel-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #5a6268 0%, #495057 100%);
+    box-shadow: 0 6px 20px rgba(108, 117, 125, 0.4);
+  }
+
+  .stop-btn {
+    /* Existing stop button styles remain */
   }
 
   /* Idle State */

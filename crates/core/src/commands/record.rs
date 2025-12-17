@@ -159,6 +159,39 @@ async fn record_worker(
                 break;
             }
 
+            // Check for cancel signal (skip processing)
+            let cancel_signal = config
+                .signals_dir
+                .join(format!("{}.cancel", session.id.as_str()));
+            if cancel_signal.exists() {
+                tracing::info!("Cancel signal received for session {}", session.id);
+                let _ = std::fs::remove_file(cancel_signal);
+
+                // Stop both recorders
+                loopback_recorder.stop()?;
+                if let Some(ref mic) = mic_recorder {
+                    mic.stop()?;
+                }
+
+                // Cleanup temporary files
+                let _ = std::fs::remove_file(&loopback_temp);
+                let _ = std::fs::remove_file(&mic_temp);
+                tracing::info!("Recording cancelled, temporary files cleaned up");
+
+                // Write cancelled status
+                observer.on_complete(RecordingResult {
+                    session_id: session.id.as_str().to_string(),
+                    filename: "".to_string(),
+                    file_path: "".to_string(),
+                    file_size_mb: 0.0,
+                    status: "cancelled".to_string(),
+                    message: "Recording cancelled by user".to_string(),
+                })?;
+
+                output.warning("Recording cancelled by user");
+                return Ok(());
+            }
+
             // Check for stop signal
             let stop_signal = config
                 .signals_dir

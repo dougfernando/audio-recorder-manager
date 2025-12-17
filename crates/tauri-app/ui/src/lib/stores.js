@@ -14,7 +14,7 @@ export const recoveryList = writable([]);
 export const devices = writable([]);
 
 // UI state
-export const selectedDuration = writable(30);
+export const selectedDuration = writable(60);
 export const selectedFormat = writable('m4a');
 export const selectedQuality = writable('professional');
 export const isManualMode = writable(false);
