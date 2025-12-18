@@ -11,10 +11,11 @@ use std::fs::File;
 #[cfg(not(windows))]
 use std::io::BufWriter;
 use std::path::PathBuf;
+use std::sync::Arc; // Used by merge_audio_streams_smart on all platforms
 #[cfg(not(windows))]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(not(windows))]
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 #[cfg(not(windows))]
 use std::time::{Duration, Instant};
 
@@ -306,6 +307,9 @@ impl RecordingHandle {
             loopback_has_audio: None,
             mic_frames: None,
             mic_has_audio: None,
+            // FFmpeg progress (not applicable during recording)
+            ffmpeg_progress: None,
+            processing_speed: None,
         }
     }
 
@@ -419,9 +423,14 @@ pub async fn merge_audio_streams_smart(
     mic_has_audio: bool,
     quality: &RecordingQuality,
     output_format: crate::domain::AudioFormat,
+    session_id: Option<&str>,
+    observer: Option<std::sync::Arc<crate::status::JsonFileObserver>>,
 ) -> Result<()> {
-    use tokio::process::Command;
+    use std::process::Stdio;
+    use std::sync::Arc;
     use std::time::Instant;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::process::Command;
 
     let format_str = match output_format {
         crate::domain::AudioFormat::Wav => "WAV",
@@ -520,6 +529,61 @@ pub async fn merge_audio_streams_smart(
     tracing::info!("⏳ Starting merge operation...");
 
     let start_time = Instant::now();
+
+    // Get audio duration for progress calculation
+    let audio_duration_ms = crate::ffmpeg_encoder::get_audio_duration_ms(loopback_wav).await.unwrap_or(0);
+    let enable_progress = session_id.is_some() && observer.is_some() && audio_duration_ms > 0;
+
+    // Helper closure to execute FFmpeg with or without progress monitoring
+    let execute_ffmpeg = |mut cmd: Command| async move {
+        if enable_progress {
+            let session_id = session_id.unwrap();
+            let observer = observer.as_ref().unwrap();
+
+            // Add progress flag
+            cmd.arg("-progress").arg("pipe:2");
+            cmd.stderr(Stdio::piped());
+
+            let mut child = cmd.spawn()?;
+            let stderr = child.stderr.take().unwrap();
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+
+            // Parse progress in real-time
+            let mut current_speed = None;
+            while let Ok(Some(line)) = lines.next_line().await {
+                if line.starts_with("out_time_ms=") {
+                    if let Ok(time_ms) = line.split('=').nth(1).unwrap_or("0").parse::<u64>() {
+                        let progress_pct = if audio_duration_ms > 0 {
+                            ((time_ms as f64 / audio_duration_ms as f64) * 100.0).min(100.0) as u8
+                        } else {
+                            0
+                        };
+
+                        let _ = observer.update_ffmpeg_progress(
+                            session_id,
+                            progress_pct,
+                            current_speed.clone(),
+                        );
+
+                        tracing::debug!(
+                            "FFmpeg merge progress: {}% ({}/{} ms)",
+                            progress_pct,
+                            time_ms,
+                            audio_duration_ms
+                        );
+                    }
+                } else if line.starts_with("speed=") {
+                    current_speed = line.split('=').nth(1).map(|s| s.to_string());
+                }
+            }
+
+            child.wait_with_output().await
+        } else {
+            cmd.output().await
+        }
+    };
+
     let output = if loopback_has_audio && mic_has_audio {
         // Scenario A: Both have audio - Create dual-mono stereo (L=loopback, R=mic)
         // Convert mic mono to stereo first, then merge with amerge
@@ -537,9 +601,9 @@ pub async fn merge_audio_streams_smart(
         add_encoding_params(&mut cmd, output_format, &encoder_choice);
 
         cmd.arg("-y")
-            .arg(output_path)
-            .output()
-            .await?
+            .arg(output_path);
+
+        execute_ffmpeg(cmd).await?
     } else if loopback_has_audio && !mic_has_audio {
         // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
         tracing::info!("📋 Merge Strategy: Using loopback only (duplicate system audio to stereo)");
@@ -558,9 +622,9 @@ pub async fn merge_audio_streams_smart(
         add_encoding_params(&mut cmd, output_format, &encoder_choice);
 
         cmd.arg("-y")
-            .arg(output_path)
-            .output()
-            .await?
+            .arg(output_path);
+
+        execute_ffmpeg(cmd).await?
     } else if !loopback_has_audio && mic_has_audio {
         // Scenario C: Mic only - Convert mono to stereo (duplicate to both channels)
         tracing::info!("📋 Merge Strategy: Using microphone only (duplicate user audio to stereo)");
@@ -576,9 +640,9 @@ pub async fn merge_audio_streams_smart(
         add_encoding_params(&mut cmd, output_format, &encoder_choice);
 
         cmd.arg("-y")
-            .arg(output_path)
-            .output()
-            .await?
+            .arg(output_path);
+
+        execute_ffmpeg(cmd).await?
     } else {
         // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
         tracing::info!("📋 Merge Strategy: Both channels silent (creating silent stereo file)");
@@ -597,9 +661,9 @@ pub async fn merge_audio_streams_smart(
         add_encoding_params(&mut cmd, output_format, &encoder_choice);
 
         cmd.arg("-y")
-            .arg(output_path)
-            .output()
-            .await?
+            .arg(output_path);
+
+        execute_ffmpeg(cmd).await?
     };
 
     let elapsed = start_time.elapsed();

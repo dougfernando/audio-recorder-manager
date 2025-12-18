@@ -1,6 +1,51 @@
 use anyhow::Result;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
+
+/// FFmpeg progress information parsed from progress output
+#[derive(Debug, Clone, Default)]
+pub struct FfmpegProgress {
+    pub out_time_ms: u64,
+    pub speed: Option<String>,
+    pub frame: Option<u64>,
+}
+
+/// Parse FFmpeg progress line (e.g., "out_time_ms=6000000" or "speed=12.0x")
+fn parse_progress_line(line: &str) -> Option<(&str, String)> {
+    let parts: Vec<&str> = line.splitn(2, '=').collect();
+    if parts.len() == 2 {
+        Some((parts[0], parts[1].to_string()))
+    } else {
+        None
+    }
+}
+
+/// Get audio duration in milliseconds using ffprobe
+pub async fn get_audio_duration_ms(audio_path: &PathBuf) -> Result<u64> {
+    let mut cmd = Command::new("ffprobe");
+    cmd.arg("-v")
+        .arg("error")
+        .arg("-show_entries")
+        .arg("format=duration")
+        .arg("-of")
+        .arg("default=noprint_wrappers=1:nokey=1")
+        .arg(audio_path);
+
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let output = cmd.output().await?;
+
+    if output.status.success() {
+        let duration_str = String::from_utf8_lossy(&output.stdout);
+        let duration_secs: f64 = duration_str.trim().parse()?;
+        Ok((duration_secs * 1000.0) as u64)
+    } else {
+        anyhow::bail!("Failed to get audio duration")
+    }
+}
 
 /// Represents available hardware encoders on the system
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,7 +146,17 @@ pub async fn convert_wav_to_m4a_optimized(
     wav_path: &PathBuf,
     m4a_path: &PathBuf,
 ) -> Result<()> {
-    use tokio::process::Command;
+    convert_wav_to_m4a_with_progress(wav_path, m4a_path, None, None).await
+}
+
+/// Convert WAV file to M4A with optional progress monitoring
+pub async fn convert_wav_to_m4a_with_progress(
+    wav_path: &PathBuf,
+    m4a_path: &PathBuf,
+    session_id: Option<&str>,
+    observer: Option<Arc<crate::status::JsonFileObserver>>,
+) -> Result<()> {
+    use std::process::Stdio;
     use std::time::Instant;
 
     tracing::info!("═══════════════════════════════════════════════════════════");
@@ -199,7 +254,72 @@ pub async fn convert_wav_to_m4a_optimized(
     tracing::info!("   and available hardware...");
 
     let start_time = Instant::now();
-    let output = cmd.output().await?;
+
+    // Get audio duration for progress calculation
+    let audio_duration_ms = get_audio_duration_ms(wav_path).await.unwrap_or(0);
+
+    // If we have progress monitoring enabled, use it
+    let output = if session_id.is_some() && observer.is_some() && audio_duration_ms > 0 {
+        let session_id = session_id.unwrap();
+        let observer = observer.unwrap();
+
+        // Add progress flag
+        cmd.arg("-progress").arg("pipe:2");
+
+        // Spawn with stderr piped
+        cmd.stderr(Stdio::piped());
+
+        let mut child = cmd.spawn()?;
+        let stderr = child.stderr.take().unwrap();
+        let reader = BufReader::new(stderr);
+        let mut lines = reader.lines();
+
+        // Parse progress in real-time
+        let mut current_progress = FfmpegProgress::default();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if let Some((key, value)) = parse_progress_line(&line) {
+                match key {
+                    "out_time_ms" => {
+                        if let Ok(time_ms) = value.parse::<u64>() {
+                            current_progress.out_time_ms = time_ms;
+
+                            // Calculate percentage
+                            let progress_pct = if audio_duration_ms > 0 {
+                                ((time_ms as f64 / audio_duration_ms as f64) * 100.0).min(100.0) as u8
+                            } else {
+                                0
+                            };
+
+                            // Update status file
+                            let _ = observer.update_ffmpeg_progress(
+                                session_id,
+                                progress_pct,
+                                current_progress.speed.clone(),
+                            );
+
+                            tracing::debug!(
+                                "FFmpeg progress: {}% ({}/{} ms) - Speed: {}",
+                                progress_pct,
+                                time_ms,
+                                audio_duration_ms,
+                                current_progress.speed.as_deref().unwrap_or("N/A")
+                            );
+                        }
+                    }
+                    "speed" => {
+                        current_progress.speed = Some(value);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        child.wait_with_output().await?
+    } else {
+        // Fallback to standard execution without progress
+        cmd.output().await?
+    };
+
     let elapsed = start_time.elapsed();
 
     if !output.status.success() {

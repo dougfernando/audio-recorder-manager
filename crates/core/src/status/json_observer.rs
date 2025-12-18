@@ -65,6 +65,34 @@ impl JsonFileObserver {
         fs::write(&status_file, json)?;
         Ok(())
     }
+
+    /// Update FFmpeg progress in the status file
+    pub fn update_ffmpeg_progress(
+        &self,
+        session_id: &str,
+        ffmpeg_progress: u8,
+        processing_speed: Option<String>,
+    ) -> Result<()> {
+        let status_file = self.get_status_file(session_id);
+
+        // Read existing status
+        if let Ok(content) = fs::read_to_string(&status_file) {
+            if let Ok(mut status) = serde_json::from_str::<serde_json::Value>(&content) {
+                // Update FFmpeg progress fields
+                status["ffmpeg_progress"] = serde_json::json!(ffmpeg_progress);
+                if let Some(speed) = processing_speed {
+                    status["processing_speed"] = serde_json::json!(speed);
+                }
+
+                // Write back
+                let json = serde_json::to_string_pretty(&status)?;
+                fs::write(&status_file, json)?;
+                return Ok(());
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl StatusObserver for JsonFileObserver {

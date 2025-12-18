@@ -198,8 +198,25 @@
           {/if}
         </div>
 
-        <!-- Progress Bar (Step-based or Indeterminate) -->
-        {#if $recordingStatus.step && $recordingStatus.total_steps}
+        <!-- Progress Bar (FFmpeg progress, Step-based, or Indeterminate) -->
+        {#if $recordingStatus.ffmpeg_progress !== undefined && $recordingStatus.ffmpeg_progress !== null}
+          <!-- FFmpeg granular progress -->
+          <div class="processing-progress-bar">
+            <div
+              class="processing-progress-fill"
+              style="width: {$recordingStatus.ffmpeg_progress}%"
+            >
+              <div class="processing-progress-shine"></div>
+            </div>
+          </div>
+          <div class="progress-percentage">
+            {$recordingStatus.ffmpeg_progress}% Complete
+            {#if $recordingStatus.processing_speed}
+              <span class="processing-speed"> • {$recordingStatus.processing_speed}</span>
+            {/if}
+          </div>
+        {:else if $recordingStatus.step && $recordingStatus.total_steps}
+          <!-- Step-based progress -->
           <div class="processing-progress-bar">
             <div
               class="processing-progress-fill"
@@ -212,6 +229,7 @@
             {Math.round(($recordingStatus.step / $recordingStatus.total_steps) * 100)}% Complete
           </div>
         {:else}
+          <!-- Indeterminate progress -->
           <div class="processing-progress-bar">
             <div class="processing-progress-fill-indeterminate">
               <div class="processing-progress-shine"></div>
@@ -1081,6 +1099,13 @@
     font-weight: 600;
     color: var(--warning);
     margin-top: var(--spacing-sm);
+  }
+
+  .processing-speed {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-family: 'IBM Plex Mono', monospace;
   }
 
   .session-id-small {
