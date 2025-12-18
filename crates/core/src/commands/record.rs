@@ -1,4 +1,5 @@
 use serde_json::json;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::Instrument;
 
@@ -77,7 +78,7 @@ async fn record_worker(
 
     async move {
         let filepath = config.recordings_dir.join(session.temp_filename());
-        let observer = JsonFileObserver::new(config.status_dir.clone());
+        let observer = Arc::new(JsonFileObserver::new(config.status_dir.clone()));
         let effective_duration = session.duration.effective_duration();
 
         // Track the final output file path (will be updated based on format and platform)
@@ -147,6 +148,9 @@ async fn record_worker(
             loopback_has_audio: Some(loopback_recorder.has_audio_detected()),
             mic_frames: mic_recorder.as_ref().map(|m| m.get_frames_captured()),
             mic_has_audio: mic_recorder.as_ref().map(|m| m.has_audio_detected()),
+            // FFmpeg progress (not applicable during recording)
+            ffmpeg_progress: None,
+            processing_speed: None,
         })?;
 
         // Update status every second
@@ -266,6 +270,9 @@ async fn record_worker(
                 loopback_has_audio: Some(loopback_recorder.has_audio_detected()),
                 mic_frames: mic_recorder.as_ref().map(|m| m.get_frames_captured()),
                 mic_has_audio: mic_recorder.as_ref().map(|m| m.has_audio_detected()),
+                // FFmpeg progress (not applicable during recording)
+                ffmpeg_progress: None,
+                processing_speed: None,
             })?;
         }
 
@@ -327,6 +334,8 @@ async fn record_worker(
                     mic_has_audio,
                     &session.quality,
                     session.format,
+                    Some(session.id.as_str()),
+                    Some(observer.clone()),
                 )
                 .await?;
 

@@ -19,6 +19,9 @@ pub struct RecordingStatus {
     pub loopback_has_audio: Option<bool>,
     pub mic_frames: Option<u64>,
     pub mic_has_audio: Option<bool>,
+    // FFmpeg progress monitoring (0-100 during processing)
+    pub ffmpeg_progress: Option<u8>,
+    pub processing_speed: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
