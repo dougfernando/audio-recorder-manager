@@ -66,7 +66,7 @@ impl JsonFileObserver {
         Ok(())
     }
 
-    /// Update FFmpeg progress in the status file
+    /// Update FFmpeg progress in the status file (preserves other fields)
     pub fn update_ffmpeg_progress(
         &self,
         session_id: &str,
@@ -75,19 +75,128 @@ impl JsonFileObserver {
     ) -> Result<()> {
         let status_file = self.get_status_file(session_id);
 
-        // Read existing status
-        if let Ok(content) = fs::read_to_string(&status_file) {
-            if let Ok(mut status) = serde_json::from_str::<serde_json::Value>(&content) {
-                // Update FFmpeg progress fields
-                status["ffmpeg_progress"] = serde_json::json!(ffmpeg_progress);
-                if let Some(speed) = processing_speed {
-                    status["processing_speed"] = serde_json::json!(speed);
-                }
+        // Retry logic for file updates (in case of transient read/write conflicts)
+        for attempt in 0..3 {
+            match fs::read_to_string(&status_file) {
+                Ok(content) => {
+                    match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(mut status) => {
+                            // Update FFmpeg progress fields while preserving existing data
+                            status["ffmpeg_progress"] = serde_json::json!(ffmpeg_progress);
+                            if let Some(speed) = processing_speed.as_ref() {
+                                status["processing_speed"] = serde_json::json!(speed);
+                            }
 
-                // Write back
-                let json = serde_json::to_string_pretty(&status)?;
-                fs::write(&status_file, json)?;
-                return Ok(());
+                            // Write back as pretty JSON
+                            match serde_json::to_string_pretty(&status) {
+                                Ok(json) => {
+                                    match fs::write(&status_file, json) {
+                                        Ok(_) => {
+                                            tracing::debug!(
+                                                "Updated FFmpeg progress to {}%{}",
+                                                ffmpeg_progress,
+                                                processing_speed
+                                                    .as_ref()
+                                                    .map(|s| format!(" ({})", s))
+                                                    .unwrap_or_default()
+                                            );
+                                            return Ok(());
+                                        }
+                                        Err(e) if attempt < 2 => {
+                                            tracing::debug!(
+                                                "Failed to write status file (attempt {}): {}, retrying...",
+                                                attempt + 1,
+                                                e
+                                            );
+                                            std::thread::sleep(std::time::Duration::from_millis(5));
+                                            continue;
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!("Failed to write status file after {} attempts: {}", attempt + 1, e);
+                                            return Ok(());
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Failed to serialize status JSON: {}", e);
+                                    return Ok(());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse status JSON: {}", e);
+                            return Ok(());
+                        }
+                    }
+                }
+                Err(e) if attempt < 2 => {
+                    tracing::debug!("Failed to read status file (attempt {}): {}, retrying...", attempt + 1, e);
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                    continue;
+                }
+                Err(e) => {
+                    tracing::debug!("Status file not found or inaccessible: {}", e);
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Mark FFmpeg encoding as complete (transition from processing to completion)
+    /// This ensures the file watcher detects the status change and the UI updates
+    pub fn mark_ffmpeg_complete(&self, session_id: &str) -> Result<()> {
+        let status_file = self.get_status_file(session_id);
+
+        // Retry logic for file updates
+        for attempt in 0..3 {
+            match fs::read_to_string(&status_file) {
+                Ok(content) => {
+                    match serde_json::from_str::<serde_json::Value>(&content) {
+                        Ok(mut status) => {
+                            // Update status to completed but keep all other fields
+                            status["ffmpeg_progress"] = serde_json::json!(100);
+
+                            // Write back as pretty JSON
+                            match serde_json::to_string_pretty(&status) {
+                                Ok(json) => {
+                                    match fs::write(&status_file, json) {
+                                        Ok(_) => {
+                                            tracing::debug!("Marked FFmpeg encoding as complete (100%)");
+                                            return Ok(());
+                                        }
+                                        Err(e) if attempt < 2 => {
+                                            tracing::debug!(
+                                                "Failed to write status file (attempt {}): {}, retrying...",
+                                                attempt + 1,
+                                                e
+                                            );
+                                            std::thread::sleep(std::time::Duration::from_millis(10));
+                                            continue;
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!("Failed to write FFmpeg complete status: {}", e);
+                                            return Ok(());
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Failed to serialize FFmpeg complete status: {}", e);
+                                    return Ok(());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse status JSON: {}", e);
+                            return Ok(());
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to read status file for completion: {}", e);
+                    return Ok(());
+                }
             }
         }
 

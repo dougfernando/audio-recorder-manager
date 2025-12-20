@@ -1,6 +1,7 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
-  import { onDestroy } from 'svelte';
+  import { listen } from '@tauri-apps/api/event';
+  import { onDestroy, onMount } from 'svelte';
   import {
     isRecording,
     currentSession,
@@ -11,63 +12,60 @@
 
   let isStopping = false;
   let isCancelling = false;
-  let pollInterval;
+  let unlistenStatusUpdate;
   let processingStepStartTime = null;
   let previousStep = null;
+  let completionTimeout = null;
 
-  // Reactive statement: start/stop polling based on recording state
-  $: {
-    // Clear existing interval
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
-    }
+  onMount(async () => {
+    // Listen to file watcher status updates
+    // The file watcher emits 'recording-status-update' events whenever the status JSON changes
+    unlistenStatusUpdate = await listen('recording-status-update', (event) => {
+      const status = event.payload;
+      console.log('Received status update from watcher:', status);
 
-    // Start polling if recording
-    if ($isRecording && $currentSession) {
-      console.log('Starting status polling for session:', $currentSession);
-      pollInterval = setInterval(async () => {
-        try {
-          const status = await invoke('get_recording_status', {
-            sessionId: $currentSession
-          });
-          console.log('Polled status:', status);
-          if (status) {
-            recordingStatus.set(status);
+      if (status) {
+        recordingStatus.set(status);
 
-            // Track step transitions for minimum display time
-            if (status.status === 'processing' && status.step !== previousStep) {
-              processingStepStartTime = Date.now();
-              previousStep = status.step;
-            }
-
-            // If completed, ensure minimum display time before transitioning
-            if (status.status === 'completed') {
-              const minDisplayTime = 800; // milliseconds
-              const elapsed = processingStepStartTime
-                ? Date.now() - processingStepStartTime
-                : minDisplayTime;
-              const remainingTime = Math.max(0, minDisplayTime - elapsed);
-
-              setTimeout(() => {
-                isRecording.set(false);
-                currentSession.set(null);
-                if (pollInterval) {
-                  clearInterval(pollInterval);
-                }
-              }, remainingTime + 5000); // +5000 for the existing 5s completion display
-            }
-          }
-        } catch (error) {
-          console.error('Failed to poll recording status:', error);
+        // Track step transitions for minimum display time
+        if (status.status === 'processing' && status.step !== previousStep) {
+          processingStepStartTime = Date.now();
+          previousStep = status.step;
+          console.log(`Processing step changed to: ${status.step}/${status.total_steps}`);
         }
-      }, 1000);
-    }
-  }
+
+        // If completed, ensure minimum display time before transitioning
+        if (status.status === 'completed') {
+          console.log('Recording completed, scheduling UI cleanup');
+          const minDisplayTime = 800; // milliseconds
+          const elapsed = processingStepStartTime
+            ? Date.now() - processingStepStartTime
+            : minDisplayTime;
+          const remainingTime = Math.max(0, minDisplayTime - elapsed);
+
+          // Clear any existing timeout
+          if (completionTimeout) {
+            clearTimeout(completionTimeout);
+          }
+
+          completionTimeout = setTimeout(() => {
+            isRecording.set(false);
+            currentSession.set(null);
+            completionTimeout = null;
+          }, remainingTime + 5000); // +5000 for the 5s completion display
+        }
+      }
+    });
+  });
 
   onDestroy(() => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
+    // Clean up event listener
+    if (unlistenStatusUpdate) {
+      unlistenStatusUpdate();
+    }
+    // Clean up any pending timeouts
+    if (completionTimeout) {
+      clearTimeout(completionTimeout);
     }
   });
 
@@ -146,130 +144,87 @@
 
 {#if $isRecording && $recordingStatus}
   <!-- Enhanced Processing Status UI -->
-  {#if $recordingStatus.status === 'processing'}
-    <div class="processing-header-v2">
-      <div class="processing-pulse-border"></div>
+  {#if $recordingStatus.status === 'processing' || $recordingStatus.status === 'completed'}
+    <!-- Unified Processing & Completion Screen -->
+    <div class="unified-processing">
+      <!-- Header Badge -->
+      <div class="processing-header-simple">
+        <div class="badge" class:completed={$recordingStatus.status === 'completed'}>
+          {$recordingStatus.status === 'completed' ? '✓ Complete' : '⏳ Processing'}
+        </div>
+        <span class="session-id-badge">{$recordingStatus.session_id || 'N/A'}</span>
+      </div>
 
-      <div class="processing-content">
-        <!-- Step Indicator Badge -->
-        <div class="step-indicator">
-          {#if $recordingStatus.step && $recordingStatus.total_steps}
-            <span class="step-number">STEP {$recordingStatus.step} OF {$recordingStatus.total_steps}</span>
+      <!-- Main Content -->
+      <div class="processing-content-simple">
+        <!-- Spinner or Checkmark -->
+        <div class="status-icon">
+          {#if $recordingStatus.status === 'processing'}
+            <div class="spinner"></div>
           {:else}
-            <span class="step-number">PROCESSING</span>
+            <svg class="checkmark" width="56" height="56" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
           {/if}
         </div>
 
-        <!-- Large Dual-Ring Spinner (64px) -->
-        <div class="spinner-large">
-          <div class="spinner-ring"></div>
-          <div class="spinner-ring-secondary"></div>
-        </div>
-
-        <!-- Processing Message -->
-        <div class="processing-title">
+        <!-- Status Message -->
+        <div class="status-title">
           {$recordingStatus.message || 'Processing audio...'}
         </div>
 
-        <!-- File Metadata -->
-        <div class="processing-metadata">
-          {#if $recordingStatus.duration_secs}
-            <span class="metadata-item">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/>
-              </svg>
-              {formatTime($recordingStatus.duration_secs)} duration
-            </span>
-          {/if}
-
-          {#if $recordingStatus.file_size_bytes}
-            <span class="metadata-item">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M13 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V9l-7-7zm4 18H7V4h5v5h5v11z"/>
-              </svg>
-              {formatFileSize($recordingStatus.file_size_bytes)}
-            </span>
-          {/if}
-
-          {#if $recordingStatus.processing_type}
-            <span class="metadata-item metadata-type">
-              {$recordingStatus.processing_type === 'merge' ? 'Merging Channels' : 'Format Conversion'}
-            </span>
-          {/if}
-        </div>
-
-        <!-- Progress Bar (FFmpeg progress, Step-based, or Indeterminate) -->
-        {#if $recordingStatus.ffmpeg_progress !== undefined && $recordingStatus.ffmpeg_progress !== null}
-          <!-- FFmpeg granular progress -->
-          <div class="processing-progress-bar">
-            <div
-              class="processing-progress-fill"
-              style="width: {$recordingStatus.ffmpeg_progress}%"
-            >
-              <div class="processing-progress-shine"></div>
-            </div>
-          </div>
-          <div class="progress-percentage">
-            {$recordingStatus.ffmpeg_progress}% Complete
-            {#if $recordingStatus.processing_speed}
-              <span class="processing-speed"> • {$recordingStatus.processing_speed}</span>
+        <!-- Progress Bar (only during processing) -->
+        {#if $recordingStatus.status === 'processing'}
+          <div class="progress-container">
+            {#if $recordingStatus.ffmpeg_progress !== undefined && $recordingStatus.ffmpeg_progress !== null}
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: {$recordingStatus.ffmpeg_progress}%">
+                  <div class="progress-shine"></div>
+                </div>
+              </div>
+              <div class="progress-info">
+                <span class="progress-percent">{$recordingStatus.ffmpeg_progress}%</span>
+                {#if $recordingStatus.processing_speed}
+                  <span class="progress-speed">{$recordingStatus.processing_speed}</span>
+                {/if}
+              </div>
+            {:else}
+              <div class="progress-bar-indeterminate">
+                <div class="progress-fill-indeterminate"></div>
+              </div>
+              <div class="progress-info">
+                <span class="progress-label">Processing...</span>
+              </div>
             {/if}
-          </div>
-        {:else if $recordingStatus.step && $recordingStatus.total_steps}
-          <!-- Step-based progress -->
-          <div class="processing-progress-bar">
-            <div
-              class="processing-progress-fill"
-              style="width: {($recordingStatus.step / $recordingStatus.total_steps) * 100}%"
-            >
-              <div class="processing-progress-shine"></div>
-            </div>
-          </div>
-          <div class="progress-percentage">
-            {Math.round(($recordingStatus.step / $recordingStatus.total_steps) * 100)}% Complete
-          </div>
-        {:else}
-          <!-- Indeterminate progress -->
-          <div class="processing-progress-bar">
-            <div class="processing-progress-fill-indeterminate">
-              <div class="processing-progress-shine"></div>
-            </div>
           </div>
         {/if}
 
-        <!-- Session ID (small) -->
-        <div class="session-id-small">{$recordingStatus.session_id || 'N/A'}</div>
+        <!-- Metadata -->
+        <div class="metadata-simple">
+          {#if $recordingStatus.duration_secs}
+            <div class="metadata-item-simple">
+              <span class="label">Duration:</span>
+              <span class="value">{formatTime($recordingStatus.duration_secs)}</span>
+            </div>
+          {/if}
+          {#if $recordingStatus.file_size_mb}
+            <div class="metadata-item-simple">
+              <span class="label">Size:</span>
+              <span class="value">{$recordingStatus.file_size_mb}</span>
+            </div>
+          {/if}
+        </div>
+
+        <!-- File Info (completion only) -->
+        {#if $recordingStatus.status === 'completed' && $recordingStatus.filename}
+          <div class="file-info-simple">
+            <div class="filename">{$recordingStatus.filename}</div>
+            {#if $recordingStatus.file_path}
+              <div class="filepath"><code>{$recordingStatus.file_path}</code></div>
+            {/if}
+          </div>
+        {/if}
       </div>
-    </div>
-  {:else if $recordingStatus.status === 'completed'}
-    <!-- Completion Header -->
-    <div class="completion-header">
-      <div class="completion-indicator">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-        </svg>
-        <span class="completion-text">COMPLETED</span>
-      </div>
-      <span class="session-id">{$recordingStatus.session_id || 'N/A'}</span>
-    </div>
-    <div class="completion-details">
-      <div class="completion-message">{$recordingStatus.message || 'Recording completed successfully'}</div>
-      {#if $recordingStatus.filename}
-        <div class="file-info">
-          <strong>File:</strong> {$recordingStatus.filename}
-        </div>
-      {/if}
-      {#if $recordingStatus.file_path}
-        <div class="file-path">
-          <strong>Location:</strong>
-          <code>{$recordingStatus.file_path}</code>
-        </div>
-      {/if}
-      {#if $recordingStatus.file_size_mb}
-        <div class="file-size">
-          <strong>Size:</strong> {$recordingStatus.file_size_mb} MB
-        </div>
-      {/if}
     </div>
   {:else}
     <!-- Recording Header with Pulse Animation -->
@@ -1176,6 +1131,238 @@
     font-size: 13px;
     word-break: break-all;
     color: var(--text-primary);
+  }
+
+  /* Unified Processing & Completion Screen */
+  .unified-processing {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-lg);
+    border: 2px solid var(--border-subtle);
+  }
+
+  .processing-header-simple {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: linear-gradient(135deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    border-radius: var(--radius-md);
+    letter-spacing: 0.5px;
+  }
+
+  .badge.completed {
+    background: linear-gradient(135deg, var(--success) 0%, #10B981 100%);
+  }
+
+  .session-id-badge {
+    font-size: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: var(--text-secondary);
+  }
+
+  .processing-content-simple {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-lg);
+    text-align: center;
+  }
+
+  .status-icon {
+    margin: var(--spacing-md) 0;
+  }
+
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--border-subtle);
+    border-top-color: var(--warning);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .checkmark {
+    color: var(--success);
+    animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  @keyframes popIn {
+    0% { transform: scale(0.3); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .status-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: var(--spacing-sm) 0;
+  }
+
+  .progress-container {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.3);
+  }
+
+  .progress-shine {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+    animation: shine 2s linear infinite;
+  }
+
+  @keyframes shine {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(200%); }
+  }
+
+  .progress-bar-indeterminate {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+  }
+
+  .progress-fill-indeterminate {
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    position: absolute;
+    animation: indeterminateSlide 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.3);
+  }
+
+  @keyframes indeterminateSlide {
+    0% { left: -40%; }
+    100% { left: 100%; }
+  }
+
+  .progress-info {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 13px;
+  }
+
+  .progress-percent {
+    font-weight: 700;
+    color: var(--warning);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .progress-speed {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .progress-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .metadata-simple {
+    display: flex;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    width: 100%;
+    max-width: 400px;
+    justify-content: center;
+  }
+
+  .metadata-item-simple {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 13px;
+  }
+
+  .metadata-item-simple .label {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .metadata-item-simple .value {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-family: 'Consolas', 'Monaco', monospace;
+  }
+
+  .file-info-simple {
+    width: 100%;
+    max-width: 400px;
+    padding: var(--spacing-md);
+    background: var(--success-bg);
+    border: 1px solid var(--success);
+    border-radius: var(--radius-md);
+  }
+
+  .filename {
+    font-weight: 600;
+    color: var(--success);
+    margin-bottom: var(--spacing-sm);
+    word-break: break-word;
+  }
+
+  .filepath {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .filepath code {
+    display: block;
+    padding: var(--spacing-xs);
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-sm);
+    margin-top: var(--spacing-xs);
+    font-family: 'Consolas', 'Monaco', monospace;
+    word-break: break-all;
   }
 
   /* Responsive */

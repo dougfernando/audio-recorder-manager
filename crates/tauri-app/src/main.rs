@@ -1245,6 +1245,9 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
             return;
         }
 
+        let mut last_update_time: std::collections::HashMap<std::path::PathBuf, std::time::Instant> = std::collections::HashMap::new();
+        let debounce_duration = std::time::Duration::from_millis(100); // Debounce updates within 100ms
+
         for result in rx {
             match result {
                 Ok(Event {
@@ -1254,12 +1257,53 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
                 }) => {
                     for path in paths {
                         if path.extension().map(|e| e == "json").unwrap_or(false) {
-                            // Read and emit status update
-                            if let Ok(content) = std::fs::read_to_string(&path) {
-                                if let Ok(status) =
-                                    serde_json::from_str::<serde_json::Value>(&content)
-                                {
-                                    let _ = app_handle.emit("recording-status-update", status);
+                            // Read file first to check status
+                            match std::fs::read_to_string(&path) {
+                                Ok(content) => {
+                                    match serde_json::from_str::<serde_json::Value>(&content) {
+                                        Ok(status) => {
+                                            // Check if this is a completion update - NEVER debounce completion status
+                                            let is_completion = status.get("status")
+                                                .and_then(|s| s.as_str())
+                                                .map(|s| s == "completed")
+                                                .unwrap_or(false);
+
+                                            // Apply debounce only for non-completion updates
+                                            if !is_completion {
+                                                let now = std::time::Instant::now();
+                                                let should_update = last_update_time
+                                                    .get(&path)
+                                                    .map(|last| now.duration_since(*last) >= debounce_duration)
+                                                    .unwrap_or(true);
+
+                                                if !should_update {
+                                                    continue;
+                                                }
+
+                                                last_update_time.insert(path.clone(), now);
+                                            } else {
+                                                // Always accept completion updates, reset debounce timer
+                                                last_update_time.insert(path.clone(), std::time::Instant::now());
+                                                tracing::info!("Detected completion status - emitting immediately");
+                                            }
+
+                                            // Small delay to ensure file write is complete
+                                            std::thread::sleep(std::time::Duration::from_millis(10));
+
+                                            // Emit the status update
+                                            if let Err(e) = app_handle.emit("recording-status-update", status.clone()) {
+                                                tracing::warn!(error = ?e, "Failed to emit status update event");
+                                            } else {
+                                                tracing::debug!("Emitted status update from {:?}", path.file_name().unwrap_or_default());
+                                            }
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!(error = ?e, path = ?path, "Failed to parse status JSON");
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(error = ?e, path = ?path, "Failed to read status file");
                                 }
                             }
                         }

@@ -247,6 +247,8 @@ async fn recover_recording(
         mic_has_audio,
         &quality,
         format,
+        Some(&recording.session_id),
+        None,
     )
     .await
     .context("Failed to merge audio streams")?;

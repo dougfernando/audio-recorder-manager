@@ -66,6 +66,38 @@ pub async fn execute_with_output(
     Ok(())
 }
 
+/// Wait for a file to be fully written and readable
+/// Checks both that the file exists and that its size hasn't changed
+async fn wait_for_file_ready(path: &std::path::PathBuf, timeout_ms: u64) -> Result<()> {
+    let start = tokio::time::Instant::now();
+    let timeout = Duration::from_millis(timeout_ms);
+
+    loop {
+        // Check if file exists and is readable
+        if let Ok(metadata) = std::fs::metadata(path) {
+            let size = metadata.len();
+
+            // Wait a bit more and check size again
+            tokio::time::sleep(Duration::from_millis(50)).await;
+
+            if let Ok(metadata2) = std::fs::metadata(path) {
+                // If size hasn't changed, file is done writing
+                if size == metadata2.len() && size > 0 {
+                    tracing::debug!("✓ File ready: {:?} ({} bytes)", path, size);
+                    return Ok(());
+                }
+            }
+        }
+
+        if start.elapsed() > timeout {
+            tracing::warn!("⚠ Timeout waiting for file: {:?} (continuing anyway)", path);
+            return Ok(()); // Continue anyway, file might be ready
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
 async fn record_worker(
     session: RecordingSession,
     config: RecorderConfig,
@@ -80,13 +112,11 @@ async fn record_worker(
         let filepath = config.recordings_dir.join(session.temp_filename());
         let observer = Arc::new(JsonFileObserver::new(config.status_dir.clone()));
         let effective_duration = session.duration.effective_duration();
+        let mut final_filepath = filepath.clone(); // Will be updated based on platform/format
 
-        // Track the final output file path (will be updated based on format and platform)
-        let mut final_filepath = filepath.clone();
-
-    // Use WASAPI dual-channel recording on Windows (loopback + microphone)
-    #[cfg(windows)]
-    {
+        // Use WASAPI dual-channel recording on Windows (loopback + microphone)
+        #[cfg(windows)]
+        {
         tracing::info!(
             "Starting WASAPI dual-channel recording: {} ({} seconds)",
             session.temp_filename(),
@@ -282,8 +312,35 @@ async fn record_worker(
             mic.stop()?;
         }
 
-        tracing::info!("Recording completed, starting merge process");
+        tracing::info!("Recording completed, starting post-processing");
         output.success("Recording completed successfully!");
+
+        // Wait for temporary files to be fully written and readable before processing
+        tracing::info!("⏳ Waiting for temporary files to be ready...");
+        let _ = wait_for_file_ready(&loopback_temp, 2000).await;
+        let _ = wait_for_file_ready(&mic_temp, 2000).await;
+        tracing::info!("✓ Temporary files are ready for processing");
+
+        // Determine stage message based on format
+        let stage_message = if matches!(session.format, AudioFormat::M4a) {
+            "Merging channels and encoding to M4A..."
+        } else {
+            "Merging audio channels..."
+        };
+
+        // Write unified processing status (single screen from start to finish)
+        tracing::info!("📝 Writing initial processing status: {}", stage_message);
+        let _ = observer.write_processing_status_v2(
+            session.id.as_str(),
+            stage_message,
+            None,  // No step indicator - use only progress bar
+            None,
+            None,
+            None,
+            Some(session.duration.to_api_value() as u64),
+        );
+
+        tracing::info!("🚀 Post-processing started - Stage: {}", stage_message);
 
         // Merge audio channels (and encode to M4A if requested) in a span for better tracing
         {
@@ -293,31 +350,15 @@ async fn record_worker(
             async {
                 // Determine output file based on format
                 let merge_output_path = if matches!(session.format, AudioFormat::M4a) {
-                    output.prefixed("Processing", "Merging and encoding to M4A (one-pass optimization)...");
+                    output.prefixed("Processing", "Merging and encoding to M4A...");
                     filepath.with_extension("m4a")
                 } else {
-                    output.prefixed("Merging", "Merging audio channels...");
+                    output.prefixed("Processing", "Merging audio channels...");
                     filepath.clone()
                 };
 
-                // Write processing status with enhanced metadata
-                // With one-pass merge+encode, M4A only needs 1 step (not 2)
-                let _ = observer.write_processing_status_v2(
-                    session.id.as_str(),
-                    if matches!(session.format, AudioFormat::M4a) {
-                        "Merging and encoding to M4A..."
-                    } else {
-                        "Merging audio channels..."
-                    },
-                    Some(1),  // Step 1
-                    Some(1),  // Total steps (only 1 now!)
-                    Some(if matches!(session.format, AudioFormat::M4a) { "merge+encode" } else { "merge" }),
-                    None,  // file_size_bytes not known yet
-                    Some(session.duration.to_api_value() as u64),
-                );
-
-                // Wait a moment for files to be fully written
-                tokio::time::sleep(Duration::from_millis(config.file_write_delay_ms)).await;
+                // Small delay to ensure status file was written before merge starts
+                tokio::time::sleep(Duration::from_millis(100)).await;
 
                 // Get audio detection flags
                 let loopback_has_audio = loopback_recorder.has_audio_detected();
@@ -340,11 +381,7 @@ async fn record_worker(
                 .await?;
 
                 tracing::info!("Audio processing completed: {:?}", merge_output_path);
-                if matches!(session.format, AudioFormat::M4a) {
-                    output.success("Successfully merged and encoded to M4A!");
-                } else {
-                    output.success("Successfully merged audio channels!");
-                }
+                output.success("Audio processing completed!");
                 Ok::<(), crate::error::RecorderError>(())
             }
             .instrument(tracing::info_span!(
@@ -363,11 +400,11 @@ async fn record_worker(
         // Update filepath to point to the merged output
         // For M4A, we already have the final file (merge+encode was done in one pass)
         // For WAV, filepath is already correct
-        if matches!(session.format, AudioFormat::M4a) {
-            final_filepath = filepath.with_extension("m4a");
+        final_filepath = if matches!(session.format, AudioFormat::M4a) {
+            filepath.with_extension("m4a")
         } else {
-            final_filepath = filepath.clone();
-        }
+            filepath.clone()
+        };
     }
 
     #[cfg(not(windows))]
@@ -421,29 +458,18 @@ async fn record_worker(
 
     // Convert to M4A if requested (only for non-Windows platforms)
     // On Windows, M4A encoding is done during merge (one-pass optimization)
+    // On non-Windows, we need a separate conversion step
     #[cfg(not(windows))]
     if matches!(session.format, AudioFormat::M4a) {
-        tracing::info!("Converting WAV to M4A...");
-        output.prefixed("Converting", "WAV to M4A format...");
-
-        // Write processing status with enhanced metadata
-        let file_size = std::fs::metadata(&filepath).map(|m| m.len()).unwrap_or(0);
-        let _ = observer.write_processing_status_v2(
-            session.id.as_str(),
-            "Converting to M4A format...",
-            Some(2),  // Step 2
-            Some(2),  // Total steps
-            Some("convert"),
-            Some(file_size),
-            Some(session.duration.to_api_value() as u64),
-        );
+        tracing::info!("Converting WAV to M4A (part of post-processing)...");
+        output.prefixed("Processing", "Encoding to M4A...");
 
         let m4a_path = filepath.with_extension("m4a");
 
         match convert_wav_to_m4a(&filepath, &m4a_path).await {
             Ok(_) => {
                 tracing::info!("Successfully converted to M4A: {:?}", m4a_path);
-                output.success("Successfully converted to M4A format!");
+                output.success("M4A encoding complete!");
                 // Delete temporary WAV file
                 if let Err(e) = std::fs::remove_file(&filepath) {
                     tracing::warn!("Failed to delete temporary WAV file: {}", e);

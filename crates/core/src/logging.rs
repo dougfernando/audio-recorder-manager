@@ -206,10 +206,11 @@ pub fn init_cli_logging(
         let file_layer = tracing_subscriber::fmt::layer()
             .with_writer(DailyRollingAppender(Arc::new(file_appender)))
             .with_ansi(false)
-            .with_target(true)
-            .with_thread_ids(true)
+            .with_target(false)
+            .with_thread_ids(false)
             .with_line_number(true)
             .with_file(true)
+            .compact()
             .boxed();
         layers.push(file_layer);
     }
@@ -267,7 +268,7 @@ pub fn init_tauri_logging(
     let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(DailyRollingAppender(Arc::new(file_appender)))
         .with_ansi(false)
-        .with_target(true)
+        .with_target(false)
         .with_thread_ids(false)
         .with_line_number(true)
         .with_file(true)

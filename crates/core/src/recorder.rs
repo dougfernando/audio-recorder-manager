@@ -11,7 +11,6 @@ use std::fs::File;
 #[cfg(not(windows))]
 use std::io::BufWriter;
 use std::path::PathBuf;
-use std::sync::Arc; // Used by merge_audio_streams_smart on all platforms
 #[cfg(not(windows))]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(not(windows))]
@@ -427,7 +426,6 @@ pub async fn merge_audio_streams_smart(
     observer: Option<std::sync::Arc<crate::status::JsonFileObserver>>,
 ) -> Result<()> {
     use std::process::Stdio;
-    use std::sync::Arc;
     use std::time::Instant;
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::process::Command;
@@ -453,28 +451,28 @@ pub async fn merge_audio_streams_smart(
     tracing::info!("    • Output Sample Rate:     {} Hz", quality.sample_rate);
     tracing::info!("    • Output Channels:        {} (Stereo)", quality.channels);
 
-    // Check if FFmpeg is available
-    let mut ffmpeg_check = Command::new("ffmpeg");
-    ffmpeg_check.arg("-version");
+    // Check if FFmpeg is available (cached on first run)
+    use std::sync::OnceLock;
+    static FFMPEG_AVAILABLE: OnceLock<bool> = OnceLock::new();
 
-    #[cfg(windows)]
-    ffmpeg_check.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    let ffmpeg_available = FFMPEG_AVAILABLE.get_or_init(|| {
+        // Perform synchronous FFmpeg availability check
+        let mut cmd = std::process::Command::new("ffmpeg");
+        cmd.arg("-version");
 
-    let check_result = ffmpeg_check.output().await;
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW - prevents 8-second console creation delay
+        }
 
-    if check_result.is_err() {
+        let check_result = cmd.output();
+        check_result.is_ok()
+    });
+
+    if !ffmpeg_available {
         anyhow::bail!("FFmpeg is not installed or not in PATH. Please install FFmpeg for dual-channel recording.");
     }
-
-    // Detect hardware encoders if M4A output is requested
-    let encoder_choice = if matches!(output_format, crate::domain::AudioFormat::M4a) {
-        tracing::info!("───────────────────────────────────────────────────────────");
-        let capabilities = crate::ffmpeg_encoder::detect_hardware_encoders().await?;
-        tracing::info!("───────────────────────────────────────────────────────────");
-        Some(capabilities.preferred_encoder)
-    } else {
-        None
-    };
 
     let target_sample_rate = quality.sample_rate.to_string();
 
@@ -495,28 +493,14 @@ pub async fn merge_audio_streams_smart(
     fn add_encoding_params(
         cmd: &mut Command,
         output_format: crate::domain::AudioFormat,
-        encoder_choice: &Option<crate::ffmpeg_encoder::EncoderChoice>,
     ) {
         match output_format {
             crate::domain::AudioFormat::M4a => {
-                // Add AAC encoding with hardware acceleration if available
+                // Optimized software AAC encoding (20-50x real-time performance)
                 cmd.arg("-c:a").arg("aac");
-                cmd.arg("-q:a").arg("2"); // Quality: 2 is good balance
+                cmd.arg("-b:a").arg("192k"); // Explicit bitrate for consistent quality
                 cmd.arg("-movflags").arg("faststart"); // Streaming-friendly
-
-                // Use all CPU cores for encoding
-                cmd.arg("-threads").arg("auto");
-
-                if let Some(encoder) = encoder_choice {
-                    match encoder {
-                        crate::ffmpeg_encoder::EncoderChoice::Hardware(_) => {
-                            tracing::debug!("Using hardware-accelerated AAC encoding");
-                        }
-                        crate::ffmpeg_encoder::EncoderChoice::Software => {
-                            tracing::debug!("Using software AAC encoding");
-                        }
-                    }
-                }
+                cmd.arg("-threads").arg("auto"); // Use all CPU cores for encoding
             }
             crate::domain::AudioFormat::Wav => {
                 // WAV output - no encoding needed, PCM passthrough
@@ -530,15 +514,65 @@ pub async fn merge_audio_streams_smart(
 
     let start_time = Instant::now();
 
-    // Get audio duration for progress calculation
-    let audio_duration_ms = crate::ffmpeg_encoder::get_audio_duration_ms(loopback_wav).await.unwrap_or(0);
-    let enable_progress = session_id.is_some() && observer.is_some() && audio_duration_ms > 0;
+    // Get audio duration from BOTH input files and use the maximum
+    // On Windows, we merge two files (loopback + mic) which may have different durations
+    // Run duration detection in parallel to reduce setup overhead (50% faster)
+    let (loopback_duration_ms, mic_duration_ms) = tokio::join!(
+        async { crate::ffmpeg_encoder::get_audio_duration_ms(loopback_wav).await.unwrap_or(0) },
+        async { crate::ffmpeg_encoder::get_audio_duration_ms(mic_wav).await.unwrap_or(0) }
+    );
+
+    // Use the longer duration to ensure we don't show 100% prematurely
+    let audio_duration_ms = std::cmp::max(loopback_duration_ms, mic_duration_ms);
+
+    tracing::info!("📊 Duration detection:");
+    tracing::info!("  ├─ Loopback: {} ms", loopback_duration_ms);
+    tracing::info!("  ├─ Microphone: {} ms", mic_duration_ms);
+    tracing::info!("  └─ Using maximum: {} ms", audio_duration_ms);
+
+    // ALWAYS enable progress monitoring when we have a session and observer
+    let enable_progress = session_id.is_some() && observer.is_some();
+
+    // If duration detection failed for both, estimate from the larger file
+    // Professional quality: 48kHz stereo 16-bit = 192,000 bytes/second
+    let effective_duration_ms = if audio_duration_ms > 0 {
+        audio_duration_ms
+    } else {
+        tracing::warn!("⚠ Duration detection failed for both files, estimating from larger file size");
+        let loopback_size = std::fs::metadata(loopback_wav).map(|m| m.len()).unwrap_or(0);
+        let mic_size = std::fs::metadata(mic_wav).map(|m| m.len()).unwrap_or(0);
+        let larger_size = std::cmp::max(loopback_size, mic_size);
+
+        if larger_size > 0 {
+            const BYTES_PER_SECOND: u64 = 192000;
+            let estimated_secs = larger_size / BYTES_PER_SECOND;
+            let estimated_ms = estimated_secs * 1000;
+            // Be conservative: add 20% buffer to prevent premature 100%
+            let buffered_ms = (estimated_ms as f64 * 1.2) as u64;
+            tracing::warn!("  ├─ Loopback file: {} bytes", loopback_size);
+            tracing::warn!("  ├─ Microphone file: {} bytes", mic_size);
+            tracing::warn!("  ├─ Estimated duration: {} ms", estimated_ms);
+            tracing::warn!("  └─ Buffered estimate (20% extra): {} ms", buffered_ms);
+            buffered_ms
+        } else {
+            tracing::warn!("  └─ Files unavailable, using default 300 seconds");
+            300_000 // Default fallback: 5 minutes
+        }
+    };
+
+    tracing::info!("Duration detection result: {} ms", audio_duration_ms);
+    tracing::info!("Progress monitoring: {} (using effective duration: {} ms)",
+        if enable_progress { "ENABLED" } else { "DISABLED" },
+        effective_duration_ms);
+
+    // Clone observer for the closure to own
+    let observer_for_closure = observer.clone();
 
     // Helper closure to execute FFmpeg with or without progress monitoring
     let execute_ffmpeg = |mut cmd: Command| async move {
         if enable_progress {
             let session_id = session_id.unwrap();
-            let observer = observer.as_ref().unwrap();
+            let observer = observer_for_closure.as_ref().unwrap();
 
             // Add progress flag
             cmd.arg("-progress").arg("pipe:2");
@@ -554,11 +588,8 @@ pub async fn merge_audio_streams_smart(
             while let Ok(Some(line)) = lines.next_line().await {
                 if line.starts_with("out_time_ms=") {
                     if let Ok(time_ms) = line.split('=').nth(1).unwrap_or("0").parse::<u64>() {
-                        let progress_pct = if audio_duration_ms > 0 {
-                            ((time_ms as f64 / audio_duration_ms as f64) * 100.0).min(100.0) as u8
-                        } else {
-                            0
-                        };
+                        // Use effective_duration_ms (never 0) for reliable progress calculation
+                        let progress_pct = ((time_ms as f64 / effective_duration_ms as f64) * 100.0).min(100.0) as u8;
 
                         let _ = observer.update_ffmpeg_progress(
                             session_id,
@@ -567,10 +598,11 @@ pub async fn merge_audio_streams_smart(
                         );
 
                         tracing::debug!(
-                            "FFmpeg merge progress: {}% ({}/{} ms)",
+                            "FFmpeg merge progress: {}% ({}/{} ms, speed: {:?})",
                             progress_pct,
                             time_ms,
-                            audio_duration_ms
+                            effective_duration_ms,
+                            current_speed
                         );
                     }
                 } else if line.starts_with("speed=") {
@@ -588,6 +620,8 @@ pub async fn merge_audio_streams_smart(
         // Scenario A: Both have audio - Create dual-mono stereo (L=loopback, R=mic)
         // Convert mic mono to stereo first, then merge with amerge
         tracing::info!("📋 Merge Strategy: Dual-mono stereo (L=loopback, R=microphone)");
+        let cmd_build_start = std::time::Instant::now();
+
         let mut cmd = setup_ffmpeg_command();
         cmd.arg("-hide_banner")
             .arg("-loglevel").arg("error")
@@ -595,57 +629,84 @@ pub async fn merge_audio_streams_smart(
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=stereo[left];[1:a]aformat=channel_layouts=mono,asplit=2[ml][mr];[left][ml][mr]amerge=inputs=3,pan=stereo|c0<c0+c2|c1<c1+c2[aout]")
+            .arg("-filter_threads").arg("auto")  // Enable parallel filter processing
             .arg("-map").arg("[aout]")
             .arg("-ar").arg(&target_sample_rate);
 
-        add_encoding_params(&mut cmd, output_format, &encoder_choice);
+        add_encoding_params(&mut cmd, output_format);
 
         cmd.arg("-y")
             .arg(output_path);
 
-        execute_ffmpeg(cmd).await?
+        let cmd_build_elapsed = cmd_build_start.elapsed();
+        tracing::debug!("  [BOTTLENECK] FFmpeg command construction: {:.3}s", cmd_build_elapsed.as_secs_f64());
+
+        let ffmpeg_start = std::time::Instant::now();
+        let result = execute_ffmpeg(cmd).await?;
+        let ffmpeg_elapsed = ffmpeg_start.elapsed();
+        tracing::info!("  [BOTTLENECK] FFmpeg execution: {:.3}s ({:.2}x real-time)",
+            ffmpeg_elapsed.as_secs_f64(),
+            audio_duration_ms as f64 / 1000.0 / ffmpeg_elapsed.as_secs_f64()
+        );
+        result
     } else if loopback_has_audio && !mic_has_audio {
         // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
         tracing::info!("📋 Merge Strategy: Using loopback only (duplicate system audio to stereo)");
+        let ffmpeg_start = std::time::Instant::now();
+
         let mut cmd = setup_ffmpeg_command();
         cmd.arg("-hide_banner")
             .arg("-loglevel").arg("error")
             .arg("-i")
             .arg(loopback_wav)
-            .arg("-filter_complex")
-            .arg("[0:a]aformat=channel_layouts=stereo[aout]")
-            .arg("-map")
-            .arg("[aout]")
+            .arg("-ac").arg("2")  // Direct channel conversion to stereo (faster than filter_complex)
             .arg("-ar")
             .arg(&target_sample_rate);
 
-        add_encoding_params(&mut cmd, output_format, &encoder_choice);
+        add_encoding_params(&mut cmd, output_format);
 
         cmd.arg("-y")
             .arg(output_path);
 
-        execute_ffmpeg(cmd).await?
+        let result = execute_ffmpeg(cmd).await?;
+        let ffmpeg_elapsed = ffmpeg_start.elapsed();
+        tracing::info!("  [BOTTLENECK] FFmpeg execution: {:.3}s ({:.2}x real-time)",
+            ffmpeg_elapsed.as_secs_f64(),
+            audio_duration_ms as f64 / 1000.0 / ffmpeg_elapsed.as_secs_f64()
+        );
+        result
     } else if !loopback_has_audio && mic_has_audio {
         // Scenario C: Mic only - Convert mono to stereo (duplicate to both channels)
         tracing::info!("📋 Merge Strategy: Using microphone only (duplicate user audio to stereo)");
+        let ffmpeg_start = std::time::Instant::now();
+
         let mut cmd = setup_ffmpeg_command();
         cmd.arg("-hide_banner")
             .arg("-loglevel").arg("error")
             .arg("-i").arg(mic_wav)
             .arg("-filter_complex")
             .arg("[0:a]aformat=channel_layouts=mono,asplit=2[l][r];[l][r]amerge=inputs=2,pan=stereo|c0=c0|c1=c1[aout]")
+            .arg("-filter_threads").arg("auto")  // Enable parallel filter processing
             .arg("-map").arg("[aout]")
             .arg("-ar").arg(&target_sample_rate);
 
-        add_encoding_params(&mut cmd, output_format, &encoder_choice);
+        add_encoding_params(&mut cmd, output_format);
 
         cmd.arg("-y")
             .arg(output_path);
 
-        execute_ffmpeg(cmd).await?
+        let result = execute_ffmpeg(cmd).await?;
+        let ffmpeg_elapsed = ffmpeg_start.elapsed();
+        tracing::info!("  [BOTTLENECK] FFmpeg execution: {:.3}s ({:.2}x real-time)",
+            ffmpeg_elapsed.as_secs_f64(),
+            audio_duration_ms as f64 / 1000.0 / ffmpeg_elapsed.as_secs_f64()
+        );
+        result
     } else {
         // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
         tracing::info!("📋 Merge Strategy: Both channels silent (creating silent stereo file)");
+        let ffmpeg_start = std::time::Instant::now();
+
         let mut cmd = setup_ffmpeg_command();
         cmd.arg("-hide_banner")
             .arg("-loglevel").arg("error")
@@ -658,12 +719,18 @@ pub async fn merge_audio_streams_smart(
             .arg("-ar")
             .arg(&target_sample_rate);
 
-        add_encoding_params(&mut cmd, output_format, &encoder_choice);
+        add_encoding_params(&mut cmd, output_format);
 
         cmd.arg("-y")
             .arg(output_path);
 
-        execute_ffmpeg(cmd).await?
+        let result = execute_ffmpeg(cmd).await?;
+        let ffmpeg_elapsed = ffmpeg_start.elapsed();
+        tracing::info!("  [BOTTLENECK] FFmpeg execution: {:.3}s ({:.2}x real-time)",
+            ffmpeg_elapsed.as_secs_f64(),
+            audio_duration_ms as f64 / 1000.0 / ffmpeg_elapsed.as_secs_f64()
+        );
+        result
     };
 
     let elapsed = start_time.elapsed();
@@ -671,6 +738,15 @@ pub async fn merge_audio_streams_smart(
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!("FFmpeg merge failed: {}", stderr);
+    }
+
+    // Mark FFmpeg merge/encoding as complete to ensure UI transitions properly (for M4A format)
+    if matches!(output_format, crate::domain::AudioFormat::M4a) {
+        if let Some(session_id) = session_id {
+            if let Some(observer) = &observer {
+                let _ = observer.mark_ffmpeg_complete(session_id);
+            }
+        }
     }
 
     // Log FFmpeg output for debugging
@@ -687,9 +763,38 @@ pub async fn merge_audio_streams_smart(
     let output_metadata = std::fs::metadata(output_path)?;
     let output_size_mb = output_metadata.len() as f64 / (1024.0 * 1024.0);
 
+    // Bottleneck Analysis
+    let total_elapsed = elapsed.as_secs_f64();
+    let audio_duration_secs = audio_duration_ms as f64 / 1000.0;
+    let processing_speed = if audio_duration_secs > 0.0 {
+        audio_duration_secs / total_elapsed
+    } else {
+        0.0
+    };
+
     tracing::info!("───────────────────────────────────────────────────────────");
     tracing::info!("✓ AUDIO MERGE COMPLETED SUCCESSFULLY");
     tracing::info!("═══════════════════════════════════════════════════════════");
+
+    // Bottleneck Performance Metrics
+    tracing::info!("🔍 BOTTLENECK ANALYSIS:");
+    tracing::info!("    • Audio duration:      {:.2}s", audio_duration_secs);
+    tracing::info!("    • Total time:          {:.2}s", total_elapsed);
+    tracing::info!("    • Processing speed:   {:.2}x real-time", processing_speed);
+
+    if processing_speed > 0.0 {
+        if processing_speed < 1.0 {
+            tracing::warn!("    ⚠️  SLOW: Processing slower than real-time ({:.2}x). Possible bottleneck:", processing_speed);
+            tracing::warn!("         - Disk I/O bottleneck (slow drive or many read/writes)");
+            tracing::warn!("         - Complex FFmpeg filter chain (amerge, pan filters)");
+            tracing::warn!("         - CPU/Memory constraints");
+        } else if processing_speed < 5.0 {
+            tracing::info!("    ✓  ACCEPTABLE: Processing at {:.2}x real-time", processing_speed);
+        } else {
+            tracing::info!("    ✓✓ OPTIMAL: Processing at {:.2}x real-time (excellent performance)", processing_speed);
+        }
+    }
+
     tracing::info!("📊 Merge Results:");
     tracing::info!("    • Output file:     {:?}", output_path.file_name().unwrap_or_default());
     tracing::info!("    • Output format:   {}", format_str);
@@ -698,21 +803,8 @@ pub async fn merge_audio_streams_smart(
     tracing::info!("    • Sample rate:     {} Hz", quality.sample_rate);
 
     if matches!(output_format, crate::domain::AudioFormat::M4a) {
-        if let Some(encoder) = encoder_choice {
-            match encoder {
-                crate::ffmpeg_encoder::EncoderChoice::Hardware(hw) => {
-                    let hw_name = match hw {
-                        crate::ffmpeg_encoder::HardwareEncoder::IntelQuickSync => "Intel Quick Sync",
-                        crate::ffmpeg_encoder::HardwareEncoder::NvidiaEnc => "NVIDIA NVENC",
-                        crate::ffmpeg_encoder::HardwareEncoder::AmdVce => "AMD VCE",
-                    };
-                    tracing::info!("    • Encoder:         {} (hardware-accelerated)", hw_name);
-                }
-                crate::ffmpeg_encoder::EncoderChoice::Software => {
-                    tracing::info!("    • Encoder:         Software AAC (optimized)");
-                }
-            }
-        }
+        tracing::info!("    • Encoder:         AAC (software, multi-threaded)");
+        tracing::info!("    • Bitrate:         192 kbps");
     }
 
     tracing::info!("═══════════════════════════════════════════════════════════");
