@@ -1,8 +1,8 @@
 pub mod audio_monitor;
+pub mod audio_utils;
 pub mod cli;
 pub mod commands;
 pub mod config;
-pub mod devices;
 pub mod domain;
 pub mod error;
 pub mod ffmpeg_encoder;

@@ -1,6 +1,7 @@
 #[cfg(windows)]
 pub mod windows_microphone {
     use anyhow::{Context, Result};
+    use crate::audio_utils::{calculate_rms_f32, calculate_rms_i16};
     use hound::{WavSpec, WavWriter};
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -311,53 +312,4 @@ pub mod windows_microphone {
         }
     }
 
-    fn calculate_rms_i16(samples: &[i16]) -> f32 {
-        if samples.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
-        (sum / samples.len() as f64).sqrt() as f32
-    }
-
-    fn calculate_rms_f32(samples: &[f32]) -> f32 {
-        if samples.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
-        (sum / samples.len() as f64).sqrt() as f32
-    }
-}
-
-#[cfg(not(windows))]
-pub mod windows_microphone {
-    use anyhow::Result;
-    use std::path::PathBuf;
-
-    pub struct WasapiMicrophoneRecorder;
-
-    impl WasapiMicrophoneRecorder {
-        pub fn new(_filepath: PathBuf, _target_sample_rate: u32) -> Result<Self> {
-            anyhow::bail!("WASAPI microphone is only available on Windows")
-        }
-
-        pub fn get_frames_captured(&self) -> u64 {
-            0
-        }
-
-        pub fn has_audio_detected(&self) -> bool {
-            false
-        }
-
-        pub fn get_sample_rate(&self) -> u32 {
-            48000
-        }
-
-        pub fn get_channels(&self) -> u16 {
-            2
-        }
-
-        pub fn stop(&self) -> Result<()> {
-            Ok(())
-        }
-    }
 }

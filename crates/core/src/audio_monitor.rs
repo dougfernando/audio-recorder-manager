@@ -1,6 +1,7 @@
 #[cfg(windows)]
 pub mod windows_monitor {
     use anyhow::{Context, Result};
+    use crate::audio_utils::{calculate_rms_f32, calculate_rms_i16, calculate_rms_i32};
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
@@ -247,50 +248,4 @@ pub mod windows_monitor {
         }
     }
 
-    fn calculate_rms_i16(samples: &[i16]) -> f32 {
-        if samples.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
-        (sum / samples.len() as f64).sqrt() as f32
-    }
-
-    fn calculate_rms_i32(samples: &[i32]) -> f32 {
-        if samples.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
-        (sum / samples.len() as f64).sqrt() as f32
-    }
-
-    fn calculate_rms_f32(samples: &[f32]) -> f32 {
-        if samples.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
-        (sum / samples.len() as f64).sqrt() as f32
-    }
-}
-
-#[cfg(not(windows))]
-pub mod windows_monitor {
-    use anyhow::Result;
-
-    pub struct AudioLevelMonitor;
-
-    impl AudioLevelMonitor {
-        pub fn new() -> Result<Self> {
-            anyhow::bail!("Audio monitoring is only available on Windows")
-        }
-
-        pub fn get_loopback_level(&self) -> f32 {
-            0.0
-        }
-
-        pub fn get_microphone_level(&self) -> f32 {
-            0.0
-        }
-
-        pub fn stop(&self) {}
-    }
 }

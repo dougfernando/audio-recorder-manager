@@ -58,7 +58,9 @@
       "Bash(crates/tauri-app/ui/src/lib/components/RecordingView.svelte)",
       "Bash(npm uninstall:*)",
       "Bash(git checkout:*)",
-      "Skill(frontend-design)"
+      "Skill(frontend-design)",
+      "Bash(cargo tree:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

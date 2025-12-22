@@ -1,24 +1,9 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-
-/// Global cache for hardware encoder detection results
-/// Initialized once on first access and reused for the lifetime of the application
-static ENCODER_CACHE: OnceLock<EncoderCapabilities> = OnceLock::new();
-
-/// Persistent hardware encoder cache stored on disk
-/// Cached encoders remain valid across app executions since hardware doesn't change
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PersistentEncoderCache {
-    pub available_encoders: Vec<HardwareEncoder>,
-    pub preferred_encoder: EncoderChoice,
-    pub ffmpeg_version: String,
-    pub cached_at: String,
-}
 
 /// FFmpeg progress information parsed from progress output
 #[derive(Debug, Clone, Default)]
@@ -285,248 +270,7 @@ fn estimate_duration_from_filesize(path: &PathBuf) -> Result<u64> {
     Ok(duration_ms)
 }
 
-/// Represents available hardware encoders on the system
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum HardwareEncoder {
-    /// Intel Quick Sync (H.264/H.265)
-    IntelQuickSync,
-    /// NVIDIA NVENC (H.264/H.265)
-    NvidiaEnc,
-    /// AMD VCE (H.264/H.265)
-    AmdVce,
-}
-
-/// Result of hardware encoder detection
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EncoderCapabilities {
-    pub available_encoders: Vec<HardwareEncoder>,
-    pub preferred_encoder: EncoderChoice,
-}
-
-/// Final encoder choice to use
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum EncoderChoice {
-    Hardware(HardwareEncoder),
-    Software,
-}
-
-/// Get the path to the persistent encoder cache file
-fn get_encoder_cache_path() -> PathBuf {
-    let config_dir = if let Ok(config_home) = std::env::var("APPDATA") {
-        PathBuf::from(config_home)
-    } else {
-        dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
-    };
-
-    config_dir
-        .join("audio-recorder-manager")
-        .join("encoder-cache.json")
-}
-
-/// Get the current FFmpeg version
-async fn get_ffmpeg_version() -> String {
-    match Command::new("ffmpeg")
-        .arg("-version")
-        .output()
-        .await
-    {
-        Ok(output) => {
-            let version_str = String::from_utf8_lossy(&output.stdout);
-            // Extract first line (contains version info)
-            version_str.lines().next().unwrap_or("unknown").to_string()
-        }
-        Err(_) => "unknown".to_string(),
-    }
-}
-
-/// Load hardware encoder cache from disk if it exists and is valid
-async fn load_persistent_encoder_cache() -> Option<EncoderCapabilities> {
-    let cache_path = get_encoder_cache_path();
-
-    if !cache_path.exists() {
-        tracing::debug!("No persistent encoder cache found at {:?}", cache_path);
-        return None;
-    }
-
-    match std::fs::read_to_string(&cache_path) {
-        Ok(content) => {
-            match serde_json::from_str::<PersistentEncoderCache>(&content) {
-                Ok(cached) => {
-                    let current_version = get_ffmpeg_version().await;
-
-                    // Validate that FFmpeg version matches (encoders could change with version)
-                    if cached.ffmpeg_version == current_version {
-                        tracing::info!(
-                            "✓ Loaded cached hardware encoders (cached at {}, version: {})",
-                            cached.cached_at,
-                            current_version
-                        );
-                        return Some(EncoderCapabilities {
-                            available_encoders: cached.available_encoders,
-                            preferred_encoder: cached.preferred_encoder,
-                        });
-                    } else {
-                        tracing::info!(
-                            "⚠️  Encoder cache is stale (FFmpeg version changed). Clearing cache and re-detecting."
-                        );
-                        let _ = std::fs::remove_file(&cache_path);
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to parse encoder cache: {}", e);
-                }
-            }
-        }
-        Err(e) => {
-            tracing::debug!("Failed to read encoder cache: {}", e);
-        }
-    }
-
-    None
-}
-
-/// Save hardware encoder detection results to persistent cache
-async fn save_persistent_encoder_cache(capabilities: &EncoderCapabilities) -> Result<()> {
-    let cache_path = get_encoder_cache_path();
-
-    // Ensure the directory exists
-    if let Some(parent) = cache_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    let ffmpeg_version = get_ffmpeg_version().await;
-    let cached = PersistentEncoderCache {
-        available_encoders: capabilities.available_encoders.clone(),
-        preferred_encoder: capabilities.preferred_encoder.clone(),
-        ffmpeg_version,
-        cached_at: chrono::Local::now().to_rfc3339(),
-    };
-
-    let json = serde_json::to_string_pretty(&cached)?;
-    std::fs::write(&cache_path, json)?;
-
-    tracing::debug!("✓ Saved encoder cache to {:?}", cache_path);
-    Ok(())
-}
-
-/// Detect available hardware encoders on the system
-pub async fn detect_hardware_encoders() -> Result<EncoderCapabilities> {
-    let mut available_encoders = Vec::new();
-
-    tracing::info!("🔍 Detecting available hardware encoders on system...");
-    tracing::debug!("Running encoder detection in PARALLEL for QSV, NVENC, and AMF...");
-
-    // Detect all three encoders in parallel (3x faster than sequential)
-    // Each encoder detection typically takes ~1.6-10 seconds, so running in parallel
-    // reduces the total time to the longest single check instead of the sum of all three
-    let (has_qsv, has_nvenc, has_amf) = tokio::join!(
-        detect_encoder("h264_qsv"),
-        detect_encoder("h264_nvenc"),
-        detect_encoder("h264_amf")
-    );
-
-    // Process results in order of preference
-    if has_qsv {
-        tracing::info!("✓ Intel Quick Sync (h264_qsv) detected - enables GPU acceleration");
-        available_encoders.push(HardwareEncoder::IntelQuickSync);
-    }
-
-    if has_nvenc {
-        tracing::info!("✓ NVIDIA NVENC (h264_nvenc) detected - enables GPU acceleration");
-        available_encoders.push(HardwareEncoder::NvidiaEnc);
-    }
-
-    if has_amf {
-        tracing::info!("✓ AMD VCE (h264_amf) detected - enables GPU acceleration");
-        available_encoders.push(HardwareEncoder::AmdVce);
-    }
-
-    // Select preferred encoder (in order of preference)
-    let preferred_encoder = if !available_encoders.is_empty() {
-        let encoder_name = match available_encoders.first().unwrap() {
-            HardwareEncoder::IntelQuickSync => "Intel Quick Sync",
-            HardwareEncoder::NvidiaEnc => "NVIDIA NVENC",
-            HardwareEncoder::AmdVce => "AMD VCE",
-        };
-        tracing::info!(
-            "🚀 Using hardware encoder: {} (expects 3-5x faster encoding)",
-            encoder_name
-        );
-        EncoderChoice::Hardware(available_encoders[0])
-    } else {
-        tracing::warn!("⚠️  No hardware encoders detected");
-        tracing::info!("📊 Will use optimized software encoding (slower than hardware, but still optimized)");
-        EncoderChoice::Software
-    };
-
-    Ok(EncoderCapabilities {
-        available_encoders,
-        preferred_encoder,
-    })
-}
-
-/// Detect hardware encoders with multi-level caching
-/// 1. In-memory cache (app lifetime) - <1ms
-/// 2. Persistent disk cache (persists across app restarts) - <1ms
-/// 3. Live detection (first time or version mismatch) - ~10s
-pub async fn detect_hardware_encoders_cached() -> Result<EncoderCapabilities> {
-    // Level 1: Try in-memory cache (app lifetime)
-    if let Some(cached) = ENCODER_CACHE.get() {
-        tracing::debug!("✓ Using in-memory cached hardware encoders");
-        return Ok(cached.clone());
-    }
-
-    // Level 2: Try persistent disk cache
-    if let Some(cached) = load_persistent_encoder_cache().await {
-        // Store in memory cache for faster subsequent access
-        let _ = ENCODER_CACHE.set(cached.clone());
-        return Ok(cached);
-    }
-
-    // Level 3: Perform live detection (will take ~10 seconds with parallel detection)
-    tracing::info!("🔍 Performing live hardware encoder detection (will cache for future use)...");
-    let start = std::time::Instant::now();
-    let capabilities = detect_hardware_encoders().await?;
-    let elapsed = start.elapsed();
-
-    tracing::info!(
-        "✓ Detection completed in {:.2}s - saving to persistent cache",
-        elapsed.as_secs_f64()
-    );
-
-    // Cache the result in memory
-    let _ = ENCODER_CACHE.set(capabilities.clone());
-
-    // Save to persistent disk cache
-    if let Err(e) = save_persistent_encoder_cache(&capabilities).await {
-        tracing::warn!(
-            "Failed to save encoder cache to disk: {} (will use in-memory cache)",
-            e
-        );
-    }
-
-    Ok(capabilities)
-}
-
-/// Check if a specific encoder is available in FFmpeg
-async fn detect_encoder(encoder_name: &str) -> bool {
-    let mut cmd = Command::new("ffmpeg");
-    cmd.arg("-encoders").arg("-hide_banner");
-
-    #[cfg(windows)]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-
-    match cmd.output().await {
-        Ok(output) => {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            // FFmpeg output shows available encoders with their names
-            output_str.contains(encoder_name)
-        }
-        Err(_) => false,
-    }
-}
-
-/// Convert WAV file to M4A using best available encoder with optimization flags
+/// Convert WAV file to M4A using optimized software AAC encoding
 pub async fn convert_wav_to_m4a_optimized(
     wav_path: &PathBuf,
     m4a_path: &PathBuf,
@@ -573,8 +317,6 @@ pub async fn convert_wav_to_m4a_with_progress(
     tracing::info!("✓ FFmpeg found");
 
     // Build FFmpeg command with optimized software AAC encoding
-    // Note: Hardware encoders (h264_qsv, nvenc, amf) are for VIDEO only, not audio.
-    // Audio encoding uses software AAC which is fast and efficient.
     let mut cmd = Command::new("ffmpeg");
 
     // Suppress FFmpeg banner and stats for cleaner output
@@ -583,7 +325,7 @@ pub async fn convert_wav_to_m4a_with_progress(
 
     cmd.arg("-i").arg(wav_path);
 
-    // Direct software AAC encoding (no hardware detection needed for audio)
+    // Software AAC encoding configuration
     tracing::info!("⚙️  Encoder Configuration:");
     tracing::info!("    • Codec: AAC (software, optimized for audio)");
     tracing::info!("    • Bitrate: 192 kbps");
@@ -703,7 +445,6 @@ pub async fn convert_wav_to_m4a_with_progress(
     tracing::info!("    • Compression:     {:.1}%", compression_ratio);
     tracing::info!("    • Time elapsed:    {:.2}s", elapsed.as_secs_f64());
     tracing::info!("    • Speed (MB/min):  {:.2}", (wav_size_mb / elapsed.as_secs_f64()) * 60.0);
-    tracing::info!("    • Encoder used:    Software AAC (multi-threaded)");
 
     tracing::info!("═══════════════════════════════════════════════════════════");
 
