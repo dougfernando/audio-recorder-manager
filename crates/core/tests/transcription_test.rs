@@ -1,14 +1,12 @@
 use audio_recorder_manager::transcription::{load_config, transcribe_audio};
+use audio_recorder_manager::logging::init_test_logging;
 use std::path::PathBuf;
 
 #[tokio::test]
 #[ignore] // Run with: cargo test --test transcription_test -- --ignored
 async fn test_transcription_with_real_audio() {
-    // Initialize logger for test
-    let _ = env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
-        .is_test(true)
-        .try_init();
+    // Initialize tracing for test
+    let _ = init_test_logging();
 
     // Path to the test audio file
     let audio_path =
