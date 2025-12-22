@@ -1,4 +1,5 @@
-use audio_recorder_manager_core::cli;
+mod cli;
+
 use audio_recorder_manager_core::logging;
 use audio_recorder_manager_core::Result;
 use std::env;

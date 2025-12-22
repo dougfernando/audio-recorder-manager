@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use crate::commands;
-use crate::config::RecorderConfig;
-use crate::domain::{AudioFormat, RecordingDuration};
-use crate::error::Result;
-use crate::output::UserOutput;
-use crate::recorder::RecordingQuality;
+use audio_recorder_manager_core::commands;
+use audio_recorder_manager_core::config::RecorderConfig;
+use audio_recorder_manager_core::domain::{AudioFormat, RecordingDuration};
+use audio_recorder_manager_core::error::Result;
+use audio_recorder_manager_core::output::UserOutput;
+use audio_recorder_manager_core::recorder::RecordingQuality;
 
 pub async fn run(args: Vec<String>) -> Result<()> {
     let output = UserOutput::new();
