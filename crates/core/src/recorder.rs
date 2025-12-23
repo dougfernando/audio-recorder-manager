@@ -424,6 +424,7 @@ pub async fn merge_audio_streams_smart(
     output_format: crate::domain::AudioFormat,
     session_id: Option<&str>,
     observer: Option<std::sync::Arc<crate::status::JsonFileObserver>>,
+    total_steps: u8,
 ) -> Result<()> {
     use std::process::Stdio;
     use std::time::Instant;
@@ -585,11 +586,30 @@ pub async fn merge_audio_streams_smart(
 
             // Parse progress in real-time
             let mut current_speed = None;
+            let mut encoding_stage_emitted = false;
+
             while let Ok(Some(line)) = lines.next_line().await {
                 if line.starts_with("out_time_ms=") {
                     if let Ok(time_ms) = line.split('=').nth(1).unwrap_or("0").parse::<u64>() {
                         // Use effective_duration_ms (never 0) for reliable progress calculation
                         let progress_pct = ((time_ms as f64 / effective_duration_ms as f64) * 100.0).min(100.0) as u8;
+
+                        // For M4A format, emit encoding stage when we're past merging (at 30% progress)
+                        if matches!(output_format, crate::domain::AudioFormat::M4a)
+                            && !encoding_stage_emitted
+                            && progress_pct >= 30 {
+                            tracing::info!("📝 Stage 3/{}: Encoding to M4A", total_steps);
+                            let _ = observer.write_processing_status_v2(
+                                session_id,
+                                "Converting to M4A format...",
+                                Some(3),
+                                Some(total_steps),
+                                Some("encoding"),
+                                None,
+                                None,
+                            );
+                            encoding_stage_emitted = true;
+                        }
 
                         let _ = observer.update_ffmpeg_progress(
                             session_id,
@@ -740,12 +760,31 @@ pub async fn merge_audio_streams_smart(
         anyhow::bail!("FFmpeg merge failed: {}", stderr);
     }
 
-    // Mark FFmpeg merge/encoding as complete to ensure UI transitions properly (for M4A format)
-    if matches!(output_format, crate::domain::AudioFormat::M4a) {
-        if let Some(session_id) = session_id {
-            if let Some(observer) = &observer {
-                let _ = observer.mark_ffmpeg_complete(session_id);
-            }
+    // Mark FFmpeg merge/encoding as complete to ensure UI transitions properly
+    if let Some(session_id) = session_id {
+        if let Some(observer) = &observer {
+            // Emit finalizing stage
+            let final_step = if matches!(output_format, crate::domain::AudioFormat::M4a) {
+                4
+            } else {
+                3
+            };
+            tracing::info!("📝 Stage {}/{}: Finalizing", final_step, total_steps);
+            let _ = observer.write_processing_status_v2(
+                session_id,
+                "Saving recording...",
+                Some(final_step),
+                Some(total_steps),
+                Some("finalizing"),
+                None,
+                None,
+            );
+
+            // Small delay to show finalization stage
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+            // Mark as complete
+            let _ = observer.mark_ffmpeg_complete(session_id);
         }
     }
 
