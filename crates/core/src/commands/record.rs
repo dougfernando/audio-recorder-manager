@@ -321,26 +321,39 @@ async fn record_worker(
         let _ = wait_for_file_ready(&mic_temp, 2000).await;
         tracing::info!("✓ Temporary files are ready for processing");
 
-        // Determine stage message based on format
-        let stage_message = if matches!(session.format, AudioFormat::M4a) {
-            "Merging channels and encoding to M4A..."
+        // Determine total steps based on format
+        let total_steps = if matches!(session.format, AudioFormat::M4a) {
+            4  // M4A: Analyze -> Merge -> Encode -> Finalize
         } else {
-            "Merging audio channels..."
+            3  // WAV: Analyze -> Merge -> Finalize
         };
 
-        // Write unified processing status (single screen from start to finish)
-        tracing::info!("📝 Writing initial processing status: {}", stage_message);
+        // Stage 1: Analyzing Audio
+        let loopback_has_audio = loopback_recorder.has_audio_detected();
+        let mic_has_audio = mic_recorder.as_ref().map(|m| m.has_audio_detected()).unwrap_or(false);
+
+        let analysis_message = if loopback_has_audio && mic_has_audio {
+            "Detected system audio and microphone"
+        } else if loopback_has_audio {
+            "Detected system audio only"
+        } else if mic_has_audio {
+            "Detected microphone only"
+        } else {
+            "No audio detected"
+        };
+
+        tracing::info!("📝 Stage 1/{}: Analyzing Audio - {}", total_steps, analysis_message);
         let _ = observer.write_processing_status_v2(
             session.id.as_str(),
-            stage_message,
-            None,  // No step indicator - use only progress bar
-            None,
-            None,
+            analysis_message,
+            Some(1),
+            Some(total_steps),
+            Some("analyzing"),
             None,
             Some(session.duration.to_api_value() as u64),
         );
 
-        tracing::info!("🚀 Post-processing started - Stage: {}", stage_message);
+        tracing::info!("🚀 Post-processing started");
 
         // Merge audio channels (and encode to M4A if requested) in a span for better tracing
         {
@@ -358,13 +371,25 @@ async fn record_worker(
                 };
 
                 // Small delay to ensure status file was written before merge starts
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(300)).await;
 
                 // Get audio detection flags
                 let loopback_has_audio = loopback_recorder.has_audio_detected();
                 let mic_has_audio = mic_recorder.as_ref()
                     .map(|m| m.has_audio_detected())
                     .unwrap_or(false);
+
+                // Stage 2: Merging Channels
+                tracing::info!("📝 Stage 2/{}: Merging Channels", total_steps);
+                let _ = observer.write_processing_status_v2(
+                    session.id.as_str(),
+                    "Combining audio streams...",
+                    Some(2),
+                    Some(total_steps),
+                    Some("merging"),
+                    None,
+                    Some(session.duration.to_api_value() as u64),
+                );
 
                 // Merge audio streams using FFmpeg (with direct M4A encoding if requested)
                 merge_audio_streams_smart(
@@ -377,6 +402,7 @@ async fn record_worker(
                     session.format,
                     Some(session.id.as_str()),
                     Some(observer.clone()),
+                    total_steps,
                 )
                 .await?;
 

@@ -9,6 +9,7 @@
     formatTime,
     formatFileSize,
   } from '../stores';
+  import ProcessingStages from './ProcessingStages.svelte';
 
   let isStopping = false;
   let isCancelling = false;
@@ -143,61 +144,40 @@
 </script>
 
 {#if $isRecording && $recordingStatus}
-  <!-- Enhanced Processing Status UI -->
-  {#if $recordingStatus.status === 'processing' || $recordingStatus.status === 'completed'}
-    <!-- Unified Processing & Completion Screen -->
+  <!-- Processing Status with Stages -->
+  {#if $recordingStatus.status === 'processing'}
+    <div class="processing-container">
+      <!-- Header Badge -->
+      <div class="processing-header-simple">
+        <div class="badge">⏳ Processing</div>
+        <span class="session-id-badge">{$recordingStatus.session_id || 'N/A'}</span>
+      </div>
+
+      <!-- Stages Component -->
+      <ProcessingStages status={$recordingStatus} />
+    </div>
+  {:else if $recordingStatus.status === 'completed'}
+    <!-- Completion Screen -->
     <div class="unified-processing">
       <!-- Header Badge -->
       <div class="processing-header-simple">
-        <div class="badge" class:completed={$recordingStatus.status === 'completed'}>
-          {$recordingStatus.status === 'completed' ? '✓ Complete' : '⏳ Processing'}
-        </div>
+        <div class="badge completed">✓ Complete</div>
         <span class="session-id-badge">{$recordingStatus.session_id || 'N/A'}</span>
       </div>
 
       <!-- Main Content -->
       <div class="processing-content-simple">
-        <!-- Spinner or Checkmark -->
+        <!-- Checkmark -->
         <div class="status-icon">
-          {#if $recordingStatus.status === 'processing'}
-            <div class="spinner"></div>
-          {:else}
-            <svg class="checkmark" width="56" height="56" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-          {/if}
+          <svg class="checkmark" width="56" height="56" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+          </svg>
         </div>
 
         <!-- Status Message -->
         <div class="status-title">
-          {$recordingStatus.message || 'Processing audio...'}
+          {$recordingStatus.message || 'Recording completed!'}
         </div>
-
-        <!-- Progress Bar (only during processing) -->
-        {#if $recordingStatus.status === 'processing'}
-          <div class="progress-container">
-            {#if $recordingStatus.ffmpeg_progress !== undefined && $recordingStatus.ffmpeg_progress !== null}
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: {$recordingStatus.ffmpeg_progress}%">
-                  <div class="progress-shine"></div>
-                </div>
-              </div>
-              <div class="progress-info">
-                <span class="progress-percent">{$recordingStatus.ffmpeg_progress}%</span>
-                {#if $recordingStatus.processing_speed}
-                  <span class="progress-speed">{$recordingStatus.processing_speed}</span>
-                {/if}
-              </div>
-            {:else}
-              <div class="progress-bar-indeterminate">
-                <div class="progress-fill-indeterminate"></div>
-              </div>
-              <div class="progress-info">
-                <span class="progress-label">Processing...</span>
-              </div>
-            {/if}
-          </div>
-        {/if}
 
         <!-- Metadata -->
         <div class="metadata-simple">
@@ -215,8 +195,8 @@
           {/if}
         </div>
 
-        <!-- File Info (completion only) -->
-        {#if $recordingStatus.status === 'completed' && $recordingStatus.filename}
+        <!-- File Info -->
+        {#if $recordingStatus.filename}
           <div class="file-info-simple">
             <div class="filename">{$recordingStatus.filename}</div>
             {#if $recordingStatus.file_path}
@@ -1131,6 +1111,11 @@
     font-size: 13px;
     word-break: break-all;
     color: var(--text-primary);
+  }
+
+  /* Processing Container */
+  .processing-container {
+    margin-bottom: var(--spacing-lg);
   }
 
   /* Unified Processing & Completion Screen */
