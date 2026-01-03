@@ -1257,53 +1257,81 @@ fn setup_status_watcher(app_handle: tauri::AppHandle) {
                 }) => {
                     for path in paths {
                         if path.extension().map(|e| e == "json").unwrap_or(false) {
-                            // Read file first to check status
-                            match std::fs::read_to_string(&path) {
-                                Ok(content) => {
-                                    match serde_json::from_str::<serde_json::Value>(&content) {
-                                        Ok(status) => {
-                                            // Check if this is a completion update - NEVER debounce completion status
-                                            let is_completion = status.get("status")
-                                                .and_then(|s| s.as_str())
-                                                .map(|s| s == "completed")
-                                                .unwrap_or(false);
-
-                                            // Apply debounce only for non-completion updates
-                                            if !is_completion {
-                                                let now = std::time::Instant::now();
-                                                let should_update = last_update_time
-                                                    .get(&path)
-                                                    .map(|last| now.duration_since(*last) >= debounce_duration)
-                                                    .unwrap_or(true);
-
-                                                if !should_update {
-                                                    continue;
-                                                }
-
-                                                last_update_time.insert(path.clone(), now);
-                                            } else {
-                                                // Always accept completion updates, reset debounce timer
-                                                last_update_time.insert(path.clone(), std::time::Instant::now());
-                                                tracing::info!("Detected completion status - emitting immediately");
+                            // Retry logic for reading status file (handles in-progress writes)
+                            let mut status_opt = None;
+                            for attempt in 0..3 {
+                                match std::fs::read_to_string(&path) {
+                                    Ok(content) => {
+                                        // Skip empty files (still being written)
+                                        if content.is_empty() {
+                                            if attempt < 2 {
+                                                std::thread::sleep(std::time::Duration::from_millis(5));
+                                                continue;
                                             }
-
-                                            // Small delay to ensure file write is complete
-                                            std::thread::sleep(std::time::Duration::from_millis(10));
-
-                                            // Emit the status update
-                                            if let Err(e) = app_handle.emit("recording-status-update", status.clone()) {
-                                                tracing::warn!(error = ?e, "Failed to emit status update event");
-                                            } else {
-                                                tracing::debug!("Emitted status update from {:?}", path.file_name().unwrap_or_default());
-                                            }
+                                            tracing::debug!(path = ?path, "Status file is empty, skipping");
+                                            break;
                                         }
-                                        Err(e) => {
-                                            tracing::warn!(error = ?e, path = ?path, "Failed to parse status JSON");
+
+                                        match serde_json::from_str::<serde_json::Value>(&content) {
+                                            Ok(status) => {
+                                                status_opt = Some(status);
+                                                break;
+                                            }
+                                            Err(e) if attempt < 2 => {
+                                                // Likely incomplete write, retry
+                                                tracing::debug!(error = ?e, path = ?path, "Failed to parse status JSON (attempt {}), retrying...", attempt + 1);
+                                                std::thread::sleep(std::time::Duration::from_millis(5));
+                                                continue;
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(error = ?e, path = ?path, "Failed to parse status JSON after {} attempts", attempt + 1);
+                                                break;
+                                            }
                                         }
                                     }
+                                    Err(e) if attempt < 2 => {
+                                        tracing::debug!(error = ?e, path = ?path, "Failed to read status file (attempt {}), retrying...", attempt + 1);
+                                        std::thread::sleep(std::time::Duration::from_millis(5));
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(error = ?e, path = ?path, "Failed to read status file after {} attempts", attempt + 1);
+                                        break;
+                                    }
                                 }
-                                Err(e) => {
-                                    tracing::warn!(error = ?e, path = ?path, "Failed to read status file");
+                            }
+
+                            if let Some(status) = status_opt {
+                                // Check if this is a completion update - NEVER debounce completion status
+                                let is_completion = status.get("status")
+                                    .and_then(|s| s.as_str())
+                                    .map(|s| s == "completed")
+                                    .unwrap_or(false);
+
+                                // Apply debounce only for non-completion updates
+                                if !is_completion {
+                                    let now = std::time::Instant::now();
+                                    let should_update = last_update_time
+                                        .get(&path)
+                                        .map(|last| now.duration_since(*last) >= debounce_duration)
+                                        .unwrap_or(true);
+
+                                    if !should_update {
+                                        continue;
+                                    }
+
+                                    last_update_time.insert(path.clone(), now);
+                                } else {
+                                    // Always accept completion updates, reset debounce timer
+                                    last_update_time.insert(path.clone(), std::time::Instant::now());
+                                    tracing::info!("Detected completion status - emitting immediately");
+                                }
+
+                                // Emit the status update
+                                if let Err(e) = app_handle.emit("recording-status-update", status.clone()) {
+                                    tracing::warn!(error = ?e, "Failed to emit status update event");
+                                } else {
+                                    tracing::debug!("Emitted status update from {:?}", path.file_name().unwrap_or_default());
                                 }
                             }
                         }

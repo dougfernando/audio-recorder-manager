@@ -16,6 +16,25 @@ impl JsonFileObserver {
         self.status_dir.join(format!("{}.json", session_id))
     }
 
+    /// Atomically write JSON to file to avoid race conditions with file watchers
+    /// Uses temp file + atomic rename on Windows to ensure complete writes
+    fn write_json_atomic(&self, path: &PathBuf, content: &str) -> Result<()> {
+        let temp_path = path.with_extension("json.tmp");
+
+        // Write to temporary file
+        fs::write(&temp_path, content)?;
+
+        // On Windows, remove old file first (rename fails if destination exists)
+        if path.exists() {
+            fs::remove_file(path)?;
+        }
+
+        // Atomically rename temp file to final location
+        fs::rename(&temp_path, path)?;
+
+        Ok(())
+    }
+
     pub fn write_processing_status(&self, session_id: &str, message: &str) -> Result<()> {
         let status_file = self.get_status_file(session_id);
         let processing_status = serde_json::json!({
@@ -24,7 +43,7 @@ impl JsonFileObserver {
             "message": message,
         });
         let json = serde_json::to_string_pretty(&processing_status)?;
-        fs::write(&status_file, json)?;
+        self.write_json_atomic(&status_file, &json)?;
         Ok(())
     }
 
@@ -62,7 +81,7 @@ impl JsonFileObserver {
         }
 
         let json = serde_json::to_string_pretty(&processing_status)?;
-        fs::write(&status_file, json)?;
+        self.write_json_atomic(&status_file, &json)?;
         Ok(())
     }
 
@@ -90,7 +109,7 @@ impl JsonFileObserver {
                             // Write back as pretty JSON
                             match serde_json::to_string_pretty(&status) {
                                 Ok(json) => {
-                                    match fs::write(&status_file, json) {
+                                    match self.write_json_atomic(&status_file, &json) {
                                         Ok(_) => {
                                             tracing::debug!(
                                                 "Updated FFmpeg progress to {}%{}",
@@ -161,7 +180,7 @@ impl JsonFileObserver {
                             // Write back as pretty JSON
                             match serde_json::to_string_pretty(&status) {
                                 Ok(json) => {
-                                    match fs::write(&status_file, json) {
+                                    match self.write_json_atomic(&status_file, &json) {
                                         Ok(_) => {
                                             tracing::debug!("Marked FFmpeg encoding as complete (100%)");
                                             return Ok(());
@@ -208,14 +227,14 @@ impl StatusObserver for JsonFileObserver {
     fn on_progress(&self, status: RecordingStatus) -> Result<()> {
         let status_file = self.get_status_file(&status.session_id);
         let json = serde_json::to_string_pretty(&status)?;
-        fs::write(&status_file, json)?;
+        self.write_json_atomic(&status_file, &json)?;
         Ok(())
     }
 
     fn on_complete(&self, result: RecordingResult) -> Result<()> {
         let status_file = self.get_status_file(&result.session_id);
         let json = serde_json::to_string_pretty(&result)?;
-        fs::write(&status_file, json)?;
+        self.write_json_atomic(&status_file, &json)?;
         Ok(())
     }
 }
