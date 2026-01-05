@@ -239,6 +239,13 @@ async fn recover_recording(
         output.prefixed("Merging", "Merging audio channels...");
     }
 
+    // Determine total steps based on format
+    let total_steps = if matches!(format, AudioFormat::M4a) {
+        4  // M4A: Analyze -> Merge -> Encode -> Finalize
+    } else {
+        3  // WAV: Analyze -> Merge -> Finalize
+    };
+
     merge_audio_streams_smart(
         &loopback_path,
         &mic_path,
@@ -249,6 +256,7 @@ async fn recover_recording(
         format,
         Some(&recording.session_id),
         None,
+        total_steps,
     )
     .await
     .context("Failed to merge audio streams")?;

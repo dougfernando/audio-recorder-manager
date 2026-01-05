@@ -112,7 +112,7 @@ async fn record_worker(
         let filepath = config.recordings_dir.join(session.temp_filename());
         let observer = Arc::new(JsonFileObserver::new(config.status_dir.clone()));
         let effective_duration = session.duration.effective_duration();
-        let mut final_filepath = filepath.clone(); // Will be updated based on platform/format
+        let mut final_filepath = filepath.clone();
 
         // Use WASAPI dual-channel recording on Windows (loopback + microphone)
         #[cfg(windows)]
