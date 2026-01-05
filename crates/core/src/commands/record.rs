@@ -371,7 +371,7 @@ async fn record_worker(
                 };
 
                 // Small delay to ensure status file was written before merge starts
-                tokio::time::sleep(Duration::from_millis(300)).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
 
                 // Get audio detection flags
                 let loopback_has_audio = loopback_recorder.has_audio_detected();
@@ -379,18 +379,7 @@ async fn record_worker(
                     .map(|m| m.has_audio_detected())
                     .unwrap_or(false);
 
-                // Stage 2: Merging Channels
-                tracing::info!("📝 Stage 2/{}: Merging Channels", total_steps);
-                let _ = observer.write_processing_status_v2(
-                    session.id.as_str(),
-                    "Combining audio streams...",
-                    Some(2),
-                    Some(total_steps),
-                    Some("merging"),
-                    None,
-                    Some(session.duration.to_api_value() as u64),
-                );
-
+                // Stage 2 will be emitted inside merge_audio_streams_smart for better granularity
                 // Merge audio streams using FFmpeg (with direct M4A encoding if requested)
                 merge_audio_streams_smart(
                     &loopback_temp,

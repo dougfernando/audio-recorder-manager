@@ -164,19 +164,32 @@
           <div class="stage-message">{getStageMessage(stage)}</div>
 
           <!-- FFmpeg Progress for current stage -->
-          {#if state === 'current' && showProgress && (stage.type === 'merging' || stage.type === 'encoding')}
+          {#if state === 'current' && (stage.type === 'merging' || stage.type === 'encoding')}
             <div class="stage-progress">
-              <div class="progress-bar-small">
-                <div class="progress-fill-small" style="width: {progressPercent}%">
-                  <div class="progress-shine"></div>
+              {#if showProgress}
+                <!-- Determinate progress bar -->
+                <div class="progress-bar-small">
+                  <div class="progress-fill-small" style="width: {progressPercent}%">
+                    <div class="progress-shine"></div>
+                  </div>
                 </div>
-              </div>
-              <div class="progress-details">
-                <span class="progress-percent">{progressPercent}%</span>
-                {#if processingSpeed}
-                  <span class="progress-speed">{processingSpeed}</span>
-                {/if}
-              </div>
+                <div class="progress-details">
+                  <span class="progress-percent">{progressPercent}%</span>
+                  {#if processingSpeed}
+                    <span class="progress-speed">{processingSpeed}</span>
+                  {/if}
+                </div>
+              {:else}
+                <!-- Indeterminate progress bar (preparing) -->
+                <div class="progress-bar-small">
+                  <div class="progress-fill-indeterminate">
+                    <div class="progress-shine"></div>
+                  </div>
+                </div>
+                <div class="progress-details">
+                  <span class="progress-label">Preparing...</span>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
@@ -438,6 +451,20 @@
     overflow: hidden;
   }
 
+  .progress-fill-indeterminate {
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    position: absolute;
+    animation: indeterminateSlide 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.3);
+  }
+
+  @keyframes indeterminateSlide {
+    0% { left: -40%; }
+    100% { left: 100%; }
+  }
+
   .progress-details {
     display: flex;
     align-items: center;
@@ -453,6 +480,12 @@
 
   .progress-speed {
     color: var(--text-secondary);
+  }
+
+  .progress-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-style: italic;
   }
 
   /* Metadata */
