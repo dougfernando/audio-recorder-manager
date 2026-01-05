@@ -515,6 +515,20 @@ pub async fn merge_audio_streams_smart(
 
     let start_time = Instant::now();
 
+    // Emit interim status: preparing merge
+    if let (Some(session_id), Some(observer)) = (session_id, observer.as_ref()) {
+        tracing::info!("📝 Stage 2/{}: Preparing merge (detecting durations)...", total_steps);
+        let _ = observer.write_processing_status_v2(
+            session_id,
+            "Preparing merge operation...",
+            Some(2),
+            Some(total_steps),
+            Some("merging"),
+            None,
+            None,
+        );
+    }
+
     // Get audio duration from BOTH input files and use the maximum
     // On Windows, we merge two files (loopback + mic) which may have different durations
     // Run duration detection in parallel to reduce setup overhead (50% faster)
@@ -660,6 +674,20 @@ pub async fn merge_audio_streams_smart(
 
         let cmd_build_elapsed = cmd_build_start.elapsed();
         tracing::debug!("  [BOTTLENECK] FFmpeg command construction: {:.3}s", cmd_build_elapsed.as_secs_f64());
+
+        // Update status before FFmpeg starts
+        if let (Some(session_id), Some(observer)) = (session_id, observer.as_ref()) {
+            tracing::info!("🔀 Starting FFmpeg merge and encode...");
+            let _ = observer.write_processing_status_v2(
+                session_id,
+                "Combining audio streams...",
+                Some(2),
+                Some(total_steps),
+                Some("merging"),
+                None,
+                None,
+            );
+        }
 
         let ffmpeg_start = std::time::Instant::now();
         let result = execute_ffmpeg(cmd).await?;
