@@ -251,7 +251,16 @@ pub async fn merge_audio_streams_smart(
 
             // Parse progress in real-time
             let mut current_speed = None;
+            let mut current_speed_float: f64 = 0.0;
             let mut encoding_stage_emitted = false;
+            let encoding_start = std::time::Instant::now();
+
+            // Log estimated processing time at the start
+            // Typical processing speed is 4-6x real-time for M4A encoding
+            let estimated_processing_secs = effective_duration_ms / 1000 / 5; // Conservative 5x estimate
+            tracing::info!("⏱️  Estimated processing time: ~{} minutes (based on {}s audio at ~5x speed)",
+                estimated_processing_secs / 60,
+                effective_duration_ms / 1000);
 
             while let Ok(Some(line)) = lines.next_line().await {
                 if line.starts_with("out_time_ms=") {
@@ -259,11 +268,30 @@ pub async fn merge_audio_streams_smart(
                         // Use effective_duration_ms (never 0) for reliable progress calculation
                         let progress_pct = ((time_ms as f64 / effective_duration_ms as f64) * 100.0).min(100.0) as u8;
 
+                        // Calculate estimated remaining time based on current processing speed
+                        let remaining_audio_ms = effective_duration_ms.saturating_sub(time_ms);
+                        let estimated_remaining_secs = if current_speed_float > 0.0 {
+                            // Use actual measured speed
+                            (remaining_audio_ms as f64 / 1000.0 / current_speed_float) as u64
+                        } else {
+                            // Fallback to elapsed-based estimate
+                            let elapsed = encoding_start.elapsed().as_secs_f64();
+                            if elapsed > 0.0 && time_ms > 0 {
+                                let actual_speed = time_ms as f64 / 1000.0 / elapsed;
+                                (remaining_audio_ms as f64 / 1000.0 / actual_speed) as u64
+                            } else {
+                                remaining_audio_ms / 1000 / 5 // Conservative fallback
+                            }
+                        };
+
                         // For M4A format, emit encoding stage when we're past merging (at 30% progress)
                         if matches!(output_format, crate::domain::AudioFormat::M4a)
                             && !encoding_stage_emitted
                             && progress_pct >= 30 {
                             tracing::info!("📝 Stage 3/{}: Encoding to M4A", total_steps);
+                            tracing::info!("    └─ Estimated remaining: ~{} min {} sec",
+                                estimated_remaining_secs / 60,
+                                estimated_remaining_secs % 60);
                             let _ = observer.write_processing_status_v2(
                                 session_id,
                                 "Converting to M4A format...",
@@ -280,18 +308,36 @@ pub async fn merge_audio_streams_smart(
                             session_id,
                             progress_pct,
                             current_speed.clone(),
+                            Some(effective_duration_ms),
+                            Some(time_ms),
+                            Some(estimated_remaining_secs),
                         );
 
+                        // Log progress checkpoints at 25%, 50%, 75%
+                        if progress_pct == 25 || progress_pct == 50 || progress_pct == 75 {
+                            let elapsed = encoding_start.elapsed();
+                            tracing::info!("    📊 Progress checkpoint: {}% | Elapsed: {:.0}s | ETA: ~{} min {} sec",
+                                progress_pct,
+                                elapsed.as_secs_f64(),
+                                estimated_remaining_secs / 60,
+                                estimated_remaining_secs % 60);
+                        }
+
                         tracing::debug!(
-                            "FFmpeg merge progress: {}% ({}/{} ms, speed: {:?})",
+                            "FFmpeg merge progress: {}% ({}/{} ms, speed: {:?}, ETA: {}s)",
                             progress_pct,
                             time_ms,
                             effective_duration_ms,
-                            current_speed
+                            current_speed,
+                            estimated_remaining_secs
                         );
                     }
                 } else if line.starts_with("speed=") {
                     current_speed = line.split('=').nth(1).map(|s| s.to_string());
+                    // Parse speed as float for ETA calculation (e.g., "4.75x" -> 4.75)
+                    if let Some(speed_str) = current_speed.as_ref() {
+                        current_speed_float = speed_str.trim_end_matches('x').parse().unwrap_or(0.0);
+                    }
                 }
             }
 

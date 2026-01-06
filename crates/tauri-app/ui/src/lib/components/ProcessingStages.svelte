@@ -105,6 +105,35 @@
   $: showProgress = currentStep > 0 && status?.ffmpeg_progress !== null && status?.ffmpeg_progress !== undefined;
   $: progressPercent = status?.ffmpeg_progress || 0;
   $: processingSpeed = status?.processing_speed || null;
+
+  // Enhanced progress tracking - ETA display
+  $: estimatedRemainingSecs = status?.estimated_remaining_secs || null;
+  $: audioDurationMs = status?.audio_duration_ms || null;
+  $: processedTimeMs = status?.processed_time_ms || null;
+
+  // Format remaining time as "X min Y sec" or "X sec"
+  function formatRemainingTime(secs) {
+    if (secs === null || secs === undefined) return null;
+    const minutes = Math.floor(secs / 60);
+    const seconds = secs % 60;
+    if (minutes > 0) {
+      return `${minutes} min ${seconds} sec`;
+    }
+    return `${seconds} sec`;
+  }
+
+  // Format milliseconds as "MM:SS"
+  function formatMsAsTime(ms) {
+    if (ms === null || ms === undefined) return null;
+    const totalSecs = Math.floor(ms / 1000);
+    const minutes = Math.floor(totalSecs / 60);
+    const seconds = totalSecs % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  $: remainingTimeDisplay = formatRemainingTime(estimatedRemainingSecs);
+  $: processedTimeDisplay = formatMsAsTime(processedTimeMs);
+  $: totalTimeDisplay = formatMsAsTime(audioDurationMs);
 </script>
 
 <div class="processing-stages">
@@ -179,6 +208,17 @@
                     <span class="progress-speed">{processingSpeed}</span>
                   {/if}
                 </div>
+                <!-- Enhanced ETA display -->
+                {#if remainingTimeDisplay || (processedTimeDisplay && totalTimeDisplay)}
+                  <div class="progress-eta">
+                    {#if processedTimeDisplay && totalTimeDisplay}
+                      <span class="eta-processed">Processed: {processedTimeDisplay} / {totalTimeDisplay}</span>
+                    {/if}
+                    {#if remainingTimeDisplay}
+                      <span class="eta-remaining">Est. remaining: {remainingTimeDisplay}</span>
+                    {/if}
+                  </div>
+                {/if}
               {:else}
                 <!-- Indeterminate progress bar (preparing) -->
                 <div class="progress-bar-small">
@@ -486,6 +526,30 @@
     color: var(--text-secondary);
     font-size: 12px;
     font-style: italic;
+  }
+
+  /* Enhanced ETA Display */
+  .progress-eta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .eta-processed {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .eta-remaining {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warning);
   }
 
   /* Metadata */
