@@ -112,16 +112,16 @@
   $: audioDurationMs = status?.audio_duration_ms ?? null;
   $: processedTimeMs = status?.processed_time_ms ?? null;
 
-  // Debug logging for ETA fields
-  $: if (status?.ffmpeg_progress !== undefined) {
-    console.log('ProcessingStages ETA data:', {
-      ffmpeg_progress: status?.ffmpeg_progress,
-      estimated_remaining_secs: status?.estimated_remaining_secs,
-      audio_duration_ms: status?.audio_duration_ms,
-      processed_time_ms: status?.processed_time_ms,
-      processing_speed: status?.processing_speed
-    });
-  }
+  // Debug logging for ETA fields (can be removed after confirming feature works)
+  // $: if (status?.ffmpeg_progress !== undefined) {
+  //   console.log('ProcessingStages ETA data:', {
+  //     ffmpeg_progress: status?.ffmpeg_progress,
+  //     estimated_remaining_secs: status?.estimated_remaining_secs,
+  //     audio_duration_ms: status?.audio_duration_ms,
+  //     processed_time_ms: status?.processed_time_ms,
+  //     processing_speed: status?.processing_speed
+  //   });
+  // }
 
   // Format remaining time as "X min Y sec" or "X sec"
   function formatRemainingTime(secs) {
@@ -154,13 +154,26 @@
     <span class="stages-title">Processing Stage {currentStep} of {totalSteps}</span>
   </div>
 
-  <!-- DEBUG: Always visible ETA info - remove after testing -->
-  <div class="debug-eta-info">
-    <div class="debug-title">⏱️ ETA Debug Info (v2)</div>
-    <div class="debug-row">Progress: {progressPercent}% | Speed: {processingSpeed ?? 'N/A'}</div>
-    <div class="debug-row">Audio Duration: {audioDurationMs ?? 'null'}ms | Processed: {processedTimeMs ?? 'null'}ms</div>
-    <div class="debug-row">Est. Remaining: {estimatedRemainingSecs ?? 'null'}s = {remainingTimeDisplay ?? 'N/A'}</div>
-  </div>
+  <!-- ETA Summary - shows when encoding data is available -->
+  {#if audioDurationMs !== null && progressPercent > 0}
+    <div class="eta-summary">
+      <div class="eta-summary-row">
+        <span class="eta-label">⏱️ Encoding Progress</span>
+        <span class="eta-value">{progressPercent}%{processingSpeed ? ` @ ${processingSpeed}` : ''}</span>
+      </div>
+      {#if remainingTimeDisplay && estimatedRemainingSecs > 0}
+        <div class="eta-summary-row">
+          <span class="eta-label">Est. Time Remaining</span>
+          <span class="eta-value eta-highlight">{remainingTimeDisplay}</span>
+        </div>
+      {:else if progressPercent >= 100}
+        <div class="eta-summary-row">
+          <span class="eta-label">Status</span>
+          <span class="eta-value eta-complete">Encoding complete!</span>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Progress Bar (overall) -->
   <div class="overall-progress">
@@ -550,27 +563,47 @@
     font-style: italic;
   }
 
-  /* DEBUG: Always visible ETA info */
-  .debug-eta-info {
-    background: #1a1a2e;
-    border: 2px solid #e94560;
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 16px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px;
+  /* ETA Summary Panel */
+  .eta-summary {
+    background: linear-gradient(135deg, rgba(255, 184, 77, 0.1) 0%, rgba(255, 184, 77, 0.05) 100%);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
   }
 
-  .debug-title {
-    color: #e94560;
-    font-weight: bold;
-    margin-bottom: 8px;
+  .eta-summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs) 0;
+  }
+
+  .eta-summary-row:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 184, 77, 0.2);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .eta-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .eta-value {
     font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'IBM Plex Mono', monospace;
   }
 
-  .debug-row {
-    color: #00ff88;
-    margin: 4px 0;
+  .eta-highlight {
+    color: var(--warning);
+    font-size: 15px;
+  }
+
+  .eta-complete {
+    color: var(--success);
   }
 
   /* Enhanced ETA Display */
