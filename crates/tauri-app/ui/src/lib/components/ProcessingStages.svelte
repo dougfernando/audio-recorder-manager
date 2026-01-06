@@ -103,13 +103,25 @@
 
   // Show progress for current stage
   $: showProgress = currentStep > 0 && status?.ffmpeg_progress !== null && status?.ffmpeg_progress !== undefined;
-  $: progressPercent = status?.ffmpeg_progress || 0;
-  $: processingSpeed = status?.processing_speed || null;
+  $: progressPercent = status?.ffmpeg_progress ?? 0;
+  $: processingSpeed = status?.processing_speed ?? null;
 
   // Enhanced progress tracking - ETA display
-  $: estimatedRemainingSecs = status?.estimated_remaining_secs || null;
-  $: audioDurationMs = status?.audio_duration_ms || null;
-  $: processedTimeMs = status?.processed_time_ms || null;
+  // Use nullish coalescing (??) instead of OR (||) to preserve valid 0 values
+  $: estimatedRemainingSecs = status?.estimated_remaining_secs ?? null;
+  $: audioDurationMs = status?.audio_duration_ms ?? null;
+  $: processedTimeMs = status?.processed_time_ms ?? null;
+
+  // Debug logging for ETA fields
+  $: if (status?.ffmpeg_progress !== undefined) {
+    console.log('ProcessingStages ETA data:', {
+      ffmpeg_progress: status?.ffmpeg_progress,
+      estimated_remaining_secs: status?.estimated_remaining_secs,
+      audio_duration_ms: status?.audio_duration_ms,
+      processed_time_ms: status?.processed_time_ms,
+      processing_speed: status?.processing_speed
+    });
+  }
 
   // Format remaining time as "X min Y sec" or "X sec"
   function formatRemainingTime(secs) {
@@ -208,14 +220,16 @@
                     <span class="progress-speed">{processingSpeed}</span>
                   {/if}
                 </div>
-                <!-- Enhanced ETA display -->
-                {#if remainingTimeDisplay || (processedTimeDisplay && totalTimeDisplay)}
+                <!-- Enhanced ETA display - show when any ETA data is available -->
+                {#if estimatedRemainingSecs !== null || audioDurationMs !== null}
                   <div class="progress-eta">
                     {#if processedTimeDisplay && totalTimeDisplay}
                       <span class="eta-processed">Processed: {processedTimeDisplay} / {totalTimeDisplay}</span>
                     {/if}
                     {#if remainingTimeDisplay}
                       <span class="eta-remaining">Est. remaining: {remainingTimeDisplay}</span>
+                    {:else if estimatedRemainingSecs === 0}
+                      <span class="eta-remaining">Almost done...</span>
                     {/if}
                   </div>
                 {/if}
