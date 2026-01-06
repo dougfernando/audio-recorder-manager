@@ -154,6 +154,14 @@
     <span class="stages-title">Processing Stage {currentStep} of {totalSteps}</span>
   </div>
 
+  <!-- DEBUG: Always visible ETA info - remove after testing -->
+  <div class="debug-eta-info">
+    <div class="debug-title">⏱️ ETA Debug Info (v2)</div>
+    <div class="debug-row">Progress: {progressPercent}% | Speed: {processingSpeed ?? 'N/A'}</div>
+    <div class="debug-row">Audio Duration: {audioDurationMs ?? 'null'}ms | Processed: {processedTimeMs ?? 'null'}ms</div>
+    <div class="debug-row">Est. Remaining: {estimatedRemainingSecs ?? 'null'}s = {remainingTimeDisplay ?? 'N/A'}</div>
+  </div>
+
   <!-- Progress Bar (overall) -->
   <div class="overall-progress">
     <div class="progress-bar">
@@ -540,6 +548,29 @@
     color: var(--text-secondary);
     font-size: 12px;
     font-style: italic;
+  }
+
+  /* DEBUG: Always visible ETA info */
+  .debug-eta-info {
+    background: #1a1a2e;
+    border: 2px solid #e94560;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+  }
+
+  .debug-title {
+    color: #e94560;
+    font-weight: bold;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .debug-row {
+    color: #00ff88;
+    margin: 4px 0;
   }
 
   /* Enhanced ETA Display */
