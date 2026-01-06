@@ -373,6 +373,9 @@ pub async fn convert_wav_to_m4a_with_progress(
 
         // Parse progress in real-time
         let mut current_progress = FfmpegProgress::default();
+        let mut current_speed_float: f64 = 0.0;
+        let encoding_start = std::time::Instant::now();
+
         while let Ok(Some(line)) = lines.next_line().await {
             if let Some((key, value)) = parse_progress_line(&line) {
                 match key {
@@ -387,24 +390,44 @@ pub async fn convert_wav_to_m4a_with_progress(
                                 0
                             };
 
-                            // Update status file
+                            // Calculate estimated remaining time
+                            let remaining_audio_ms = audio_duration_ms.saturating_sub(time_ms);
+                            let estimated_remaining_secs = if current_speed_float > 0.0 {
+                                (remaining_audio_ms as f64 / 1000.0 / current_speed_float) as u64
+                            } else {
+                                let elapsed = encoding_start.elapsed().as_secs_f64();
+                                if elapsed > 0.0 && time_ms > 0 {
+                                    let actual_speed = time_ms as f64 / 1000.0 / elapsed;
+                                    (remaining_audio_ms as f64 / 1000.0 / actual_speed) as u64
+                                } else {
+                                    remaining_audio_ms / 1000 / 5
+                                }
+                            };
+
+                            // Update status file with enhanced progress info
                             let _ = observer.update_ffmpeg_progress(
                                 session_id,
                                 progress_pct,
                                 current_progress.speed.clone(),
+                                Some(audio_duration_ms),
+                                Some(time_ms),
+                                Some(estimated_remaining_secs),
                             );
 
                             tracing::debug!(
-                                "FFmpeg progress: {}% ({}/{} ms) - Speed: {}",
+                                "FFmpeg progress: {}% ({}/{} ms) - Speed: {} - ETA: {}s",
                                 progress_pct,
                                 time_ms,
                                 audio_duration_ms,
-                                current_progress.speed.as_deref().unwrap_or("N/A")
+                                current_progress.speed.as_deref().unwrap_or("N/A"),
+                                estimated_remaining_secs
                             );
                         }
                     }
                     "speed" => {
-                        current_progress.speed = Some(value);
+                        current_progress.speed = Some(value.clone());
+                        // Parse speed as float for ETA calculation (e.g., "4.75x" -> 4.75)
+                        current_speed_float = value.trim_end_matches('x').parse().unwrap_or(0.0);
                     }
                     _ => {}
                 }

@@ -86,11 +86,18 @@ impl JsonFileObserver {
     }
 
     /// Update FFmpeg progress in the status file (preserves other fields)
+    /// Now includes additional fields for better ETA calculation in UI:
+    /// - audio_duration_ms: Total audio duration being processed
+    /// - processed_time_ms: How much audio has been processed so far
+    /// - estimated_remaining_secs: Calculated estimate of time remaining
     pub fn update_ffmpeg_progress(
         &self,
         session_id: &str,
         ffmpeg_progress: u8,
         processing_speed: Option<String>,
+        audio_duration_ms: Option<u64>,
+        processed_time_ms: Option<u64>,
+        estimated_remaining_secs: Option<u64>,
     ) -> Result<()> {
         let status_file = self.get_status_file(session_id);
 
@@ -104,6 +111,16 @@ impl JsonFileObserver {
                             status["ffmpeg_progress"] = serde_json::json!(ffmpeg_progress);
                             if let Some(speed) = processing_speed.as_ref() {
                                 status["processing_speed"] = serde_json::json!(speed);
+                            }
+                            // Add enhanced progress tracking fields
+                            if let Some(duration) = audio_duration_ms {
+                                status["audio_duration_ms"] = serde_json::json!(duration);
+                            }
+                            if let Some(processed) = processed_time_ms {
+                                status["processed_time_ms"] = serde_json::json!(processed);
+                            }
+                            if let Some(remaining) = estimated_remaining_secs {
+                                status["estimated_remaining_secs"] = serde_json::json!(remaining);
                             }
 
                             // Write back as pretty JSON
