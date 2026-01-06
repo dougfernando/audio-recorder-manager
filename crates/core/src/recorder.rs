@@ -255,12 +255,18 @@ pub async fn merge_audio_streams_smart(
             let mut encoding_stage_emitted = false;
             let encoding_start = std::time::Instant::now();
 
+            // Track checkpoints (reset per recording)
+            let mut checkpoint_25_logged = false;
+            let mut checkpoint_50_logged = false;
+            let mut checkpoint_75_logged = false;
+
             // Log estimated processing time at the start
             // Typical processing speed is 4-6x real-time for M4A encoding
             let estimated_processing_secs = effective_duration_ms / 1000 / 5; // Conservative 5x estimate
             tracing::info!("⏱️  Estimated processing time: ~{} minutes (based on {}s audio at ~5x speed)",
                 estimated_processing_secs / 60,
                 effective_duration_ms / 1000);
+            tracing::info!("    Audio duration: {}ms, Progress monitoring: ACTIVE", effective_duration_ms);
 
             while let Ok(Some(line)) = lines.next_line().await {
                 if line.starts_with("out_time_ms=") {
@@ -313,14 +319,21 @@ pub async fn merge_audio_streams_smart(
                             Some(estimated_remaining_secs),
                         );
 
-                        // Log progress checkpoints at 25%, 50%, 75%
-                        if progress_pct == 25 || progress_pct == 50 || progress_pct == 75 {
-                            let elapsed = encoding_start.elapsed();
+                        // Log progress checkpoints at approximately 25%, 50%, 75%
+                        // Use ranges to avoid missing checkpoints due to progress jumps
+                        let elapsed = encoding_start.elapsed();
+                        if progress_pct >= 25 && progress_pct < 30 && !checkpoint_25_logged {
+                            checkpoint_25_logged = true;
                             tracing::info!("    📊 Progress checkpoint: {}% | Elapsed: {:.0}s | ETA: ~{} min {} sec",
-                                progress_pct,
-                                elapsed.as_secs_f64(),
-                                estimated_remaining_secs / 60,
-                                estimated_remaining_secs % 60);
+                                progress_pct, elapsed.as_secs_f64(), estimated_remaining_secs / 60, estimated_remaining_secs % 60);
+                        } else if progress_pct >= 50 && progress_pct < 55 && !checkpoint_50_logged {
+                            checkpoint_50_logged = true;
+                            tracing::info!("    📊 Progress checkpoint: {}% | Elapsed: {:.0}s | ETA: ~{} min {} sec",
+                                progress_pct, elapsed.as_secs_f64(), estimated_remaining_secs / 60, estimated_remaining_secs % 60);
+                        } else if progress_pct >= 75 && progress_pct < 80 && !checkpoint_75_logged {
+                            checkpoint_75_logged = true;
+                            tracing::info!("    📊 Progress checkpoint: {}% | Elapsed: {:.0}s | ETA: ~{} min {} sec",
+                                progress_pct, elapsed.as_secs_f64(), estimated_remaining_secs / 60, estimated_remaining_secs % 60);
                         }
 
                         tracing::debug!(
