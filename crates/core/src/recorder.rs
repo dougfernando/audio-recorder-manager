@@ -87,6 +87,12 @@ pub async fn merge_audio_streams_smart(
         crate::domain::AudioFormat::M4a => "M4A (AAC)",
     };
 
+    // UNCONDITIONAL DEBUG LOG - This MUST appear in logs (v2)
+    tracing::info!("🔴🔴🔴 MERGE FUNCTION CALLED (ETA v2) 🔴🔴🔴");
+    tracing::info!("    session_id: {:?}", session_id);
+    tracing::info!("    observer present: {}", observer.is_some());
+    tracing::info!("    output_format: {:?}", format_str);
+
     tracing::info!("═══════════════════════════════════════════════════════════");
     tracing::info!("🎧 AUDIO MERGE PROCESS STARTED");
     tracing::info!("═══════════════════════════════════════════════════════════");
@@ -235,8 +241,14 @@ pub async fn merge_audio_streams_smart(
     let observer_for_closure = observer.clone();
 
     // Helper closure to execute FFmpeg with or without progress monitoring
+    // UNCONDITIONAL DEBUG LOG
+    tracing::info!("🔵🔵🔵 About to execute FFmpeg, enable_progress={} 🔵🔵🔵", enable_progress);
+
     let execute_ffmpeg = |mut cmd: Command| async move {
         if enable_progress {
+            // UNCONDITIONAL DEBUG LOG - inside progress block
+            tracing::info!("🟢🟢🟢 INSIDE PROGRESS MONITORING BLOCK 🟢🟢🟢");
+
             let session_id = session_id.unwrap();
             let observer = observer_for_closure.as_ref().unwrap();
 
