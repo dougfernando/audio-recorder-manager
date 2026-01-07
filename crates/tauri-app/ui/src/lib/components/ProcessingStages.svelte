@@ -73,8 +73,13 @@
     if (state === 'completed') {
       // Show completion messages
       if (stage.type === 'analyzing') {
+        // Only use backend message if we're not past this stage and it's relevant
+        if (currentStep === 1 && status?.message) {
+          return status.message;
+        }
         return status?.message || 'Audio detected';
       }
+      // For other completed stages, always show "Completed"
       return 'Completed';
     }
 
@@ -101,8 +106,12 @@
     return '';
   }
 
-  // Show progress for current stage
-  $: showProgress = currentStep > 0 && status?.ffmpeg_progress !== null && status?.ffmpeg_progress !== undefined;
+  // Show progress for current stage - only when actively processing (not at 0% or 100%)
+  $: showProgress = currentStep > 0
+    && status?.ffmpeg_progress !== null
+    && status?.ffmpeg_progress !== undefined
+    && status.ffmpeg_progress > 0
+    && status.ffmpeg_progress < 100;
   $: progressPercent = status?.ffmpeg_progress ?? 0;
   $: processingSpeed = status?.processing_speed ?? null;
 
@@ -143,8 +152,13 @@
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 
+  // Defensive: Clamp processed time to not exceed total duration (in case of bad backend data)
+  $: clampedProcessedTimeMs = (processedTimeMs !== null && audioDurationMs !== null)
+    ? Math.min(processedTimeMs, audioDurationMs)
+    : processedTimeMs;
+
   $: remainingTimeDisplay = formatRemainingTime(estimatedRemainingSecs);
-  $: processedTimeDisplay = formatMsAsTime(processedTimeMs);
+  $: processedTimeDisplay = formatMsAsTime(clampedProcessedTimeMs);
   $: totalTimeDisplay = formatMsAsTime(audioDurationMs);
 </script>
 
