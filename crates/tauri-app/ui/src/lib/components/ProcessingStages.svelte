@@ -214,53 +214,70 @@
           </div>
 
           <div class="stage-message">{getStageMessage(stage, state)}</div>
+        </div>
+      </div>
+    {/each}
+  </div>
 
-          <!-- FFmpeg Progress for current stage -->
-          {#if state === 'current' && (stage.type === 'merging' || stage.type === 'encoding')}
-            <div class="stage-progress">
-              {#if showProgress}
-                <!-- Determinate progress bar -->
-                <div class="progress-bar-small">
-                  <div class="progress-fill-small" style="width: {progressPercent}%">
-                    <div class="progress-shine"></div>
-                  </div>
+  <!-- Fixed Progress Section (shows during merging/encoding) -->
+  {#if (processingType === 'merging' || processingType === 'encoding')}
+    <div class="progress-section-fixed">
+      <div class="progress-header">
+        <span class="progress-title">🔄 Processing Progress</span>
+      </div>
+
+      {#if showProgress}
+        <!-- Determinate progress bar -->
+        <div class="progress-bar-large">
+          <div class="progress-fill-large" style="width: {progressPercent}%">
+            <div class="progress-shine"></div>
+          </div>
+        </div>
+
+        <div class="progress-stats">
+          <div class="progress-main">
+            <span class="progress-percent-large">{progressPercent}%</span>
+            {#if processingSpeed}
+              <span class="progress-speed-large">{processingSpeed}</span>
+            {/if}
+          </div>
+
+          <!-- Enhanced ETA display -->
+          {#if estimatedRemainingSecs !== null || audioDurationMs !== null}
+            <div class="progress-details-grid">
+              {#if processedTimeDisplay && totalTimeDisplay}
+                <div class="detail-item">
+                  <span class="detail-label">Processed:</span>
+                  <span class="detail-value">{processedTimeDisplay} / {totalTimeDisplay}</span>
                 </div>
-                <div class="progress-details">
-                  <span class="progress-percent">{progressPercent}%</span>
-                  {#if processingSpeed}
-                    <span class="progress-speed">{processingSpeed}</span>
-                  {/if}
+              {/if}
+              {#if remainingTimeDisplay}
+                <div class="detail-item">
+                  <span class="detail-label">Est. Remaining:</span>
+                  <span class="detail-value highlight">{remainingTimeDisplay}</span>
                 </div>
-                <!-- Enhanced ETA display - show when any ETA data is available -->
-                {#if estimatedRemainingSecs !== null || audioDurationMs !== null}
-                  <div class="progress-eta">
-                    {#if processedTimeDisplay && totalTimeDisplay}
-                      <span class="eta-processed">Processed: {processedTimeDisplay} / {totalTimeDisplay}</span>
-                    {/if}
-                    {#if remainingTimeDisplay}
-                      <span class="eta-remaining">Est. remaining: {remainingTimeDisplay}</span>
-                    {:else if estimatedRemainingSecs === 0}
-                      <span class="eta-remaining">Almost done...</span>
-                    {/if}
-                  </div>
-                {/if}
-              {:else}
-                <!-- Indeterminate progress bar (preparing) -->
-                <div class="progress-bar-small">
-                  <div class="progress-fill-indeterminate">
-                    <div class="progress-shine"></div>
-                  </div>
-                </div>
-                <div class="progress-details">
-                  <span class="progress-label">Preparing...</span>
+              {:else if estimatedRemainingSecs === 0}
+                <div class="detail-item">
+                  <span class="detail-label">Status:</span>
+                  <span class="detail-value highlight">Almost done...</span>
                 </div>
               {/if}
             </div>
           {/if}
         </div>
-      </div>
-    {/each}
-  </div>
+      {:else}
+        <!-- Indeterminate progress bar (preparing) -->
+        <div class="progress-bar-large">
+          <div class="progress-fill-indeterminate-large">
+            <div class="progress-shine"></div>
+          </div>
+        </div>
+        <div class="progress-stats">
+          <span class="progress-label-large">Preparing...</span>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Metadata -->
   {#if (status?.duration_secs && status.duration_secs < 86400) || status?.audio_duration_ms || status?.file_size_mb}
@@ -582,6 +599,129 @@
     color: var(--warning);
   }
 
+  /* Fixed Progress Section (bottom of screen) */
+  .progress-section-fixed {
+    background: var(--bg-surface);
+    border: 2px solid var(--warning);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    margin-top: var(--spacing-xl);
+    box-shadow: var(--shadow-md), 0 0 24px rgba(255, 184, 77, 0.2);
+  }
+
+  .progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .progress-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--warning);
+    letter-spacing: 0.5px;
+  }
+
+  .progress-bar-large {
+    width: 100%;
+    height: 12px;
+    background: var(--bg-elevated);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .progress-fill-large {
+    height: 100%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    transition: width 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.4);
+  }
+
+  .progress-fill-indeterminate-large {
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    position: absolute;
+    animation: indeterminateSlide 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.3);
+  }
+
+  .progress-stats {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .progress-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+  }
+
+  .progress-percent-large {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--warning);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .progress-speed-large {
+    font-size: 18px;
+    color: var(--text-secondary);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .progress-label-large {
+    text-align: center;
+    font-size: 16px;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  .progress-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    text-align: center;
+  }
+
+  .detail-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .detail-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .detail-value.highlight {
+    color: var(--warning);
+    font-size: 18px;
+  }
+
   /* Metadata */
   .metadata {
     display: flex;
@@ -631,6 +771,27 @@
 
     .stage-name {
       font-size: 14px;
+    }
+
+    .progress-section-fixed {
+      padding: var(--spacing-md);
+    }
+
+    .progress-percent-large {
+      font-size: 24px;
+    }
+
+    .progress-speed-large {
+      font-size: 14px;
+    }
+
+    .progress-details-grid {
+      grid-template-columns: 1fr;
+      gap: var(--spacing-sm);
+    }
+
+    .detail-value.highlight {
+      font-size: 16px;
     }
 
     .metadata {
