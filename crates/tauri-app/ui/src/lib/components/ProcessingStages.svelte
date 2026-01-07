@@ -65,25 +65,20 @@
     return 'pending';
   }
 
-  // Get stage message
-  function getStageMessage(stage) {
-    const state = getStageState(stage);
-
+  // Get stage message - takes both stage and state to ensure reactivity
+  function getStageMessage(stage, state) {
     if (state === 'pending') return 'Waiting...';
+
     if (state === 'completed') {
-      // Show completion messages
+      // Special handling for analyzing stage
       if (stage.type === 'analyzing') {
-        // Only use backend message if we're not past this stage and it's relevant
-        if (currentStep === 1 && status?.message) {
-          return status.message;
-        }
-        return status?.message || 'Audio detected';
+        return status?.message || 'Detected system audio and microphone';
       }
-      // For other completed stages, always show "Completed"
+      // All other completed stages show "Completed"
       return 'Completed';
     }
 
-    // Current stage - show live message from backend
+    // Current stage - show backend message or fallback
     if (state === 'current') {
       if (status?.message) {
         return status.message;
@@ -168,22 +163,6 @@
     <span class="stages-title">Processing Stage {currentStep} of {totalSteps}</span>
   </div>
 
-  <!-- ETA Summary - shows when encoding data is available and we're in merging/encoding stage -->
-  {#if audioDurationMs !== null && progressPercent > 0 && progressPercent < 100 && (processingType === 'merging' || processingType === 'encoding')}
-    <div class="eta-summary">
-      <div class="eta-summary-row">
-        <span class="eta-label">⏱️ Encoding Progress</span>
-        <span class="eta-value">{progressPercent}%{processingSpeed ? ` @ ${processingSpeed}` : ''}</span>
-      </div>
-      {#if remainingTimeDisplay && estimatedRemainingSecs > 0}
-        <div class="eta-summary-row">
-          <span class="eta-label">Est. Time Remaining</span>
-          <span class="eta-value eta-highlight">{remainingTimeDisplay}</span>
-        </div>
-      {/if}
-    </div>
-  {/if}
-
   <!-- Progress Bar (overall) -->
   <div class="overall-progress">
     <div class="progress-bar">
@@ -232,7 +211,7 @@
             {/if}
           </div>
 
-          <div class="stage-message">{getStageMessage(stage)}</div>
+          <div class="stage-message">{getStageMessage(stage, state)}</div>
 
           <!-- FFmpeg Progress for current stage -->
           {#if state === 'current' && (stage.type === 'merging' || stage.type === 'encoding')}
