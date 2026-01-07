@@ -347,7 +347,7 @@ async fn record_worker(
             Some(total_steps),
             Some("analyzing"),
             None,
-            Some(session.duration.to_api_value() as u64),
+            None, // Duration will be determined from actual audio file during processing
         );
 
         tracing::info!("🚀 Post-processing started");
