@@ -163,6 +163,8 @@
     <span class="stages-title">Processing Stage {currentStep} of {totalSteps}</span>
   </div>
 
+  <!-- NOTE: Progress details (%, speed, ETA) are shown per-stage below, not in a summary box here -->
+
   <!-- Progress Bar (overall) -->
   <div class="overall-progress">
     <div class="progress-bar">
@@ -554,49 +556,6 @@
     color: var(--text-secondary);
     font-size: 12px;
     font-style: italic;
-  }
-
-  /* ETA Summary Panel */
-  .eta-summary {
-    background: linear-gradient(135deg, rgba(255, 184, 77, 0.1) 0%, rgba(255, 184, 77, 0.05) 100%);
-    border: 1px solid var(--warning);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
-    margin-bottom: var(--spacing-lg);
-  }
-
-  .eta-summary-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-xs) 0;
-  }
-
-  .eta-summary-row:not(:last-child) {
-    border-bottom: 1px solid rgba(255, 184, 77, 0.2);
-    margin-bottom: var(--spacing-xs);
-  }
-
-  .eta-label {
-    font-size: 13px;
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  .eta-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    font-family: 'IBM Plex Mono', monospace;
-  }
-
-  .eta-highlight {
-    color: var(--warning);
-    font-size: 15px;
-  }
-
-  .eta-complete {
-    color: var(--success);
   }
 
   /* Enhanced ETA Display */
