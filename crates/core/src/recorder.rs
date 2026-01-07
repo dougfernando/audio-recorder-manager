@@ -282,7 +282,11 @@ pub async fn merge_audio_streams_smart(
 
             while let Ok(Some(line)) = lines.next_line().await {
                 if line.starts_with("out_time_ms=") {
-                    if let Ok(time_ms) = line.split('=').nth(1).unwrap_or("0").parse::<u64>() {
+                    if let Ok(time_us) = line.split('=').nth(1).unwrap_or("0").parse::<u64>() {
+                        // IMPORTANT: FFmpeg's out_time_ms is actually in MICROSECONDS despite the name
+                        // Convert to milliseconds for all calculations
+                        let time_ms = time_us / 1000;
+
                         // Use effective_duration_ms (never 0) for reliable progress calculation
                         let progress_pct = ((time_ms as f64 / effective_duration_ms as f64) * 100.0).min(100.0) as u8;
 
