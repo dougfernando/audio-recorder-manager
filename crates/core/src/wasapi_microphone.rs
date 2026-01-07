@@ -1,5 +1,17 @@
 #[cfg(windows)]
 pub mod windows_microphone {
+    //! Windows WASAPI microphone recording implementation
+    //!
+    //! # Safety
+    //!
+    //! This module uses extensive `unsafe` code to interact with the Windows Audio Session API (WASAPI).
+    //! All unsafe operations follow the same safety invariants as the loopback module:
+    //!
+    //! - **COM Initialization**: Proper initialization and cleanup on each thread
+    //! - **Pointer Validity**: All WASAPI pointers are used only while valid
+    //! - **Buffer Access**: Audio buffers are validated before casting to typed slices
+    //! - **Memory Layout**: Relies on WASAPI's alignment guarantees for audio buffers
+
     use anyhow::{Context, Result};
     use crate::audio_utils::{calculate_rms_f32, calculate_rms_i16};
     use hound::{WavSpec, WavWriter};

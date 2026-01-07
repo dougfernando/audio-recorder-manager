@@ -4,18 +4,15 @@ use std::time::Duration;
 use tracing::Instrument;
 
 use crate::config::RecorderConfig;
-#[cfg(not(windows))]
-use crate::devices::DeviceManager;
 use crate::domain::{AudioFormat, RecordingDuration, RecordingSession};
 use crate::error::Result;
 use crate::output::UserOutput;
-#[cfg(not(windows))]
-use crate::recorder::AudioRecorder;
 use crate::recorder::{merge_audio_streams_smart, RecordingQuality};
-#[cfg(not(windows))]
-use crate::recorder::convert_wav_to_m4a;
 use crate::status::{JsonFileObserver, RecordingResult, RecordingStatus, StatusObserver};
+
+#[cfg(windows)]
 use crate::wasapi_loopback::windows_loopback::WasapiLoopbackRecorder;
+#[cfg(windows)]
 use crate::wasapi_microphone::windows_microphone::WasapiMicrophoneRecorder;
 
 /// Execute the record command
@@ -424,78 +421,11 @@ async fn record_worker(
 
     #[cfg(not(windows))]
     {
-        // Fallback to CPAL for non-Windows platforms
-        let device_manager =
-            DeviceManager::new().context("Failed to create device manager")?;
-
-        let device = device_manager
-            .get_best_recording_device()
-            .context("Failed to get recording device")?;
-
-        let device_raw = device.device().context("Device not available")?.clone();
-
-        let recorder = AudioRecorder::new(
-            device_raw,
-            device.name.clone(),
-            config.recordings_dir.clone(),
-        )?;
-
-        let handle = recorder
-            .start_recording(
-                &session.temp_filename(),
-                Some(effective_duration),
-                session.id.as_str().to_string(),
-                config.status_dir.clone(),
-            )
-            .await?;
-
-        tracing::info!(
-            "Recording started: {} ({} seconds)",
-            session.temp_filename(),
-            effective_duration
-        );
-        handle.write_status()?;
-
-        let update_interval = config.status_update_interval;
-        loop {
-            tokio::time::sleep(update_interval).await;
-
-            if handle.should_stop() {
-                break;
-            }
-
-            handle.write_status()?;
-        }
-
-        let _ = handle.stop().await?;
-        tracing::info!("Recording completed: {:?}", filepath);
-    }
-
-    // Convert to M4A if requested (only for non-Windows platforms)
-    // On Windows, M4A encoding is done during merge (one-pass optimization)
-    // On non-Windows, we need a separate conversion step
-    #[cfg(not(windows))]
-    if matches!(session.format, AudioFormat::M4a) {
-        tracing::info!("Converting WAV to M4A (part of post-processing)...");
-        output.prefixed("Processing", "Encoding to M4A...");
-
-        let m4a_path = filepath.with_extension("m4a");
-
-        match convert_wav_to_m4a(&filepath, &m4a_path).await {
-            Ok(_) => {
-                tracing::info!("Successfully converted to M4A: {:?}", m4a_path);
-                output.success("M4A encoding complete!");
-                // Delete temporary WAV file
-                if let Err(e) = std::fs::remove_file(&filepath) {
-                    tracing::warn!("Failed to delete temporary WAV file: {}", e);
-                }
-                final_filepath = m4a_path;
-            }
-            Err(e) => {
-                tracing::error!("Failed to convert to M4A: {}. Keeping WAV file.", e);
-                output.warning("Failed to convert to M4A. Keeping WAV file.");
-            }
-        }
+        // TODO: Implement cross-platform recording support using cpal
+        // For now, this application only supports Windows (WASAPI)
+        return Err(crate::error::RecorderError::Other(anyhow::anyhow!(
+            "Recording is currently only supported on Windows. Cross-platform support (Linux/macOS) is planned for a future release."
+        )));
     }
 
     // Write final status
