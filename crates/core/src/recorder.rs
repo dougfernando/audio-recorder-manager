@@ -2,8 +2,15 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// Audio quality constants
 const PROFESSIONAL_SAMPLE_RATE: u32 = 48000;
 const PROFESSIONAL_CHANNELS: u16 = 2;
+
+// File size estimation constants
+// Professional quality: 48kHz stereo 16-bit = 48000 * 2 channels * 2 bytes = 192,000 bytes/sec
+const PROFESSIONAL_BYTES_PER_SECOND: u64 = 192_000;
+const DEFAULT_DURATION_FALLBACK_MS: u64 = 300_000; // 5 minutes
+const DURATION_ESTIMATE_BUFFER_FACTOR: f64 = 1.2; // 20% buffer to prevent premature 100%
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingQuality {
@@ -15,6 +22,7 @@ pub struct RecordingQuality {
 }
 
 impl RecordingQuality {
+    #[must_use]
     pub fn professional() -> Self {
         Self {
             name: "Professional (48kHz Stereo)".to_string(),
@@ -25,6 +33,7 @@ impl RecordingQuality {
         }
     }
 
+    #[must_use]
     pub fn quick() -> Self {
         Self {
             name: "Quick (16kHz Mono)".to_string(),
@@ -35,6 +44,7 @@ impl RecordingQuality {
         }
     }
 
+    #[must_use]
     pub fn standard() -> Self {
         Self {
             name: "Standard (44.1kHz Stereo)".to_string(),
@@ -45,6 +55,7 @@ impl RecordingQuality {
         }
     }
 
+    #[must_use]
     pub fn high() -> Self {
         Self {
             name: "High (96kHz Stereo)".to_string(),
@@ -210,19 +221,20 @@ pub async fn merge_audio_streams_smart(
         let larger_size = std::cmp::max(loopback_size, mic_size);
 
         if larger_size > 0 {
-            const BYTES_PER_SECOND: u64 = 192000;
-            let estimated_secs = larger_size / BYTES_PER_SECOND;
+            let estimated_secs = larger_size / PROFESSIONAL_BYTES_PER_SECOND;
             let estimated_ms = estimated_secs * 1000;
-            // Be conservative: add 20% buffer to prevent premature 100%
-            let buffered_ms = (estimated_ms as f64 * 1.2) as u64;
+            // Be conservative: add buffer to prevent premature 100%
+            let buffered_ms = (estimated_ms as f64 * DURATION_ESTIMATE_BUFFER_FACTOR) as u64;
             tracing::warn!("  ├─ Loopback file: {} bytes", loopback_size);
             tracing::warn!("  ├─ Microphone file: {} bytes", mic_size);
             tracing::warn!("  ├─ Estimated duration: {} ms", estimated_ms);
-            tracing::warn!("  └─ Buffered estimate (20% extra): {} ms", buffered_ms);
+            tracing::warn!("  └─ Buffered estimate ({}% extra): {} ms",
+                (DURATION_ESTIMATE_BUFFER_FACTOR - 1.0) * 100.0, buffered_ms);
             buffered_ms
         } else {
-            tracing::warn!("  └─ Files unavailable, using default 300 seconds");
-            300_000 // Default fallback: 5 minutes
+            tracing::warn!("  └─ Files unavailable, using default {} seconds",
+                DEFAULT_DURATION_FALLBACK_MS / 1000);
+            DEFAULT_DURATION_FALLBACK_MS
         }
     };
 

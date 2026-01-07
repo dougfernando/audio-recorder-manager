@@ -1,5 +1,16 @@
 #[cfg(windows)]
 pub mod windows_monitor {
+    //! Windows WASAPI audio level monitoring
+    //!
+    //! # Safety
+    //!
+    //! This module uses `unsafe` code to monitor audio levels via WASAPI without recording.
+    //! Safety invariants match the recording modules (loopback/microphone):
+    //!
+    //! - **COM Initialization**: Each monitoring thread initializes and cleans up COM properly
+    //! - **Pointer Validity**: WASAPI buffer pointers are only used between GetBuffer/ReleaseBuffer
+    //! - **Thread Safety**: Audio levels are stored as AtomicU32 (f32 bits) for lock-free reads
+
     use anyhow::{Context, Result};
     use crate::audio_utils::{calculate_rms_f32, calculate_rms_i16, calculate_rms_i32};
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};

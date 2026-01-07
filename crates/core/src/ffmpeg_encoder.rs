@@ -5,6 +5,11 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
+// Audio encoding constants (must match recorder.rs)
+// Professional quality: 48kHz stereo 16-bit = 48000 * 2 channels * 2 bytes = 192,000 bytes/sec
+const PROFESSIONAL_BYTES_PER_SECOND: u64 = 192_000;
+const MIN_FILE_SIZE_FOR_ESTIMATION: u64 = 1000;
+
 /// FFmpeg progress information parsed from progress output
 #[derive(Debug, Clone, Default)]
 pub struct FfmpegProgress {
@@ -183,7 +188,6 @@ fn try_wav_header_duration(path: &PathBuf) -> Result<u64> {
         return Err(anyhow::anyhow!("Not a valid WAV file (no WAVE format)"));
     }
 
-    let mut _sample_rate = 0u32; // Kept for reference, not currently used in calculation
     let mut byte_rate = 0u32;
     let mut data_size = 0u32;
 
@@ -208,15 +212,8 @@ fn try_wav_header_duration(path: &PathBuf) -> Result<u64> {
             file.read_exact(&mut fmt_data)?;
 
             if fmt_data.len() >= 12 {
-                // Bytes 4-7: sample rate (little-endian)
-                _sample_rate = u32::from_le_bytes([
-                    fmt_data[4],
-                    fmt_data[5],
-                    fmt_data[6],
-                    fmt_data[7],
-                ]);
-
-                // Bytes 8-11: byte rate (little-endian)
+                // Bytes 4-7: sample rate (not used - we use byte_rate for duration calculation)
+                // Bytes 8-11: byte rate (little-endian) - this is what we need for duration
                 byte_rate = u32::from_le_bytes([
                     fmt_data[8],
                     fmt_data[9],
@@ -258,13 +255,11 @@ fn estimate_duration_from_filesize(path: &PathBuf) -> Result<u64> {
     let metadata = std::fs::metadata(path)?;
     let file_size = metadata.len();
 
-    if file_size < 1000 {
+    if file_size < MIN_FILE_SIZE_FOR_ESTIMATION {
         return Err(anyhow::anyhow!("File too small to estimate duration"));
     }
 
-    // Professional quality: 48000 Hz * 2 channels * 2 bytes = 192000 bytes/sec
-    const BYTES_PER_SECOND: u64 = 192000;
-    let duration_secs = file_size / BYTES_PER_SECOND;
+    let duration_secs = file_size / PROFESSIONAL_BYTES_PER_SECOND;
     let duration_ms = duration_secs * 1000;
 
     Ok(duration_ms)

@@ -133,8 +133,6 @@ async fn start_recording(
 
     // Start recording in background task
     let session_id = chrono::Local::now().format("rec-%Y%m%d_%H%M%S").to_string();
-    let session_id_clone = session_id.clone();
-    let session_id_clone2 = session_id.clone();
 
     // Get file path before moving config
     let file_path = config
@@ -142,33 +140,31 @@ async fn start_recording(
         .join(format!("recording_{}.{}", session_id, format))
         .to_string_lossy()
         .to_string();
-    let filename = format!("recording_{}.{}", session_id_clone, format);
+    let filename = format!("recording_{}.{}", session_id, format);
 
-    // Add to active sessions
+    // Add to active sessions - do this BEFORE spawning the task
+    // Handle mutex poisoning by recovering the inner data
     {
-        match state.active_sessions.lock() {
-            Ok(mut sessions) => sessions.push(session_id.clone()),
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to lock active_sessions mutex (poisoned)");
-                return Err(format!(
-                    "Internal error: Failed to track recording session: {}",
-                    e
-                ));
-            }
-        }
+        let mut sessions = state.active_sessions.lock().unwrap_or_else(|poisoned| {
+            tracing::warn!("Mutex was poisoned, recovering data");
+            poisoned.into_inner()
+        });
+        sessions.push(session_id.clone());
     }
+
+    // Clone session_id for the response
+    let session_id_for_response = session_id.clone();
 
     // Spawn recording task
     tokio::spawn(async move {
-        let _result = record::execute(duration, audio_format, recording_quality, config).await;
-        if let Err(e) = _result {
-            eprintln!("Recording error: {}", e);
+        if let Err(e) = record::execute(duration, audio_format, recording_quality, config).await {
+            tracing::error!("Recording error: {}", e);
         }
     });
 
     Ok(RecordingResponse {
         status: "success".to_string(),
-        session_id: Some(session_id_clone2),
+        session_id: Some(session_id_for_response),
         file_path: Some(file_path),
         filename: Some(filename),
         duration: Some(duration_secs),
@@ -191,18 +187,16 @@ async fn stop_recording(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Remove from active sessions
-    match state.active_sessions.lock() {
-        Ok(mut sessions) => {
-            if let Some(sid) = &session_id {
-                sessions.retain(|s| s != sid);
-            } else {
-                sessions.clear();
-            }
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to lock active_sessions mutex in stop_recording");
-            // Continue anyway since stop command already executed
+    // Remove from active sessions - handle mutex poisoning by recovering
+    {
+        let mut sessions = state.active_sessions.lock().unwrap_or_else(|poisoned| {
+            tracing::warn!("Mutex was poisoned in stop_recording, recovering data");
+            poisoned.into_inner()
+        });
+        if let Some(sid) = &session_id {
+            sessions.retain(|s| s != sid);
+        } else {
+            sessions.clear();
         }
     }
 
@@ -231,18 +225,16 @@ async fn cancel_recording(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Remove from active sessions
-    match state.active_sessions.lock() {
-        Ok(mut sessions) => {
-            if let Some(sid) = &session_id {
-                sessions.retain(|s| s != sid);
-            } else {
-                sessions.clear();
-            }
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to lock active_sessions mutex in cancel_recording");
-            // Continue anyway since cancel command already executed
+    // Remove from active sessions - handle mutex poisoning by recovering
+    {
+        let mut sessions = state.active_sessions.lock().unwrap_or_else(|poisoned| {
+            tracing::warn!("Mutex was poisoned in cancel_recording, recovering data");
+            poisoned.into_inner()
+        });
+        if let Some(sid) = &session_id {
+            sessions.retain(|s| s != sid);
+        } else {
+            sessions.clear();
         }
     }
 
@@ -261,12 +253,11 @@ async fn cancel_recording(
 /// Get device status
 #[tauri::command]
 async fn get_status() -> Result<StatusResponse, String> {
-    // Execute status command (this prints to stdout in the original)
-    // We'll need to capture the output or restructure it
+    // Execute status command
     status::execute().await.map_err(|e| e.to_string())?;
 
-    // For now, return a basic response
-    // TODO: Modify status::execute to return data instead of printing
+    // Note: status::execute currently prints to stdout
+    // Future enhancement: Modify status::execute to return structured data for API consumption
     Ok(StatusResponse {
         status: "success".to_string(),
         devices: vec![],
@@ -295,7 +286,8 @@ async fn recover_recordings(
         .await
         .map_err(|e| e.to_string())?;
 
-    // TODO: Capture actual recovery results
+    // Note: recover::execute currently prints results to stdout
+    // Future enhancement: Modify recover::execute to return list of recovered sessions
     Ok(RecoverResponse {
         status: "success".to_string(),
         message: "Recovery completed successfully".to_string(),

@@ -1,5 +1,27 @@
 #[cfg(windows)]
 pub mod windows_loopback {
+    //! Windows WASAPI loopback recording implementation
+    //!
+    //! # Safety
+    //!
+    //! This module uses extensive `unsafe` code to interact with the Windows Audio Session API (WASAPI).
+    //! All unsafe operations follow these safety invariants:
+    //!
+    //! - **COM Initialization**: Each thread that uses COM calls `CoInitializeEx` before using COM interfaces
+    //!   and `CoUninitialize` before exiting. COM interfaces are never used across thread boundaries.
+    //!
+    //! - **Pointer Validity**: All pointers obtained from WASAPI (buffer pointers, format structures) are:
+    //!   1. Only dereferenced while they're valid (between GetBuffer/ReleaseBuffer calls)
+    //!   2. Properly freed using CoTaskMemFree when appropriate
+    //!   3. Never used after being released
+    //!
+    //! - **Buffer Access**: Audio buffers obtained via GetBuffer are only accessed as slices after
+    //!   validating the frame count and sample format. The buffer size is calculated based on
+    //!   `num_frames * channels` to prevent out-of-bounds access.
+    //!
+    //! - **Memory Layout**: When casting buffer pointers to typed slices (f32, i16, i32), we rely on
+    //!   WASAPI's guarantee that buffers are properly aligned and sized for the requested format.
+
     use anyhow::{Context, Result};
     use crate::audio_utils::{calculate_rms_f32, calculate_rms_i16, calculate_rms_i32};
     use hound::{WavSpec, WavWriter};
