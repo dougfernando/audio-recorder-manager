@@ -52,9 +52,9 @@
         },
         {
           id: 3,
-          name: 'Finalizing',
-          icon: '✓',
-          type: 'finalizing',
+          name: 'Encoding',
+          icon: '📦',
+          type: 'encoding',
         },
       ];
 
@@ -90,7 +90,7 @@
         case 'merging':
           return 'Combining audio streams...';
         case 'encoding':
-          return 'Converting to M4A format...';
+          return isM4a ? 'Converting to M4A format...' : 'Processing audio...';
         case 'finalizing':
           return 'Saving recording...';
         default:
@@ -154,8 +154,8 @@
     <span class="stages-title">Processing Stage {currentStep} of {totalSteps}</span>
   </div>
 
-  <!-- ETA Summary - shows when encoding data is available -->
-  {#if audioDurationMs !== null && progressPercent > 0}
+  <!-- ETA Summary - shows when encoding data is available and we're in merging/encoding stage -->
+  {#if audioDurationMs !== null && progressPercent > 0 && progressPercent < 100 && (processingType === 'merging' || processingType === 'encoding')}
     <div class="eta-summary">
       <div class="eta-summary-row">
         <span class="eta-label">⏱️ Encoding Progress</span>
@@ -165,11 +165,6 @@
         <div class="eta-summary-row">
           <span class="eta-label">Est. Time Remaining</span>
           <span class="eta-value eta-highlight">{remainingTimeDisplay}</span>
-        </div>
-      {:else if progressPercent >= 100}
-        <div class="eta-summary-row">
-          <span class="eta-label">Status</span>
-          <span class="eta-value eta-complete">Encoding complete!</span>
         </div>
       {/if}
     </div>
@@ -273,12 +268,17 @@
   </div>
 
   <!-- Metadata -->
-  {#if status?.duration_secs || status?.file_size_mb}
+  {#if (status?.duration_secs && status.duration_secs < 86400) || status?.audio_duration_ms || status?.file_size_mb}
     <div class="metadata">
-      {#if status.duration_secs}
+      {#if (status?.duration_secs && status.duration_secs < 86400)}
         <div class="metadata-item">
           <span class="label">Duration:</span>
           <span class="value">{formatTime(status.duration_secs)}</span>
+        </div>
+      {:else if status?.audio_duration_ms}
+        <div class="metadata-item">
+          <span class="label">Duration:</span>
+          <span class="value">{formatTime(Math.floor(status.audio_duration_ms / 1000))}</span>
         </div>
       {/if}
       {#if status.file_size_mb}
