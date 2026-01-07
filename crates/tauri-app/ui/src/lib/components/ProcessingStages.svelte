@@ -65,25 +65,20 @@
     return 'pending';
   }
 
-  // Get stage message
-  function getStageMessage(stage) {
-    const state = getStageState(stage);
-
+  // Get stage message - takes both stage and state to ensure reactivity
+  function getStageMessage(stage, state) {
     if (state === 'pending') return 'Waiting...';
+
     if (state === 'completed') {
-      // Show completion messages
+      // Special handling for analyzing stage
       if (stage.type === 'analyzing') {
-        // Only use backend message if we're not past this stage and it's relevant
-        if (currentStep === 1 && status?.message) {
-          return status.message;
-        }
-        return status?.message || 'Audio detected';
+        return status?.message || 'Detected system audio and microphone';
       }
-      // For other completed stages, always show "Completed"
+      // All other completed stages show "Completed"
       return 'Completed';
     }
 
-    // Current stage - show live message from backend
+    // Current stage - show backend message or fallback
     if (state === 'current') {
       if (status?.message) {
         return status.message;
@@ -168,21 +163,7 @@
     <span class="stages-title">Processing Stage {currentStep} of {totalSteps}</span>
   </div>
 
-  <!-- ETA Summary - shows when encoding data is available and we're in merging/encoding stage -->
-  {#if audioDurationMs !== null && progressPercent > 0 && progressPercent < 100 && (processingType === 'merging' || processingType === 'encoding')}
-    <div class="eta-summary">
-      <div class="eta-summary-row">
-        <span class="eta-label">⏱️ Encoding Progress</span>
-        <span class="eta-value">{progressPercent}%{processingSpeed ? ` @ ${processingSpeed}` : ''}</span>
-      </div>
-      {#if remainingTimeDisplay && estimatedRemainingSecs > 0}
-        <div class="eta-summary-row">
-          <span class="eta-label">Est. Time Remaining</span>
-          <span class="eta-value eta-highlight">{remainingTimeDisplay}</span>
-        </div>
-      {/if}
-    </div>
-  {/if}
+  <!-- NOTE: Progress details (%, speed, ETA) are shown per-stage below, not in a summary box here -->
 
   <!-- Progress Bar (overall) -->
   <div class="overall-progress">
@@ -232,7 +213,7 @@
             {/if}
           </div>
 
-          <div class="stage-message">{getStageMessage(stage)}</div>
+          <div class="stage-message">{getStageMessage(stage, state)}</div>
 
           <!-- FFmpeg Progress for current stage -->
           {#if state === 'current' && (stage.type === 'merging' || stage.type === 'encoding')}
@@ -575,49 +556,6 @@
     color: var(--text-secondary);
     font-size: 12px;
     font-style: italic;
-  }
-
-  /* ETA Summary Panel */
-  .eta-summary {
-    background: linear-gradient(135deg, rgba(255, 184, 77, 0.1) 0%, rgba(255, 184, 77, 0.05) 100%);
-    border: 1px solid var(--warning);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
-    margin-bottom: var(--spacing-lg);
-  }
-
-  .eta-summary-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-xs) 0;
-  }
-
-  .eta-summary-row:not(:last-child) {
-    border-bottom: 1px solid rgba(255, 184, 77, 0.2);
-    margin-bottom: var(--spacing-xs);
-  }
-
-  .eta-label {
-    font-size: 13px;
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  .eta-value {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    font-family: 'IBM Plex Mono', monospace;
-  }
-
-  .eta-highlight {
-    color: var(--warning);
-    font-size: 15px;
-  }
-
-  .eta-complete {
-    color: var(--success);
   }
 
   /* Enhanced ETA Display */
