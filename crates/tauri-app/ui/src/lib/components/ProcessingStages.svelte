@@ -307,7 +307,7 @@
   .processing-stages {
     background: var(--bg-surface);
     border-radius: var(--radius-lg);
-    padding: var(--spacing-xl);
+    padding: var(--spacing-lg);
     border: 2px solid var(--border-subtle);
   }
 
@@ -315,7 +315,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
   }
 
   .stages-title {
@@ -328,7 +328,7 @@
 
   /* Overall Progress */
   .overall-progress {
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: var(--spacing-md);
   }
 
   .progress-bar {
@@ -382,14 +382,14 @@
     display: flex;
     gap: var(--spacing-md);
     position: relative;
-    padding: var(--spacing-md) 0;
+    padding: var(--spacing-sm) 0;
     transition: all 0.3s ease;
   }
 
   .stage-item.current {
     background: linear-gradient(90deg, transparent 0%, rgba(255, 184, 77, 0.05) 50%, transparent 100%);
     border-radius: var(--radius-md);
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
     margin: 0 calc(-1 * var(--spacing-md));
   }
 
@@ -604,8 +604,8 @@
     background: var(--bg-surface);
     border: 2px solid var(--warning);
     border-radius: var(--radius-lg);
-    padding: var(--spacing-xl);
-    margin-top: var(--spacing-xl);
+    padding: var(--spacing-md);
+    margin-top: var(--spacing-md);
     box-shadow: var(--shadow-md), 0 0 24px rgba(255, 184, 77, 0.2);
   }
 
@@ -613,11 +613,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
   }
 
   .progress-title {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--warning);
     letter-spacing: 0.5px;
@@ -625,13 +625,13 @@
 
   .progress-bar-large {
     width: 100%;
-    height: 12px;
+    height: 10px;
     background: var(--bg-elevated);
-    border-radius: 6px;
+    border-radius: 5px;
     overflow: hidden;
     border: 1px solid var(--border-subtle);
     position: relative;
-    margin-bottom: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
   }
 
   .progress-fill-large {
@@ -655,25 +655,25 @@
   .progress-stats {
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
   }
 
   .progress-main {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: var(--spacing-lg);
+    gap: var(--spacing-md);
   }
 
   .progress-percent-large {
-    font-size: 32px;
+    font-size: 24px;
     font-weight: 700;
     color: var(--warning);
     font-family: 'IBM Plex Mono', monospace;
   }
 
   .progress-speed-large {
-    font-size: 18px;
+    font-size: 14px;
     color: var(--text-secondary);
     font-family: 'IBM Plex Mono', monospace;
   }
@@ -688,8 +688,8 @@
   .progress-details-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
     background: var(--bg-elevated);
     border-radius: var(--radius-md);
     border: 1px solid var(--border-subtle);
@@ -711,7 +711,7 @@
   }
 
   .detail-value {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-primary);
     font-family: 'IBM Plex Mono', monospace;
@@ -719,18 +719,18 @@
 
   .detail-value.highlight {
     color: var(--warning);
-    font-size: 18px;
+    font-size: 16px;
   }
 
   /* Metadata */
   .metadata {
     display: flex;
     gap: var(--spacing-lg);
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm);
     background: var(--bg-elevated);
     border-radius: var(--radius-md);
     border: 1px solid var(--border-subtle);
-    margin-top: var(--spacing-lg);
+    margin-top: var(--spacing-md);
     justify-content: center;
   }
 
