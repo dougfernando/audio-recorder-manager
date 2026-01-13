@@ -147,12 +147,6 @@
   <!-- Processing Status with Stages -->
   {#if $recordingStatus.status === 'processing'}
     <div class="processing-container">
-      <!-- Header Badge -->
-      <div class="processing-header-simple">
-        <div class="badge">⏳ Processing</div>
-        <span class="session-id-badge">{$recordingStatus.session_id || 'N/A'}</span>
-      </div>
-
       <!-- Stages Component -->
       <ProcessingStages status={$recordingStatus} />
     </div>
