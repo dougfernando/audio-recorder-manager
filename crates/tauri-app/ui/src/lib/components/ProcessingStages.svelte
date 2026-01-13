@@ -1,5 +1,6 @@
 <script>
   import { formatTime } from '../stores';
+  import { info } from '@tauri-apps/plugin-log';
 
   export let status = null;
 
@@ -127,10 +128,10 @@
   //   });
   // }
 
-  // Debug: Log stage changes
+  // Debug: Log stage changes to backend logs
   $: if (status?.step !== undefined) {
     const currentStageName = stages.find(s => s.id === currentStep)?.name || 'Unknown';
-    console.log(`[ProcessingStages UI] Stage ${currentStep}/${totalSteps}: ${currentStageName} (backend step=${status.step})`);
+    info(`[ProcessingStages UI] Stage ${currentStep}/${totalSteps}: ${currentStageName} (backend step=${status.step})`);
   }
 
   // Format remaining time as "X min Y sec" or "X sec"
