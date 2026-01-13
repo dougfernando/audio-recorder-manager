@@ -1414,7 +1414,6 @@ fn main() {
 
     tracing::info!("[TIMING] Creating Tauri builder: {:?}", app_start.elapsed());
     let builder = tauri::Builder::default();
-    let builder = builder.plugin(tauri_plugin_log::Builder::new().build());
     let builder = builder.plugin(tauri_plugin_shell::init());
     let builder = builder.plugin(tauri_plugin_dialog::init());
     let builder = builder.manage(AppState {
