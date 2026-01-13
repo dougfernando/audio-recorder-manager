@@ -59,12 +59,17 @@
         },
       ];
 
-  // Determine stage state
-  function getStageState(stage) {
-    if (stage.id < currentStep) return 'completed';
-    if (stage.id === currentStep) return 'current';
-    return 'pending';
-  }
+  // Determine stage state - reactive map for all stages
+  $: stageStates = stages.reduce((acc, stage) => {
+    if (stage.id < currentStep) {
+      acc[stage.id] = 'completed';
+    } else if (stage.id === currentStep) {
+      acc[stage.id] = 'current';
+    } else {
+      acc[stage.id] = 'pending';
+    }
+    return acc;
+  }, {});
 
   // Get stage message - takes both stage and state to ensure reactivity
   function getStageMessage(stage, state) {
@@ -185,7 +190,7 @@
   <!-- Stages List -->
   <div class="stages-list">
     {#each stages as stage (stage.id)}
-      {@const state = getStageState(stage)}
+      {@const state = stageStates[stage.id]}
       <div class="stage-item" class:completed={state === 'completed'} class:current={state === 'current'} class:pending={state === 'pending'}>
         <!-- Stage Icon/Indicator -->
         <div class="stage-indicator">
