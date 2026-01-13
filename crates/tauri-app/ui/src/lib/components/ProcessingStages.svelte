@@ -5,7 +5,7 @@
 
   // Define stages based on format
   $: isM4a = status?.format === 'm4a' || status?.filename?.endsWith('.m4a');
-  $: currentStep = status?.step || 0;
+  $: currentStep = (status?.step ?? -1) + 1; // Convert 0-indexed backend steps to 1-indexed UI stages
   $: totalSteps = status?.total_steps || (isM4a ? 4 : 3);
   $: processingType = status?.processing_type || '';
 
