@@ -158,28 +158,21 @@
 </script>
 
 <div class="processing-stages">
-  <!-- Compact Header with Duration -->
+  <!-- Header -->
   <div class="stages-header">
-    <div class="header-left">
-      <span class="stages-title">Stage {currentStep} of {totalSteps}</span>
-      {#if (status?.duration_secs && status.duration_secs < 86400) || status?.audio_duration_ms}
-        <span class="duration-inline">
-          {#if (status?.duration_secs && status.duration_secs < 86400)}
-            {formatTime(status.duration_secs)}
-          {:else if status?.audio_duration_ms}
-            {formatTime(Math.floor(status.audio_duration_ms / 1000))}
-          {/if}
-        </span>
-      {/if}
-    </div>
-    <div class="progress-label-inline">{Math.round((currentStep / totalSteps) * 100)}%</div>
+    <span class="stages-title">Processing Stage {currentStep} of {totalSteps}</span>
   </div>
 
-  <!-- Compact Progress Bar -->
-  <div class="progress-bar">
-    <div class="progress-fill" style="width: {(currentStep / totalSteps) * 100}%">
-      <div class="progress-shine"></div>
+  <!-- NOTE: Progress details (%, speed, ETA) are shown per-stage below, not in a summary box here -->
+
+  <!-- Progress Bar (overall) -->
+  <div class="overall-progress">
+    <div class="progress-bar">
+      <div class="progress-fill" style="width: {(currentStep / totalSteps) * 100}%">
+        <div class="progress-shine"></div>
+      </div>
     </div>
+    <div class="progress-label">{Math.round((currentStep / totalSteps) * 100)}%</div>
   </div>
 
   <!-- Stages List -->
@@ -213,55 +206,99 @@
 
         <!-- Stage Content -->
         <div class="stage-content">
-          <span class="stage-name">{stage.icon} {stage.name}</span>
-          {#if state === 'current'}
-            <span class="stage-badge current">IN PROGRESS</span>
-          {/if}
+          <div class="stage-header">
+            <span class="stage-name">{stage.icon} {stage.name}</span>
+            {#if state === 'current'}
+              <span class="stage-badge current">IN PROGRESS</span>
+            {/if}
+          </div>
+
+          <div class="stage-message">{getStageMessage(stage, state)}</div>
         </div>
       </div>
     {/each}
   </div>
 
-  <!-- Compact Progress Section -->
+  <!-- Fixed Progress Section (shows during merging/encoding) -->
   {#if (processingType === 'merging' || processingType === 'encoding')}
-    <div class="progress-section-compact">
+    <div class="progress-section-fixed">
+      <div class="progress-header">
+        <span class="progress-title">🔄 Processing Progress</span>
+      </div>
+
       {#if showProgress}
+        <!-- Determinate progress bar -->
         <div class="progress-bar-large">
           <div class="progress-fill-large" style="width: {progressPercent}%">
             <div class="progress-shine"></div>
           </div>
         </div>
 
-        <div class="progress-info">
-          <div class="progress-main-compact">
-            <span class="progress-percent-compact">{progressPercent}%</span>
+        <div class="progress-stats">
+          <div class="progress-main">
+            <span class="progress-percent-large">{progressPercent}%</span>
             {#if processingSpeed}
-              <span class="progress-speed-compact">{processingSpeed}</span>
+              <span class="progress-speed-large">{processingSpeed}</span>
             {/if}
           </div>
 
-          {#if processedTimeDisplay && totalTimeDisplay && remainingTimeDisplay}
-            <div class="progress-times">
-              <span>{processedTimeDisplay} / {totalTimeDisplay}</span>
-              <span class="remaining">~{remainingTimeDisplay}</span>
+          <!-- Enhanced ETA display -->
+          {#if estimatedRemainingSecs !== null || audioDurationMs !== null}
+            <div class="progress-details-grid">
+              {#if processedTimeDisplay && totalTimeDisplay}
+                <div class="detail-item">
+                  <span class="detail-label">Processed:</span>
+                  <span class="detail-value">{processedTimeDisplay} / {totalTimeDisplay}</span>
+                </div>
+              {/if}
+              {#if remainingTimeDisplay}
+                <div class="detail-item">
+                  <span class="detail-label">Est. Remaining:</span>
+                  <span class="detail-value highlight">{remainingTimeDisplay}</span>
+                </div>
+              {:else if estimatedRemainingSecs === 0}
+                <div class="detail-item">
+                  <span class="detail-label">Status:</span>
+                  <span class="detail-value highlight">Almost done...</span>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
       {:else}
+        <!-- Indeterminate progress bar (preparing) -->
         <div class="progress-bar-large">
           <div class="progress-fill-indeterminate-large">
             <div class="progress-shine"></div>
           </div>
         </div>
-        <div class="progress-preparing">Preparing...</div>
+        <div class="progress-stats">
+          <span class="progress-label-large">Preparing...</span>
+        </div>
       {/if}
     </div>
   {/if}
 
-  <!-- File Size (if available) -->
-  {#if status?.file_size_mb}
-    <div class="file-size-compact">
-      Est. Size: {status.file_size_mb}
+  <!-- Metadata -->
+  {#if (status?.duration_secs && status.duration_secs < 86400) || status?.audio_duration_ms || status?.file_size_mb}
+    <div class="metadata">
+      {#if (status?.duration_secs && status.duration_secs < 86400)}
+        <div class="metadata-item">
+          <span class="label">Duration:</span>
+          <span class="value">{formatTime(status.duration_secs)}</span>
+        </div>
+      {:else if status?.audio_duration_ms}
+        <div class="metadata-item">
+          <span class="label">Duration:</span>
+          <span class="value">{formatTime(Math.floor(status.audio_duration_ms / 1000))}</span>
+        </div>
+      {/if}
+      {#if status.file_size_mb}
+        <div class="metadata-item">
+          <span class="label">Estimated Size:</span>
+          <span class="value">{status.file_size_mb}</span>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -269,8 +306,8 @@
 <style>
   .processing-stages {
     background: var(--bg-surface);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-md);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
     border: 2px solid var(--border-subtle);
   }
 
@@ -278,44 +315,27 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--spacing-xs);
-  }
-
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
   }
 
   .stages-title {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--text-primary);
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.5px;
   }
 
-  .duration-inline {
-    font-size: 11px;
-    color: var(--text-secondary);
-    font-family: 'IBM Plex Mono', monospace;
-    padding: 2px 6px;
-    background: var(--bg-elevated);
-    border-radius: 4px;
-  }
-
-  .progress-label-inline {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--warning);
-    font-family: 'IBM Plex Mono', monospace;
+  /* Overall Progress */
+  .overall-progress {
+    margin-bottom: var(--spacing-md);
   }
 
   .progress-bar {
     width: 100%;
-    height: 6px;
+    height: 8px;
     background: var(--bg-elevated);
-    border-radius: 3px;
+    border-radius: 4px;
     overflow: hidden;
     border: 1px solid var(--border-subtle);
     position: relative;
@@ -325,9 +345,10 @@
   .progress-fill {
     height: 100%;
     background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
-    transition: width 0.4s ease;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.3);
   }
 
   .progress-shine {
@@ -342,6 +363,14 @@
     to { transform: translateX(200%); }
   }
 
+  .progress-label {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warning);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
   /* Stages List */
   .stages-list {
     display: flex;
@@ -351,17 +380,17 @@
 
   .stage-item {
     display: flex;
-    gap: var(--spacing-sm);
+    gap: var(--spacing-md);
     position: relative;
-    padding: 4px 0;
-    transition: all 0.2s ease;
+    padding: var(--spacing-sm) 0;
+    transition: all 0.3s ease;
   }
 
   .stage-item.current {
     background: linear-gradient(90deg, transparent 0%, rgba(255, 184, 77, 0.05) 50%, transparent 100%);
-    border-radius: var(--radius-sm);
-    padding: 6px var(--spacing-sm);
-    margin: 0 calc(-1 * var(--spacing-sm));
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin: 0 calc(-1 * var(--spacing-md));
   }
 
   /* Stage Indicator */
@@ -370,56 +399,52 @@
     flex-direction: column;
     align-items: center;
     flex-shrink: 0;
+    padding-top: 2px;
   }
 
   .stage-icon {
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
     z-index: 1;
-    transition: all 0.2s ease;
-  }
-
-  .stage-icon svg {
-    width: 12px;
-    height: 12px;
+    transition: all 0.3s ease;
   }
 
   .stage-icon.completed {
     background: var(--success);
     color: white;
-    box-shadow: 0 0 0 3px var(--success-bg);
+    box-shadow: 0 0 0 4px var(--success-bg);
   }
 
   .stage-icon.current {
     background: var(--warning);
     color: white;
-    box-shadow: 0 0 0 3px rgba(255, 184, 77, 0.2);
+    box-shadow: 0 0 0 4px rgba(255, 184, 77, 0.2), 0 0 16px rgba(255, 184, 77, 0.3);
     animation: pulse 2s ease-in-out infinite;
   }
 
   @keyframes pulse {
     0%, 100% {
-      box-shadow: 0 0 0 3px rgba(255, 184, 77, 0.2);
+      box-shadow: 0 0 0 4px rgba(255, 184, 77, 0.2), 0 0 16px rgba(255, 184, 77, 0.3);
     }
     50% {
-      box-shadow: 0 0 0 4px rgba(255, 184, 77, 0.15);
+      box-shadow: 0 0 0 6px rgba(255, 184, 77, 0.1), 0 0 20px rgba(255, 184, 77, 0.4);
     }
   }
 
   .stage-icon.pending {
     background: var(--bg-elevated);
     color: var(--text-tertiary);
-    border: 1px solid var(--border-subtle);
+    border: 2px solid var(--border-subtle);
   }
 
   .spinner {
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-top-color: white;
     border-radius: 50%;
@@ -434,8 +459,8 @@
     width: 2px;
     flex: 1;
     background: var(--border-subtle);
-    margin-top: 2px;
-    transition: background 0.2s ease;
+    margin-top: 4px;
+    transition: background 0.3s ease;
   }
 
   .stage-connector.active {
@@ -446,13 +471,17 @@
   .stage-content {
     flex: 1;
     min-width: 0;
+  }
+
+  .stage-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-bottom: var(--spacing-xs);
   }
 
   .stage-name {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--text-primary);
   }
@@ -462,11 +491,11 @@
   }
 
   .stage-badge {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 8px;
-    letter-spacing: 0.4px;
+    padding: 3px var(--spacing-sm);
+    border-radius: 10px;
+    letter-spacing: 0.5px;
   }
 
   .stage-badge.current {
@@ -474,25 +503,135 @@
     color: var(--warning);
   }
 
-  /* Compact Progress Section */
-  .progress-section-compact {
-    background: var(--bg-surface);
-    border: 2px solid var(--warning);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-sm);
-    margin-top: var(--spacing-sm);
-    box-shadow: 0 0 16px rgba(255, 184, 77, 0.15);
+  .stage-message {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
   }
 
-  .progress-bar-large {
+  .stage-item.pending .stage-message {
+    color: var(--text-tertiary);
+    font-style: italic;
+  }
+
+  /* Stage Progress */
+  .stage-progress {
+    margin-top: var(--spacing-sm);
+  }
+
+  .progress-bar-small {
     width: 100%;
-    height: 8px;
+    height: 6px;
     background: var(--bg-elevated);
-    border-radius: 4px;
+    border-radius: 3px;
     overflow: hidden;
     border: 1px solid var(--border-subtle);
     position: relative;
     margin-bottom: var(--spacing-xs);
+  }
+
+  .progress-fill-small {
+    height: 100%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    transition: width 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-fill-indeterminate {
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
+    position: absolute;
+    animation: indeterminateSlide 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.3);
+  }
+
+  @keyframes indeterminateSlide {
+    0% { left: -40%; }
+    100% { left: 100%; }
+  }
+
+  .progress-details {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 12px;
+  }
+
+  .progress-percent {
+    font-weight: 700;
+    color: var(--warning);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .progress-speed {
+    color: var(--text-secondary);
+  }
+
+  .progress-label {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-style: italic;
+  }
+
+  /* Enhanced ETA Display */
+  .progress-eta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .eta-processed {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .eta-remaining {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warning);
+  }
+
+  /* Fixed Progress Section (bottom of screen) */
+  .progress-section-fixed {
+    background: var(--bg-surface);
+    border: 2px solid var(--warning);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    margin-top: var(--spacing-md);
+    box-shadow: var(--shadow-md), 0 0 24px rgba(255, 184, 77, 0.2);
+  }
+
+  .progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--spacing-md);
+  }
+
+  .progress-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--warning);
+    letter-spacing: 0.5px;
+  }
+
+  .progress-bar-large {
+    width: 100%;
+    height: 10px;
+    background: var(--bg-elevated);
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    margin-bottom: var(--spacing-md);
   }
 
   .progress-fill-large {
@@ -501,6 +640,7 @@
     transition: width 0.3s ease;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.4);
   }
 
   .progress-fill-indeterminate-large {
@@ -509,100 +649,159 @@
     background: linear-gradient(90deg, var(--warning) 0%, var(--accent-yellow) 100%);
     position: absolute;
     animation: indeterminateSlide 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    box-shadow: 0 0 12px rgba(255, 184, 77, 0.3);
   }
 
-  @keyframes indeterminateSlide {
-    0% { left: -40%; }
-    100% { left: 100%; }
-  }
-
-  .progress-info {
+  .progress-stats {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-  }
-
-  .progress-main-compact {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     gap: var(--spacing-sm);
   }
 
-  .progress-percent-compact {
-    font-size: 18px;
+  .progress-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
+  }
+
+  .progress-percent-large {
+    font-size: 24px;
     font-weight: 700;
     color: var(--warning);
     font-family: 'IBM Plex Mono', monospace;
   }
 
-  .progress-speed-compact {
-    font-size: 12px;
+  .progress-speed-large {
+    font-size: 14px;
     color: var(--text-secondary);
     font-family: 'IBM Plex Mono', monospace;
   }
 
-  .progress-times {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    color: var(--text-secondary);
-    font-family: 'IBM Plex Mono', monospace;
-  }
-
-  .progress-times .remaining {
-    color: var(--warning);
-    font-weight: 600;
-  }
-
-  .progress-preparing {
+  .progress-label-large {
     text-align: center;
-    font-size: 12px;
+    font-size: 16px;
     color: var(--text-secondary);
     font-style: italic;
   }
 
-  /* File Size Compact */
-  .file-size-compact {
-    text-align: center;
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-top: var(--spacing-xs);
-    padding: 4px;
+  .progress-details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
     background: var(--bg-elevated);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    text-align: center;
+  }
+
+  .detail-label {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .detail-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .detail-value.highlight {
+    color: var(--warning);
+    font-size: 16px;
+  }
+
+  /* Metadata */
+  .metadata {
+    display: flex;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-sm);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    margin-top: var(--spacing-md);
+    justify-content: center;
+  }
+
+  .metadata-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 13px;
+  }
+
+  .metadata-item .label {
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .metadata-item .value {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-family: 'Consolas', 'Monaco', monospace;
   }
 
   /* Responsive */
   @media (max-width: 480px) {
     .processing-stages {
+      padding: var(--spacing-md);
+    }
+
+    .stage-item.current {
+      margin: 0 calc(-1 * var(--spacing-sm));
       padding: var(--spacing-sm);
     }
 
-    .stages-title {
-      font-size: 11px;
-    }
-
     .stage-icon {
-      width: 20px;
-      height: 20px;
-    }
-
-    .stage-icon svg {
-      width: 10px;
-      height: 10px;
+      width: 28px;
+      height: 28px;
     }
 
     .stage-name {
-      font-size: 12px;
+      font-size: 14px;
     }
 
-    .progress-percent-compact {
+    .progress-section-fixed {
+      padding: var(--spacing-md);
+    }
+
+    .progress-percent-large {
+      font-size: 24px;
+    }
+
+    .progress-speed-large {
+      font-size: 14px;
+    }
+
+    .progress-details-grid {
+      grid-template-columns: 1fr;
+      gap: var(--spacing-sm);
+    }
+
+    .detail-value.highlight {
       font-size: 16px;
     }
 
-    .progress-speed-compact {
-      font-size: 11px;
+    .metadata {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .metadata-item {
+      flex-direction: row;
+      justify-content: space-between;
     }
   }
 </style>
