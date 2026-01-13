@@ -5,7 +5,7 @@
 
   // Define stages based on format
   $: isM4a = status?.format === 'm4a' || status?.filename?.endsWith('.m4a');
-  $: currentStep = (status?.step ?? -1) + 1; // Convert 0-indexed backend steps to 1-indexed UI stages
+  $: currentStep = status?.step ?? 1; // Backend uses 1-indexed stages (1, 2, 3, 4), default to 1 if undefined
   $: totalSteps = status?.total_steps || (isM4a ? 4 : 3);
   $: processingType = status?.processing_type || '';
 
@@ -126,6 +126,16 @@
   //     processing_speed: status?.processing_speed
   //   });
   // }
+
+  // Debug: Log stage changes
+  $: if (status?.step !== undefined) {
+    console.log('[ProcessingStages] Stage update:', {
+      'backend step': status.step,
+      'currentStep (UI)': currentStep,
+      'totalSteps': totalSteps,
+      'current stage': stages.find(s => s.id === currentStep)?.name || 'Unknown'
+    });
+  }
 
   // Format remaining time as "X min Y sec" or "X sec"
   function formatRemainingTime(secs) {
