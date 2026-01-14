@@ -15,12 +15,13 @@ export const modifierKey = isMac ? '⌘' : 'Ctrl';
 
 /**
  * Keyboard shortcuts configuration
+ * Using Ctrl+Shift combinations to avoid conflicts with browser shortcuts
  */
 export const shortcuts = {
-  START_RECORDING: { key: 'r', ctrl: true, description: 'Iniciar gravação' },
-  STOP_RECORDING: { key: 's', ctrl: true, description: 'Parar gravação' },
-  TRANSCRIBE: { key: 't', ctrl: true, description: 'Iniciar transcrição' },
-  VIEW_TRANSCRIPT: { key: 'e', ctrl: true, description: 'Visualizar transcrição' },
+  START_RECORDING: { key: 'r', ctrl: true, shift: true, description: 'Iniciar gravação' },
+  STOP_RECORDING: { key: 's', ctrl: true, shift: true, description: 'Parar gravação' },
+  TRANSCRIBE: { key: 't', ctrl: true, shift: true, description: 'Iniciar transcrição' },
+  VIEW_TRANSCRIPT: { key: 'e', ctrl: true, shift: true, description: 'Visualizar transcrição' },
   COPY_MARKDOWN: { key: 'c', ctrl: true, description: 'Copiar markdown' },
   QUIT_APP: { key: 'q', ctrl: true, description: 'Sair da aplicação' },
   HELP: { key: '?', shift: true, description: 'Mostrar ajuda' },
