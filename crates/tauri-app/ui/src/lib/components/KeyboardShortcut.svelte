@@ -33,24 +33,25 @@
   .keyboard-shortcut-badge {
     display: inline-flex;
     align-items: center;
-    padding: 2px 6px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
+    padding: 2px 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 500;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-    color: rgba(255, 255, 255, 0.8);
-    letter-spacing: 0.5px;
-    margin-left: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.3px;
+    margin-left: 6px;
     white-space: nowrap;
+    text-transform: uppercase;
   }
 
   .keyboard-shortcut-inline {
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 500;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-    color: rgba(255, 255, 255, 0.7);
-    letter-spacing: 0.5px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.3px;
   }
 </style>
