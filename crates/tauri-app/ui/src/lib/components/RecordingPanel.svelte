@@ -2,6 +2,7 @@
     import { invoke } from "@tauri-apps/api/core";
     import { listen } from "@tauri-apps/api/event";
     import { onMount, onDestroy } from "svelte";
+    import KeyboardShortcut from "./KeyboardShortcut.svelte";
     import {
         isRecording,
         selectedDuration,
@@ -351,6 +352,7 @@
                 <circle cx="12" cy="12" r="8" />
             </svg>
             <span>Start Recording</span>
+            <KeyboardShortcut shortcut="START_RECORDING" />
         {/if}
     </button>
 </div>
