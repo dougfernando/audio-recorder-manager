@@ -10,6 +10,7 @@
     formatFileSize,
   } from '../stores';
   import ProcessingStages from './ProcessingStages.svelte';
+  import KeyboardShortcut from './KeyboardShortcut.svelte';
 
   let isStopping = false;
   let isCancelling = false;
@@ -352,6 +353,7 @@
           <rect x="6" y="6" width="12" height="12" rx="2"/>
         </svg>
         Stop Recording
+        <KeyboardShortcut shortcut="STOP_RECORDING" />
       {/if}
     </button>
   </div>

@@ -10,6 +10,8 @@
   import RecordingDetail from './lib/components/RecordingDetail.svelte';
   import Recovery from './lib/components/Recovery.svelte';
   import Settings from './lib/components/Settings.svelte';
+  import KeyboardShortcutsHelp from './lib/components/KeyboardShortcutsHelp.svelte';
+  import KeyboardShortcut from './lib/components/KeyboardShortcut.svelte';
 
   import {
     isRecording,
@@ -18,10 +20,13 @@
     recordings,
   } from './lib/stores';
 
+  import { createShortcutHandler } from './lib/keyboard.js';
+
   let activeTab = 'record';
   let hasLoadedRecordings = false;
   let firstRenderComplete = false;
   let selectedRecording = null; // Track which recording to show in detail view
+  let showKeyboardHelp = false; // Track keyboard shortcuts help modal
 
   // Debug: log recordings data
   $: console.log('[App] recordings store:', $recordings);
@@ -33,6 +38,83 @@
       firstRenderComplete = true;
       console.log('[TIMING] First render complete (afterUpdate):', performance.now() - componentStart, 'ms');
     }
+  });
+
+  // Keyboard shortcuts handlers
+  async function handleStartRecording() {
+    if ($isRecording) return; // Already recording
+
+    // Switch to record tab and simulate start recording
+    switchTab('record');
+
+    try {
+      await invoke('start_recording');
+      console.log('[Keyboard] Started recording via Ctrl+R');
+    } catch (error) {
+      console.error('[Keyboard] Failed to start recording:', error);
+    }
+  }
+
+  async function handleStopRecording() {
+    if (!$isRecording) return; // Not recording
+
+    try {
+      await invoke('stop_recording');
+      console.log('[Keyboard] Stopped recording via Ctrl+S');
+    } catch (error) {
+      console.error('[Keyboard] Failed to stop recording:', error);
+    }
+  }
+
+  async function handleTranscribe() {
+    // Get the most recent recording
+    if ($recordings.length === 0) {
+      console.log('[Keyboard] No recordings available to transcribe');
+      return;
+    }
+
+    const latestRecording = $recordings[0];
+
+    try {
+      await invoke('transcribe_recording', { path: latestRecording.path });
+      console.log('[Keyboard] Started transcription via Ctrl+T');
+    } catch (error) {
+      console.error('[Keyboard] Failed to start transcription:', error);
+    }
+  }
+
+  function handleViewTranscript() {
+    // Get the most recent recording with transcript
+    const recordingWithTranscript = $recordings.find(r => r.has_transcript);
+
+    if (!recordingWithTranscript) {
+      console.log('[Keyboard] No transcripts available to view');
+      return;
+    }
+
+    // Navigate to the recording detail
+    switchTab('recording-detail', recordingWithTranscript);
+    console.log('[Keyboard] Viewing transcript via Ctrl+E');
+  }
+
+  function handleToggleHelp() {
+    showKeyboardHelp = !showKeyboardHelp;
+    console.log('[Keyboard] Toggled help modal via ?');
+  }
+
+  async function handleQuitApp() {
+    await quitApp();
+  }
+
+  // Create the keyboard shortcut handler
+  const keyboardHandler = createShortcutHandler({
+    START_RECORDING: handleStartRecording,
+    STOP_RECORDING: handleStopRecording,
+    TRANSCRIBE: handleTranscribe,
+    VIEW_TRANSCRIPT: handleViewTranscript,
+    HELP: handleToggleHelp,
+    HELP_F1: handleToggleHelp,
+    QUIT_APP: handleQuitApp,
   });
 
   onMount(async () => {
@@ -57,11 +139,16 @@
     // Load recordings for sidebar on mount
     await loadRecordings();
 
+    // Add global keyboard shortcuts listener
+    window.addEventListener('keydown', keyboardHandler);
+
     console.log('[TIMING] Component fully mounted and ready');
+    console.log('[Keyboard] Global keyboard shortcuts enabled');
 
     // Cleanup on unmount
     return () => {
       unlisten();
+      window.removeEventListener('keydown', keyboardHandler);
     };
   });
 
@@ -138,12 +225,21 @@
         </div>
         <span class="brand-text">Audio Recorder Manager</span>
       </div>
-      <button class="icon-btn" on:click={() => switchTab('settings')} title="Settings">
-        <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
-          <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/>
-        </svg>
-      </button>
+      <div class="header-actions">
+        <button class="icon-btn" on:click={handleToggleHelp} title="Keyboard Shortcuts (?)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </button>
+        <button class="icon-btn" on:click={() => switchTab('settings')} title="Settings">
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+            <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319z"/>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Record New Button -->
@@ -206,6 +302,7 @@
           <path d="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 012 2v2h-2V4H5v16h9v-2h2v2a2 2 0 01-2 2H5a2 2 0 01-2-2V4a2 2 0 012-2h9z"/>
         </svg>
         Quit App
+        <KeyboardShortcut shortcut="QUIT_APP" />
       </button>
     </div>
   </aside>
@@ -243,6 +340,9 @@
     </div>
   </div>
 </main>
+
+<!-- Keyboard Shortcuts Help Modal -->
+<KeyboardShortcutsHelp bind:isOpen={showKeyboardHelp} />
 
 <style>
   main {
@@ -321,6 +421,11 @@
     line-height: 1.2;
   }
 
+  .header-actions {
+    display: flex;
+    gap: var(--spacing-xs);
+  }
+
   .icon-btn {
     width: 40px;
     height: 40px;
@@ -338,6 +443,13 @@
     background: var(--bg-surface);
     color: var(--accent-cyan);
     border-color: var(--accent-cyan);
+  }
+
+  .icon-btn:first-child:hover {
+    transform: scale(1.1);
+  }
+
+  .icon-btn:last-child:hover {
     transform: rotate(90deg);
   }
 

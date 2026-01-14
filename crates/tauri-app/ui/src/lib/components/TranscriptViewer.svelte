@@ -1,8 +1,10 @@
 <script>
   import { invoke } from '@tauri-apps/api/core';
   import { ask } from '@tauri-apps/plugin-dialog';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { marked } from 'marked';
+  import { matchesShortcut, shortcuts } from '../keyboard.js';
+  import KeyboardShortcut from './KeyboardShortcut.svelte';
 
   export let transcriptPath = '';
   export let recordingName = '';
@@ -19,8 +21,21 @@
   let transcriptionProgress = null;
   let progressPollingInterval = null;
 
+  function handleKeydown(event) {
+    // Handle Ctrl+C to copy markdown
+    if (matchesShortcut(event, shortcuts.COPY_MARKDOWN)) {
+      event.preventDefault();
+      copyToClipboard();
+    }
+  }
+
   onMount(async () => {
     await loadTranscript();
+    window.addEventListener('keydown', handleKeydown);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('keydown', handleKeydown);
   });
 
   async function loadTranscript() {
@@ -194,6 +209,7 @@
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
           </svg>
+          <KeyboardShortcut shortcut="COPY_MARKDOWN" />
         </button>
         <button class="btn btn-secondary btn-sm" on:click={downloadTranscript} title="Download">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
