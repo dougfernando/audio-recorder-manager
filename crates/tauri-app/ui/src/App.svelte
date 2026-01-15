@@ -49,7 +49,7 @@
 
     try {
       await invoke('start_recording');
-      console.log('[Keyboard] Started recording via R key');
+      console.log('[Keyboard] Started recording via S key');
     } catch (error) {
       console.error('[Keyboard] Failed to start recording:', error);
     }
@@ -60,7 +60,7 @@
 
     try {
       await invoke('stop_recording');
-      console.log('[Keyboard] Stopped recording via S key');
+      console.log('[Keyboard] Stopped recording via F key');
     } catch (error) {
       console.error('[Keyboard] Failed to stop recording:', error);
     }
