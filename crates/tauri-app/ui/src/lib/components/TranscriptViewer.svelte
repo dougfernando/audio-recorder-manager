@@ -22,7 +22,7 @@
   let progressPollingInterval = null;
 
   function handleKeydown(event) {
-    // Handle Ctrl+C to copy markdown
+    // Handle C key to copy markdown
     if (matchesShortcut(event, shortcuts.COPY_MARKDOWN)) {
       event.preventDefault();
       copyToClipboard();

@@ -15,15 +15,16 @@ export const modifierKey = isMac ? '⌘' : 'Ctrl';
 
 /**
  * Keyboard shortcuts configuration
- * Using Ctrl+Shift combinations to avoid conflicts with browser shortcuts
+ * Using simple keys without modifiers - protected by isInputFocused() check
+ * This prevents conflicts as shortcuts are disabled when typing in input fields
  */
 export const shortcuts = {
-  START_RECORDING: { key: 'r', ctrl: true, shift: true, description: 'Iniciar gravação' },
-  STOP_RECORDING: { key: 's', ctrl: true, shift: true, description: 'Parar gravação' },
-  TRANSCRIBE: { key: 't', ctrl: true, shift: true, description: 'Iniciar transcrição' },
-  VIEW_TRANSCRIPT: { key: 'e', ctrl: true, shift: true, description: 'Visualizar transcrição' },
-  COPY_MARKDOWN: { key: 'c', ctrl: true, description: 'Copiar markdown' },
-  QUIT_APP: { key: 'q', ctrl: true, description: 'Sair da aplicação' },
+  START_RECORDING: { key: 'r', description: 'Iniciar gravação' },
+  STOP_RECORDING: { key: 's', description: 'Parar gravação' },
+  TRANSCRIBE: { key: 't', description: 'Iniciar transcrição' },
+  VIEW_TRANSCRIPT: { key: 'e', description: 'Visualizar transcrição' },
+  COPY_MARKDOWN: { key: 'c', description: 'Copiar markdown (no visualizador)' },
+  QUIT_APP: { key: 'q', description: 'Sair da aplicação' },
   HELP: { key: '?', shift: true, description: 'Mostrar ajuda' },
   HELP_F1: { key: 'F1', description: 'Mostrar ajuda' },
   ESCAPE: { key: 'Escape', description: 'Fechar modal/cancelar' },
@@ -45,7 +46,7 @@ export function matchesShortcut(event, shortcut) {
     return false;
   }
 
-  // Check modifier keys
+  // Check modifier keys - must match exactly
   const needsCtrl = shortcut.ctrl || false;
   const needsShift = shortcut.shift || false;
   const needsAlt = shortcut.alt || false;
@@ -54,9 +55,10 @@ export function matchesShortcut(event, shortcut) {
   const hasShift = event.shiftKey;
   const hasAlt = event.altKey;
 
-  return (needsCtrl === hasCtrl || (!needsCtrl && !hasCtrl)) &&
-         (needsShift === hasShift || (!needsShift && !hasShift)) &&
-         (needsAlt === hasAlt || (!needsAlt && !hasAlt));
+  // All modifier keys must match exactly
+  return needsCtrl === hasCtrl &&
+         needsShift === hasShift &&
+         needsAlt === hasAlt;
 }
 
 /**
