@@ -61,7 +61,9 @@
       "Skill(frontend-design)",
       "Bash(cargo tree:*)",
       "Bash(grep:*)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "mcp__acp__Edit",
+      "mcp__acp__Bash"
     ],
     "deny": [],
     "ask": []

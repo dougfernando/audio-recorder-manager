@@ -181,7 +181,8 @@
                     !$isManualMode
                         ? 'active'
                         : ''}"
-                    on:click={() => {
+                    on:click={(event) => {
+                        event.currentTarget.blur();
                         selectedDuration.set(preset);
                         isManualMode.set(false);
                     }}
@@ -194,7 +195,8 @@
                 class="duration-pill manual-pill {$isManualMode
                     ? 'active'
                     : ''}"
-                on:click={() => {
+                on:click={(event) => {
+                    event.currentTarget.blur();
                     isManualMode.set(true);
                 }}
                 disabled={$isRecording}
@@ -338,7 +340,10 @@
     <!-- Start Button -->
     <button
         class="start-recording-btn {$isRecording ? 'recording' : ''}"
-        on:click={startRecording}
+        on:click={(event) => {
+            event.currentTarget.blur();
+            startRecording();
+        }}
         disabled={$isRecording || isStarting}
     >
         {#if isStarting}

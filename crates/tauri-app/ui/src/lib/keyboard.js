@@ -6,12 +6,14 @@
 /**
  * Detect if running on macOS
  */
-export const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+export const isMac =
+  typeof navigator !== "undefined" &&
+  navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
 /**
  * Get the modifier key name for the current platform
  */
-export const modifierKey = isMac ? '⌘' : 'Ctrl';
+export const modifierKey = isMac ? "⌘" : "Ctrl";
 
 /**
  * Keyboard shortcuts configuration
@@ -19,16 +21,16 @@ export const modifierKey = isMac ? '⌘' : 'Ctrl';
  * This prevents conflicts as shortcuts are disabled when typing in input fields
  */
 export const shortcuts = {
-  START_RECORDING: { key: 's', description: 'Iniciar gravação' },
-  STOP_RECORDING: { key: 'f', description: 'Parar gravação' },
-  TRANSCRIBE: { key: 't', description: 'Iniciar transcrição' },
-  VIEW_TRANSCRIPT: { key: 'e', description: 'Visualizar transcrição' },
-  COPY_MARKDOWN: { key: 'c', description: 'Copiar markdown (no visualizador)' },
-  QUIT_APP: { key: 'q', description: 'Sair da aplicação' },
-  HELP: { key: '?', shift: true, description: 'Mostrar ajuda' },
-  HELP_F1: { key: 'F1', description: 'Mostrar ajuda' },
-  ESCAPE: { key: 'Escape', description: 'Fechar modal/cancelar' },
-  PLAY_PAUSE: { key: ' ', description: 'Play/Pause' }
+  START_RECORDING: { key: "s", description: "Iniciar gravação" },
+  STOP_RECORDING: { key: "f", description: "Parar gravação" },
+  TRANSCRIBE: { key: "t", description: "Iniciar transcrição" },
+  VIEW_TRANSCRIPT: { key: "e", description: "Visualizar transcrição" },
+  COPY_MARKDOWN: { key: "c", description: "Copiar markdown (no visualizador)" },
+  QUIT_APP: { key: "q", description: "Sair da aplicação" },
+  HELP: { key: "?", shift: true, description: "Mostrar ajuda" },
+  HELP_F1: { key: "F1", description: "Mostrar ajuda" },
+  ESCAPE: { key: "Escape", description: "Fechar modal/cancelar" },
+  PLAY_PAUSE: { key: " ", description: "Play/Pause" },
 };
 
 /**
@@ -56,9 +58,9 @@ export function matchesShortcut(event, shortcut) {
   const hasAlt = event.altKey;
 
   // All modifier keys must match exactly
-  return needsCtrl === hasCtrl &&
-         needsShift === hasShift &&
-         needsAlt === hasAlt;
+  return (
+    needsCtrl === hasCtrl && needsShift === hasShift && needsAlt === hasAlt
+  );
 }
 
 /**
@@ -73,9 +75,9 @@ export function isInputFocused() {
   const isEditable = activeElement.isContentEditable;
 
   return (
-    tagName === 'input' ||
-    tagName === 'textarea' ||
-    tagName === 'select' ||
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
     isEditable
   );
 }
@@ -92,23 +94,23 @@ export function formatShortcut(shortcut) {
     parts.push(modifierKey);
   }
   if (shortcut.shift) {
-    parts.push('Shift');
+    parts.push("Shift");
   }
   if (shortcut.alt) {
-    parts.push('Alt');
+    parts.push("Alt");
   }
 
   // Format the key
   let keyDisplay = shortcut.key;
-  if (keyDisplay === ' ') {
-    keyDisplay = 'Space';
+  if (keyDisplay === " ") {
+    keyDisplay = "Space";
   } else if (keyDisplay.length === 1) {
     keyDisplay = keyDisplay.toUpperCase();
   }
 
   parts.push(keyDisplay);
 
-  return parts.join('+');
+  return parts.join("+");
 }
 
 /**
@@ -120,9 +122,13 @@ export function formatShortcut(shortcut) {
 export function createShortcutHandler(handlers, options = {}) {
   const { ignoreInputs = true } = options;
 
-  return function(event) {
+  return function (event) {
     // Skip if an input is focused (unless override)
     if (ignoreInputs && isInputFocused()) {
+      console.log(
+        "[Keyboard] Ignoring shortcut - input focused:",
+        document.activeElement.tagName,
+      );
       return;
     }
 
@@ -132,6 +138,12 @@ export function createShortcutHandler(handlers, options = {}) {
       if (!shortcut) continue;
 
       if (matchesShortcut(event, shortcut)) {
+        console.log(
+          "[Keyboard] Matched shortcut:",
+          name,
+          "- Key pressed:",
+          event.key,
+        );
         event.preventDefault();
         event.stopPropagation();
         handler(event);
@@ -148,21 +160,21 @@ export function createShortcutHandler(handlers, options = {}) {
  */
 export function getAriaKeyshortcuts(shortcutName) {
   const shortcut = shortcuts[shortcutName];
-  if (!shortcut) return '';
+  if (!shortcut) return "";
 
   const parts = [];
 
   if (shortcut.ctrl) {
-    parts.push(isMac ? 'Meta' : 'Control');
+    parts.push(isMac ? "Meta" : "Control");
   }
   if (shortcut.shift) {
-    parts.push('Shift');
+    parts.push("Shift");
   }
   if (shortcut.alt) {
-    parts.push('Alt');
+    parts.push("Alt");
   }
 
   parts.push(shortcut.key);
 
-  return parts.join('+');
+  return parts.join("+");
 }
