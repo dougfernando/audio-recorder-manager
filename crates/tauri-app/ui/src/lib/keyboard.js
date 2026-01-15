@@ -19,8 +19,8 @@ export const modifierKey = isMac ? '⌘' : 'Ctrl';
  * This prevents conflicts as shortcuts are disabled when typing in input fields
  */
 export const shortcuts = {
-  START_RECORDING: { key: 'r', description: 'Iniciar gravação' },
-  STOP_RECORDING: { key: 's', description: 'Parar gravação' },
+  START_RECORDING: { key: 's', description: 'Iniciar gravação' },
+  STOP_RECORDING: { key: 'f', description: 'Parar gravação' },
   TRANSCRIBE: { key: 't', description: 'Iniciar transcrição' },
   VIEW_TRANSCRIPT: { key: 'e', description: 'Visualizar transcrição' },
   COPY_MARKDOWN: { key: 'c', description: 'Copiar markdown (no visualizador)' },
