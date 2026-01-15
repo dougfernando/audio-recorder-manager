@@ -49,7 +49,7 @@
 
     try {
       await invoke('start_recording');
-      console.log('[Keyboard] Started recording via Ctrl+Shift+R');
+      console.log('[Keyboard] Started recording via R key');
     } catch (error) {
       console.error('[Keyboard] Failed to start recording:', error);
     }
@@ -60,7 +60,7 @@
 
     try {
       await invoke('stop_recording');
-      console.log('[Keyboard] Stopped recording via Ctrl+Shift+S');
+      console.log('[Keyboard] Stopped recording via S key');
     } catch (error) {
       console.error('[Keyboard] Failed to stop recording:', error);
     }
@@ -77,7 +77,7 @@
 
     try {
       await invoke('transcribe_recording', { path: latestRecording.path });
-      console.log('[Keyboard] Started transcription via Ctrl+Shift+T');
+      console.log('[Keyboard] Started transcription via T key');
     } catch (error) {
       console.error('[Keyboard] Failed to start transcription:', error);
     }
@@ -94,7 +94,7 @@
 
     // Navigate to the recording detail
     switchTab('recording-detail', recordingWithTranscript);
-    console.log('[Keyboard] Viewing transcript via Ctrl+Shift+E');
+    console.log('[Keyboard] Viewing transcript via E key');
   }
 
   function handleToggleHelp() {
