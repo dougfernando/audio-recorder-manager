@@ -398,9 +398,6 @@ pub async fn merge_audio_streams_smart(
         cmd.arg("-y")
             .arg(output_path);
 
-        let cmd_build_elapsed = cmd_build_start.elapsed();
-        tracing::debug!("  [BOTTLENECK] FFmpeg command construction: {:.3}s", cmd_build_elapsed.as_secs_f64());
-
         // Update status before FFmpeg starts
         if let (Some(session_id), Some(observer)) = (session_id, observer.as_ref()) {
             tracing::info!("🔀 Starting FFmpeg merge and encode...");
@@ -418,10 +415,7 @@ pub async fn merge_audio_streams_smart(
         let ffmpeg_start = std::time::Instant::now();
         let result = execute_ffmpeg(cmd).await?;
         let ffmpeg_elapsed = ffmpeg_start.elapsed();
-        tracing::info!("  [BOTTLENECK] FFmpeg execution: {:.3}s ({:.2}x real-time)",
-            ffmpeg_elapsed.as_secs_f64(),
-            audio_duration_ms as f64 / 1000.0 / ffmpeg_elapsed.as_secs_f64()
-        );
+
         result
     } else if loopback_has_audio && !mic_has_audio {
         // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
@@ -444,10 +438,7 @@ pub async fn merge_audio_streams_smart(
 
         let result = execute_ffmpeg(cmd).await?;
         let ffmpeg_elapsed = ffmpeg_start.elapsed();
-        tracing::info!("  [BOTTLENECK] FFmpeg execution: {:.3}s ({:.2}x real-time)",
-            ffmpeg_elapsed.as_secs_f64(),
-            audio_duration_ms as f64 / 1000.0 / ffmpeg_elapsed.as_secs_f64()
-        );
+
         result
     } else if !loopback_has_audio && mic_has_audio {
         // Scenario C: Mic only - Convert mono to stereo (duplicate to both channels)
@@ -471,10 +462,7 @@ pub async fn merge_audio_streams_smart(
 
         let result = execute_ffmpeg(cmd).await?;
         let ffmpeg_elapsed = ffmpeg_start.elapsed();
-        tracing::info!("  [BOTTLENECK] FFmpeg execution: {:.3}s ({:.2}x real-time)",
-            ffmpeg_elapsed.as_secs_f64(),
-            audio_duration_ms as f64 / 1000.0 / ffmpeg_elapsed.as_secs_f64()
-        );
+
         result
     } else {
         // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
@@ -500,10 +488,7 @@ pub async fn merge_audio_streams_smart(
 
         let result = execute_ffmpeg(cmd).await?;
         let ffmpeg_elapsed = ffmpeg_start.elapsed();
-        tracing::info!("  [BOTTLENECK] FFmpeg execution: {:.3}s ({:.2}x real-time)",
-            ffmpeg_elapsed.as_secs_f64(),
-            audio_duration_ms as f64 / 1000.0 / ffmpeg_elapsed.as_secs_f64()
-        );
+
         result
     };
 
@@ -555,38 +540,6 @@ pub async fn merge_audio_streams_smart(
     // Get output file information
     let output_metadata = std::fs::metadata(output_path)?;
     let output_size_mb = output_metadata.len() as f64 / (1024.0 * 1024.0);
-
-    // Bottleneck Analysis
-    let total_elapsed = elapsed.as_secs_f64();
-    let audio_duration_secs = audio_duration_ms as f64 / 1000.0;
-    let processing_speed = if audio_duration_secs > 0.0 {
-        audio_duration_secs / total_elapsed
-    } else {
-        0.0
-    };
-
-    tracing::info!("───────────────────────────────────────────────────────────");
-    tracing::info!("✓ AUDIO MERGE COMPLETED SUCCESSFULLY");
-    tracing::info!("═══════════════════════════════════════════════════════════");
-
-    // Bottleneck Performance Metrics
-    tracing::info!("🔍 BOTTLENECK ANALYSIS:");
-    tracing::info!("    • Audio duration:      {:.2}s", audio_duration_secs);
-    tracing::info!("    • Total time:          {:.2}s", total_elapsed);
-    tracing::info!("    • Processing speed:   {:.2}x real-time", processing_speed);
-
-    if processing_speed > 0.0 {
-        if processing_speed < 1.0 {
-            tracing::warn!("    ⚠️  SLOW: Processing slower than real-time ({:.2}x). Possible bottleneck:", processing_speed);
-            tracing::warn!("         - Disk I/O bottleneck (slow drive or many read/writes)");
-            tracing::warn!("         - Complex FFmpeg filter chain (amerge, pan filters)");
-            tracing::warn!("         - CPU/Memory constraints");
-        } else if processing_speed < 5.0 {
-            tracing::info!("    ✓  ACCEPTABLE: Processing at {:.2}x real-time", processing_speed);
-        } else {
-            tracing::info!("    ✓✓ OPTIMAL: Processing at {:.2}x real-time (excellent performance)", processing_speed);
-        }
-    }
 
     tracing::info!("📊 Merge Results:");
     tracing::info!("    • Output file:     {:?}", output_path.file_name().unwrap_or_default());

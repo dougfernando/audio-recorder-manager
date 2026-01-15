@@ -150,12 +150,12 @@ impl RecordingSession {
     }
 
     pub fn filename(&self) -> String {
-        let timestamp = self.started_at.format("%Y%m%d_%H%M%S");
-        format!("recording_{}.{}", timestamp, self.format.extension())
+        let timestamp = self.started_at.format("%Y-%m-%d-%H_%M");
+        format!("{}_recording.{}", timestamp, self.format.extension())
     }
 
     pub fn temp_filename(&self) -> String {
-        let timestamp = self.started_at.format("%Y%m%d_%H%M%S");
-        format!("recording_{}.wav", timestamp)
+        let timestamp = self.started_at.format("%Y-%m-%d-%H_%M");
+        format!("{}_recording.wav", timestamp)
     }
 }

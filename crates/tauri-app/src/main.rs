@@ -1000,6 +1000,8 @@ async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<
     let mut cmd = Command::new("ffmpeg");
     cmd.arg("-i")
         .arg(&file_path)
+        .arg("-map")
+        .arg("0:a") // Explicitly map audio stream to output
         .arg("-ac")
         .arg("1") // Convert to mono
         .arg("-f")

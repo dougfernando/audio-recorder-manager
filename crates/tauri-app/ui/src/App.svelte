@@ -31,6 +31,7 @@
     let firstRenderComplete = false;
     let selectedRecording = null; // Track which recording to show in detail view
     let showKeyboardHelp = false; // Track keyboard shortcuts help modal
+    let shouldOpenTranscriptViewer = false; // Signal to open transcript viewer after navigation
 
     // Debug: log recordings data
     $: console.log("[App] recordings store:", $recordings);
@@ -103,20 +104,31 @@
         }
     }
 
-    function handleViewTranscript() {
-        // Get the most recent recording with transcript
-        const recordingWithTranscript = $recordings.find(
-            (r) => r.has_transcript,
-        );
-
-        if (!recordingWithTranscript) {
-            console.log("[Keyboard] No transcripts available to view");
-            return;
+    async function handleViewTranscript() {
+        // Get the most recent recording that has a transcript
+        for (const recording of $recordings) {
+            try {
+                const exists = await invoke("check_transcript_exists", {
+                    filePath: recording.path,
+                });
+                if (exists) {
+                    // Set flag to open transcript viewer
+                    shouldOpenTranscriptViewer = true;
+                    // Navigate to the recording detail
+                    switchTab("recording-detail", recording);
+                    console.log("[Keyboard] Viewing transcript via E key");
+                    return;
+                }
+            } catch (error) {
+                console.error(
+                    "[Keyboard] Failed to check transcript for",
+                    recording.filename,
+                    error,
+                );
+            }
         }
 
-        // Navigate to the recording detail
-        switchTab("recording-detail", recordingWithTranscript);
-        console.log("[Keyboard] Viewing transcript via E key");
+        console.log("[Keyboard] No transcripts available to view");
     }
 
     function handleToggleHelp() {
@@ -465,6 +477,7 @@
                     onBack={() => switchTab("recordings")}
                     on:deleted={handleRecordingDeleted}
                     on:renamed={handleRecordingRenamed}
+                    bind:shouldOpenTranscriptViewer
                 />
             {:else if activeTab === "recovery"}
                 <Recovery />

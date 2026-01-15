@@ -207,7 +207,18 @@ async fn recover_recording(
 
     // Create output filename based on timestamp and format
     let output_extension = format.extension();
-    let output_filename = format!("recording_{}.{}", recording.timestamp, output_extension);
+    // Convert old timestamp format (YYYYMMDD_HHMMSS) to new format (YYYY-MM-DD-HH_MM)
+    let formatted_timestamp = if recording.timestamp.len() >= 15 {
+        let year = &recording.timestamp[0..4];
+        let month = &recording.timestamp[4..6];
+        let day = &recording.timestamp[6..8];
+        let hour = &recording.timestamp[9..11];
+        let minute = &recording.timestamp[11..13];
+        format!("{}-{}-{}-{}_{}", year, month, day, hour, minute)
+    } else {
+        recording.timestamp.clone()
+    };
+    let output_filename = format!("{}_recording.{}", formatted_timestamp, output_extension);
     let output_path = config.recordings_dir.join(&output_filename);
 
     // Check if output already exists

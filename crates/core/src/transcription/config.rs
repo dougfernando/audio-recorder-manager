@@ -16,18 +16,22 @@ impl Default for TranscriptionConfig {
         Self {
             api_key: String::new(),
             model: "gemini-2.5-flash".to_string(),
-            prompt: r#"Please process the attached audio file and provide the following content in markdown format:
+            prompt: r#"
 
-            **Topics Discussed:**
+                Please process the attached audio file and provide the following content in markdown format:
 
-            *   Detect the language spoken in the audio.
-            *   Analyze the whole audio in details.
-            *   Identify the all subjects, decisions, and action items, including details, examples, numbers and names mentioned.
-            *   Organize the content into categories with clear headings for each topic; if something is hard to classify, add to "Others section".
-            *   Describe the topics in the same language as identified in the audio as long it is Spanish, Portuguese or English; otherwise, use English.
-            *   Ensure absolutely no information is lost from the audio, better add irrelevant content in the audio than lose nuances.
+                **1. Topics Discussed:**
 
-            Your entire response should be a single markdown document and absolutely not content should be lost."#.to_string(),
+                *   Detect the language spoken in the audio.
+                *   Analyze the whole audio in details.
+                *   Identify the all subjects, decisions, and action items, including details, examples, numbers and names mentioned.
+                *   Organize the content into categories with clear headings for each topic; if something is hard to classify, add to "Others section".
+                *   Describe the topics in the same language as identified in the audio as long it is Spanish, Portuguese or English; otherwise, use English.
+                *   Ensure absolutely no information is lost from the audio, better add irrelevant content in the audio than lose nuances.
+
+                Your entire response should be a single markdown document (avoid formatting content in bold unless really necessary) and absolutely not content should be lost.
+
+            "#.to_string(),
             optimize_audio: false,
         }
     }
