@@ -1084,8 +1084,6 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    let app_handle = app.handle();
-
     // Create menu items
     let show_hide = MenuItem::with_id(app, "show_hide", "Show/Hide Window", true, None::<&str>)?;
     let separator1 = PredefinedMenuItem::separator(app)?;

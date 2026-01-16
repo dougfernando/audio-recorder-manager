@@ -109,7 +109,6 @@ async fn record_worker(
         let filepath = config.recordings_dir.join(session.temp_filename());
         let observer = Arc::new(JsonFileObserver::new(config.status_dir.clone()));
         let effective_duration = session.duration.effective_duration();
-        let mut final_filepath = filepath.clone();
 
         // Use WASAPI dual-channel recording on Windows (loopback + microphone)
         #[cfg(windows)]
@@ -408,15 +407,6 @@ async fn record_worker(
         let _ = std::fs::remove_file(&loopback_temp);
         let _ = std::fs::remove_file(&mic_temp);
         tracing::info!("Temporary files cleaned up");
-
-        // Update filepath to point to the merged output
-        // For M4A, we already have the final file (merge+encode was done in one pass)
-        // For WAV, filepath is already correct
-        final_filepath = if matches!(session.format, AudioFormat::M4a) {
-            filepath.with_extension("m4a")
-        } else {
-            filepath.clone()
-        };
     }
 
     #[cfg(not(windows))]
@@ -427,6 +417,15 @@ async fn record_worker(
             "Recording is currently only supported on Windows. Cross-platform support (Linux/macOS) is planned for a future release."
         )));
     }
+
+    // Determine final filepath based on format
+    // For M4A, we already have the final file (merge+encode was done in one pass)
+    // For WAV, filepath is already correct
+    let final_filepath = if matches!(session.format, AudioFormat::M4a) {
+        filepath.with_extension("m4a")
+    } else {
+        filepath.clone()
+    };
 
     // Write final status
     let file_size_mb = if final_filepath.exists() {

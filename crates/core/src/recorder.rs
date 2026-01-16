@@ -380,7 +380,6 @@ pub async fn merge_audio_streams_smart(
         // Scenario A: Both have audio - Create dual-mono stereo (L=loopback, R=mic)
         // Convert mic mono to stereo first, then merge with amerge
         tracing::info!("📋 Merge Strategy: Dual-mono stereo (L=loopback, R=microphone)");
-        let cmd_build_start = std::time::Instant::now();
 
         let mut cmd = setup_ffmpeg_command();
         cmd.arg("-hide_banner")
@@ -412,15 +411,12 @@ pub async fn merge_audio_streams_smart(
             );
         }
 
-        let ffmpeg_start = std::time::Instant::now();
         let result = execute_ffmpeg(cmd).await?;
-        let ffmpeg_elapsed = ffmpeg_start.elapsed();
 
         result
     } else if loopback_has_audio && !mic_has_audio {
         // Scenario B: Loopback only - Convert to stereo (duplicate to both channels)
         tracing::info!("📋 Merge Strategy: Using loopback only (duplicate system audio to stereo)");
-        let ffmpeg_start = std::time::Instant::now();
 
         let mut cmd = setup_ffmpeg_command();
         cmd.arg("-hide_banner")
@@ -437,13 +433,11 @@ pub async fn merge_audio_streams_smart(
             .arg(output_path);
 
         let result = execute_ffmpeg(cmd).await?;
-        let ffmpeg_elapsed = ffmpeg_start.elapsed();
 
         result
     } else if !loopback_has_audio && mic_has_audio {
         // Scenario C: Mic only - Convert mono to stereo (duplicate to both channels)
         tracing::info!("📋 Merge Strategy: Using microphone only (duplicate user audio to stereo)");
-        let ffmpeg_start = std::time::Instant::now();
 
         let mut cmd = setup_ffmpeg_command();
         cmd.arg("-hide_banner")
@@ -461,13 +455,11 @@ pub async fn merge_audio_streams_smart(
             .arg(output_path);
 
         let result = execute_ffmpeg(cmd).await?;
-        let ffmpeg_elapsed = ffmpeg_start.elapsed();
 
         result
     } else {
         // Scenario D: Neither has audio - Use loopback file (valid silent stereo)
         tracing::info!("📋 Merge Strategy: Both channels silent (creating silent stereo file)");
-        let ffmpeg_start = std::time::Instant::now();
 
         let mut cmd = setup_ffmpeg_command();
         cmd.arg("-hide_banner")
@@ -487,7 +479,6 @@ pub async fn merge_audio_streams_smart(
             .arg(output_path);
 
         let result = execute_ffmpeg(cmd).await?;
-        let ffmpeg_elapsed = ffmpeg_start.elapsed();
 
         result
     };
