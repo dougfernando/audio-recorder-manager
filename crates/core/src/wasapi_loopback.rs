@@ -24,8 +24,7 @@ pub mod windows_loopback {
 
     use anyhow::{Context, Result};
     use crate::audio_utils::{calculate_rms_f32, calculate_rms_i16, calculate_rms_i32};
-    use hound::{WavSpec, WavWriter};
-    use std::path::PathBuf;
+    use crate::streaming_encoder::StreamingEncoder;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
@@ -42,7 +41,7 @@ pub mod windows_loopback {
     }
 
     impl WasapiLoopbackRecorder {
-        pub fn new(filepath: PathBuf) -> Result<Self> {
+        pub fn new(mut encoder: Box<dyn StreamingEncoder>) -> Result<Self> {
             let is_recording = Arc::new(AtomicBool::new(true));
             let frames_captured = Arc::new(AtomicU64::new(0));
             let has_audio = Arc::new(AtomicBool::new(false));
@@ -76,7 +75,7 @@ pub mod windows_loopback {
             // Spawn recording thread that initializes its own COM
             std::thread::spawn(move || {
                 let _ = Self::recording_thread(
-                    filepath,
+                    encoder,
                     is_recording_clone,
                     frames_captured_clone,
                     has_audio_clone,
@@ -92,7 +91,7 @@ pub mod windows_loopback {
         }
 
         fn recording_thread(
-            filepath: PathBuf,
+            mut encoder: Box<dyn StreamingEncoder>,
             is_recording: Arc<AtomicBool>,
             frames_captured: Arc<AtomicU64>,
             has_audio: Arc<AtomicBool>,
@@ -157,17 +156,6 @@ pub mod windows_loopback {
                 // Get capture client
                 let capture_client: IAudioCaptureClient = audio_client.GetService()?;
 
-                // Create WAV writer - always use 16-bit PCM for compatibility
-                let spec = WavSpec {
-                    channels,
-                    sample_rate,
-                    bits_per_sample: 16,
-                    sample_format: hound::SampleFormat::Int,
-                };
-
-                let writer = WavWriter::create(&filepath, spec)?;
-                let mut writer = Some(writer);
-
                 // Start audio client
                 audio_client.Start()?;
 
@@ -206,11 +194,8 @@ pub mod windows_loopback {
 
                             if is_silent {
                                 // Write silence for the number of frames
-                                if let Some(writer) = writer.as_mut() {
-                                    for _ in 0..(num_frames * channels as u32) {
-                                        let _ = writer.write_sample(0i16);
-                                    }
-                                }
+                                let silence: Vec<i16> = vec![0i16; (num_frames * channels as u32) as usize];
+                                let _ = encoder.write_samples(&silence, channels as u32, sample_rate);
                             } else {
                                 // Process based on actual format
                                 if is_float && is_32bit {
@@ -230,13 +215,11 @@ pub mod windows_loopback {
                                     }
 
                                     // Convert and write to 16-bit
-                                    if let Some(writer) = writer.as_mut() {
-                                        for &sample in samples {
-                                            let sample_i16 =
-                                                (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
-                                            let _ = writer.write_sample(sample_i16);
-                                        }
-                                    }
+                                    let samples_i16: Vec<i16> = samples
+                                        .iter()
+                                        .map(|&sample| (sample.clamp(-1.0, 1.0) * 32767.0) as i16)
+                                        .collect();
+                                    let _ = encoder.write_samples(&samples_i16, channels as u32, sample_rate);
                                 } else if !is_float && is_32bit {
                                     // 32-bit int samples
                                     let samples = std::slice::from_raw_parts(
@@ -259,12 +242,11 @@ pub mod windows_loopback {
                                     // i32 range: -2147483648 to 2147483647
                                     // i16 range: -32768 to 32767
                                     // Shift right by 16 bits (equivalent to dividing by 65536)
-                                    if let Some(writer) = writer.as_mut() {
-                                        for &sample in samples {
-                                            let sample_i16 = (sample >> 16) as i16;
-                                            let _ = writer.write_sample(sample_i16);
-                                        }
-                                    }
+                                    let samples_i16: Vec<i16> = samples
+                                        .iter()
+                                        .map(|&sample| (sample >> 16) as i16)
+                                        .collect();
+                                    let _ = encoder.write_samples(&samples_i16, channels as u32, sample_rate);
                                 } else if !is_float && bits_per_sample == 16 {
                                     // 16-bit int samples (legacy)
                                     let samples = std::slice::from_raw_parts(
@@ -282,11 +264,7 @@ pub mod windows_loopback {
                                     }
 
                                     // Write directly
-                                    if let Some(writer) = writer.as_mut() {
-                                        for &sample in samples {
-                                            let _ = writer.write_sample(sample);
-                                        }
-                                    }
+                                    let _ = encoder.write_samples(samples, channels as u32, sample_rate);
                                 } else {
                                     tracing::warn!(
                                         "Unsupported audio format: {} bits, float={}",
@@ -304,9 +282,8 @@ pub mod windows_loopback {
                 // Stop and cleanup
                 audio_client.Stop()?;
 
-                if let Some(writer) = writer.take() {
-                    writer.finalize()?;
-                }
+                // Finalize encoder
+                encoder.finish()?;
 
                 CoTaskMemFree(Some(mix_format as *const _ as *const _));
                 CoUninitialize();

@@ -14,8 +14,7 @@ pub mod windows_microphone {
 
     use anyhow::{Context, Result};
     use crate::audio_utils::{calculate_rms_f32, calculate_rms_i16};
-    use hound::{WavSpec, WavWriter};
-    use std::path::PathBuf;
+    use crate::streaming_encoder::StreamingEncoder;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
@@ -31,7 +30,7 @@ pub mod windows_microphone {
     }
 
     impl WasapiMicrophoneRecorder {
-        pub fn new(filepath: PathBuf, target_sample_rate: u32) -> Result<Self> {
+        pub fn new(mut encoder: Box<dyn StreamingEncoder>, target_sample_rate: u32) -> Result<Self> {
             let is_recording = Arc::new(AtomicBool::new(true));
             let frames_captured = Arc::new(AtomicU64::new(0));
             let has_audio = Arc::new(AtomicBool::new(false));
@@ -43,7 +42,7 @@ pub mod windows_microphone {
             // Spawn recording thread that initializes its own COM
             std::thread::spawn(move || {
                 if let Err(e) = Self::recording_thread(
-                    filepath,
+                    encoder,
                     target_sample_rate,
                     is_recording_clone,
                     frames_captured_clone,
@@ -62,7 +61,7 @@ pub mod windows_microphone {
         }
 
         fn recording_thread(
-            filepath: PathBuf,
+            mut encoder: Box<dyn StreamingEncoder>,
             target_sample_rate: u32,
             is_recording: Arc<AtomicBool>,
             frames_captured: Arc<AtomicU64>,
@@ -135,19 +134,6 @@ pub mod windows_microphone {
                 let capture_client: IAudioCaptureClient = audio_client.GetService()?;
                 tracing::info!("Capture client obtained successfully");
 
-                // Create WAV writer - always use 16-bit PCM for compatibility
-                tracing::info!("Creating WAV writer for microphone...");
-                let spec = WavSpec {
-                    channels,
-                    sample_rate,
-                    bits_per_sample: 16,
-                    sample_format: hound::SampleFormat::Int,
-                };
-
-                let writer = WavWriter::create(&filepath, spec)?;
-                let mut writer = Some(writer);
-                tracing::info!("WAV writer created successfully");
-
                 // Start audio client
                 tracing::info!("Starting microphone audio client...");
                 audio_client.Start()?;
@@ -205,11 +191,8 @@ pub mod windows_microphone {
 
                             if is_silent {
                                 // Write silence for the number of frames
-                                if let Some(writer) = writer.as_mut() {
-                                    for _ in 0..(num_frames * channels as u32) {
-                                        let _ = writer.write_sample(0i16);
-                                    }
-                                }
+                                let silence: Vec<i16> = vec![0i16; (num_frames * channels as u32) as usize];
+                                let _ = encoder.write_samples(&silence, channels as u32, sample_rate);
                             } else {
                                 // Process audio based on native format
                                 if is_float {
@@ -232,13 +215,11 @@ pub mod windows_microphone {
                                     }
 
                                     // Convert and write to 16-bit
-                                    if let Some(writer) = writer.as_mut() {
-                                        for &sample in samples {
-                                            let sample_i16 =
-                                                (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
-                                            let _ = writer.write_sample(sample_i16);
-                                        }
-                                    }
+                                    let samples_i16: Vec<i16> = samples
+                                        .iter()
+                                        .map(|&sample| (sample.clamp(-1.0, 1.0) * 32767.0) as i16)
+                                        .collect();
+                                    let _ = encoder.write_samples(&samples_i16, channels as u32, sample_rate);
                                 } else if bits_per_sample == 16 {
                                     // Process 16-bit int samples
                                     let samples = std::slice::from_raw_parts(
@@ -260,22 +241,15 @@ pub mod windows_microphone {
                                     }
 
                                     // Write directly
-                                    if let Some(writer) = writer.as_mut() {
-                                        for &sample in samples {
-                                            let _ = writer.write_sample(sample);
-                                        }
-                                    }
+                                    let _ = encoder.write_samples(samples, channels as u32, sample_rate);
                                 } else {
                                     // Unsupported format - write silence
                                     tracing::warn!(
                                         "Unsupported audio format: {} bits, writing silence",
                                         bits_per_sample
                                     );
-                                    if let Some(writer) = writer.as_mut() {
-                                        for _ in 0..(num_frames * channels as u32) {
-                                            let _ = writer.write_sample(0i16);
-                                        }
-                                    }
+                                    let silence: Vec<i16> = vec![0i16; (num_frames * channels as u32) as usize];
+                                    let _ = encoder.write_samples(&silence, channels as u32, sample_rate);
                                 }
                             }
                         }
@@ -294,9 +268,8 @@ pub mod windows_microphone {
 
                 audio_client.Stop()?;
 
-                if let Some(writer) = writer.take() {
-                    writer.finalize()?;
-                }
+                // Finalize encoder
+                encoder.finish()?;
 
                 // Native format was already freed after Initialize()
 

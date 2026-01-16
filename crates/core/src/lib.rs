@@ -5,13 +5,17 @@ pub mod config;
 pub mod domain;
 pub mod error;
 pub mod ffmpeg_encoder;
+pub mod ffmpeg_pipe_encoder;
 pub mod logging;
 pub mod output;
 pub mod recorder;
 pub mod status;
+pub mod streaming_encoder;
 pub mod transcription;
 pub mod wasapi_loopback;
 pub mod wasapi_microphone;
+pub mod wav_encoder;
 
 pub use error::Result;
 pub use output::UserOutput;
+pub use streaming_encoder::{create_encoder, OutputFormat, StreamingEncoder};

@@ -115,29 +115,64 @@ async fn record_worker(
         {
         tracing::info!(
             "Starting WASAPI dual-channel recording: {} ({} seconds)",
-            session.temp_filename(),
+            session.filename(),
             effective_duration
         );
 
-        // Create temporary filenames for separate recordings
-        let loopback_temp = config.recordings_dir.join(format!(
-            "{}_loopback.wav",
-            session.id.as_str()
+        // Convert audio format to output format for encoding
+        let output_format = session.format.to_output_format(None);
+
+        // Create output filenames based on format
+        let loopback_output = config.recordings_dir.join(format!(
+            "{}_loopback.{}",
+            session.id.as_str(),
+            output_format.extension()
         ));
-        let mic_temp = config.recordings_dir.join(format!(
-            "{}_mic.wav",
-            session.id.as_str()
+        let mic_output = config.recordings_dir.join(format!(
+            "{}_mic.{}",
+            session.id.as_str(),
+            output_format.extension()
         ));
+
+        // Get system audio sample rate (needed for encoder creation)
+        use crate::streaming_encoder::create_encoder;
+        let target_sample_rate = unsafe {
+            use windows::Win32::System::Com::*;
+            use windows::Win32::Media::Audio::*;
+
+            CoInitializeEx(None, COINIT_MULTITHREADED)
+                .ok()
+                .context("Failed to initialize COM")?;
+
+            let device_enumerator: IMMDeviceEnumerator =
+                CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+
+            let device = device_enumerator.GetDefaultAudioEndpoint(eRender, eConsole)?;
+
+            let audio_client: IAudioClient = device.Activate(CLSCTX_ALL, None)?;
+            let mix_format = audio_client.GetMixFormat()?;
+            let wf = &*mix_format;
+
+            let sr = wf.nSamplesPerSec;
+
+            CoTaskMemFree(Some(mix_format as *const _ as *const _));
+
+            sr
+        };
+
+        tracing::info!("System audio sample rate: {} Hz", target_sample_rate);
+
+        // Create encoders
+        let loopback_encoder = create_encoder(&output_format, loopback_output.clone(), 2, target_sample_rate)?;
+        let mic_encoder = create_encoder(&output_format, mic_output.clone(), 2, target_sample_rate)?;
 
         // Initialize loopback recorder (system audio) - REQUIRED
-        let loopback_recorder = WasapiLoopbackRecorder::new(loopback_temp.clone())?;
+        let loopback_recorder = WasapiLoopbackRecorder::new(loopback_encoder)?;
 
-        // Get loopback sample rate to match microphone
-        let target_sample_rate = loopback_recorder.get_sample_rate();
-        tracing::info!("System audio sample rate: {} Hz - will match microphone to this", target_sample_rate);
+        tracing::info!("System audio recorder initialized");
 
         // Initialize microphone recorder with matched sample rate
-        let mic_recorder = match WasapiMicrophoneRecorder::new(mic_temp.clone(), target_sample_rate) {
+        let mic_recorder = match WasapiMicrophoneRecorder::new(mic_encoder, target_sample_rate) {
             Ok(recorder) => {
                 tracing::info!("Microphone recorder initialized successfully with matched sample rate");
                 Some(recorder)
@@ -206,8 +241,8 @@ async fn record_worker(
                 }
 
                 // Cleanup temporary files
-                let _ = std::fs::remove_file(&loopback_temp);
-                let _ = std::fs::remove_file(&mic_temp);
+                let _ = std::fs::remove_file(&loopback_output);
+                let _ = std::fs::remove_file(&mic_output);
                 tracing::info!("Recording cancelled, temporary files cleaned up");
 
                 // Write cancelled status
@@ -313,8 +348,8 @@ async fn record_worker(
 
         // Wait for temporary files to be fully written and readable before processing
         tracing::info!("⏳ Waiting for temporary files to be ready...");
-        let _ = wait_for_file_ready(&loopback_temp, 2000).await;
-        let _ = wait_for_file_ready(&mic_temp, 2000).await;
+        let _ = wait_for_file_ready(&loopback_output, 2000).await;
+        let _ = wait_for_file_ready(&mic_output, 2000).await;
         tracing::info!("✓ Temporary files are ready for processing");
 
         // Determine total steps based on format
@@ -378,8 +413,8 @@ async fn record_worker(
                 // Stage 2 will be emitted inside merge_audio_streams_smart for better granularity
                 // Merge audio streams using FFmpeg (with direct M4A encoding if requested)
                 merge_audio_streams_smart(
-                    &loopback_temp,
-                    &mic_temp,
+                    &loopback_output,
+                    &mic_output,
                     &merge_output_path,
                     loopback_has_audio,
                     mic_has_audio,
@@ -404,8 +439,8 @@ async fn record_worker(
         }
 
         // Cleanup temporary files
-        let _ = std::fs::remove_file(&loopback_temp);
-        let _ = std::fs::remove_file(&mic_temp);
+        let _ = std::fs::remove_file(&loopback_output);
+        let _ = std::fs::remove_file(&mic_output);
         tracing::info!("Temporary files cleaned up");
     }
 
@@ -450,6 +485,7 @@ async fn record_worker(
         codec: session.format.codec().to_string(),
         message: match session.format {
             AudioFormat::M4a => "Recording converted to M4A successfully".to_string(),
+            AudioFormat::Mp3 => "Recording converted to MP3 successfully".to_string(),
             AudioFormat::Wav => "Recording completed successfully".to_string(),
         },
     })?;

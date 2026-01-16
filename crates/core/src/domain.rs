@@ -10,6 +10,7 @@ use crate::error::{RecorderError, Result};
 pub enum AudioFormat {
     Wav,
     M4a,
+    Mp3,
 }
 
 impl fmt::Display for AudioFormat {
@@ -17,6 +18,7 @@ impl fmt::Display for AudioFormat {
         match self {
             AudioFormat::Wav => write!(f, "wav"),
             AudioFormat::M4a => write!(f, "m4a"),
+            AudioFormat::Mp3 => write!(f, "mp3"),
         }
     }
 }
@@ -28,8 +30,9 @@ impl FromStr for AudioFormat {
         match s.to_lowercase().as_str() {
             "wav" => Ok(AudioFormat::Wav),
             "m4a" => Ok(AudioFormat::M4a),
+            "mp3" => Ok(AudioFormat::Mp3),
             _ => Err(RecorderError::InvalidParameter(format!(
-                "Unsupported audio format '{}'. Supported formats: wav, m4a",
+                "Unsupported audio format '{}'. Supported formats: wav, m4a, mp3",
                 s
             ))),
         }
@@ -41,6 +44,7 @@ impl AudioFormat {
         match self {
             AudioFormat::Wav => "wav",
             AudioFormat::M4a => "m4a",
+            AudioFormat::Mp3 => "mp3",
         }
     }
 
@@ -48,6 +52,21 @@ impl AudioFormat {
         match self {
             AudioFormat::Wav => "pcm",
             AudioFormat::M4a => "aac",
+            AudioFormat::Mp3 => "mp3",
+        }
+    }
+
+    /// Convert AudioFormat to OutputFormat with default bitrate
+    pub fn to_output_format(&self, bitrate: Option<u32>) -> crate::streaming_encoder::OutputFormat {
+        let default_bitrate = 192; // Default 192 kbps
+        match self {
+            AudioFormat::Wav => crate::streaming_encoder::OutputFormat::Wav,
+            AudioFormat::M4a => crate::streaming_encoder::OutputFormat::M4a {
+                bitrate: bitrate.unwrap_or(default_bitrate),
+            },
+            AudioFormat::Mp3 => crate::streaming_encoder::OutputFormat::Mp3 {
+                bitrate: bitrate.unwrap_or(default_bitrate),
+            },
         }
     }
 }

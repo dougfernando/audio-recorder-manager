@@ -96,6 +96,7 @@ pub async fn merge_audio_streams_smart(
     let format_str = match output_format {
         crate::domain::AudioFormat::Wav => "WAV",
         crate::domain::AudioFormat::M4a => "M4A (AAC)",
+        crate::domain::AudioFormat::Mp3 => "MP3",
     };
 
     tracing::info!("═══════════════════════════════════════════════════════════");
@@ -163,6 +164,12 @@ pub async fn merge_audio_streams_smart(
                 cmd.arg("-c:a").arg("aac");
                 cmd.arg("-b:a").arg("192k"); // Explicit bitrate for consistent quality
                 cmd.arg("-movflags").arg("faststart"); // Streaming-friendly
+                cmd.arg("-threads").arg("auto"); // Use all CPU cores for encoding
+            }
+            crate::domain::AudioFormat::Mp3 => {
+                // MP3 encoding with LAME
+                cmd.arg("-c:a").arg("libmp3lame");
+                cmd.arg("-b:a").arg("192k"); // Explicit bitrate for consistent quality
                 cmd.arg("-threads").arg("auto"); // Use all CPU cores for encoding
             }
             crate::domain::AudioFormat::Wav => {
