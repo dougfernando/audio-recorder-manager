@@ -180,6 +180,57 @@ impl JsonFileObserver {
         Ok(())
     }
 
+    /// Write compression progress status for audio compression before transcription
+    pub fn write_compression_progress(
+        &self,
+        session_id: &str,
+        progress_percent: u8,
+        processing_speed: Option<String>,
+        audio_duration_ms: Option<u64>,
+        processed_time_ms: Option<u64>,
+        estimated_remaining_secs: Option<u64>,
+    ) -> Result<()> {
+        let status_file = self.get_status_file(session_id);
+
+        let mut status = serde_json::json!({
+            "session_id": session_id,
+            "status": "compressing",
+            "step": "compressing",
+            "step_number": 1,
+            "total_steps": 5,
+            "progress": progress_percent,
+            "message": "Compressing audio file for transcription...",
+            "compression_progress": progress_percent,
+        });
+
+        if let Some(ref speed) = processing_speed {
+            status["processing_speed"] = serde_json::json!(speed);
+        }
+        if let Some(duration) = audio_duration_ms {
+            status["audio_duration_ms"] = serde_json::json!(duration);
+        }
+        if let Some(processed) = processed_time_ms {
+            status["processed_time_ms"] = serde_json::json!(processed);
+        }
+        if let Some(remaining) = estimated_remaining_secs {
+            status["estimated_remaining_secs"] = serde_json::json!(remaining);
+        }
+
+        let json = serde_json::to_string_pretty(&status)?;
+        self.write_json_atomic(&status_file, &json)?;
+
+        tracing::debug!(
+            "Compression progress: {}%{}",
+            progress_percent,
+            processing_speed
+                .as_ref()
+                .map(|s| format!(" ({})", s))
+                .unwrap_or_default()
+        );
+
+        Ok(())
+    }
+
     /// Mark FFmpeg encoding as complete (transition from processing to completion)
     /// This ensures the file watcher detects the status change and the UI updates
     pub fn mark_ffmpeg_complete(&self, session_id: &str) -> Result<()> {

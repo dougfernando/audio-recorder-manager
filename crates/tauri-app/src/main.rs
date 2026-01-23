@@ -9,8 +9,13 @@ use audio_recorder_manager_core::{
     commands::{cancel, record, recover, status, stop},
     config::RecorderConfig,
     domain::{AudioFormat, RecordingDuration},
+    ffmpeg_encoder::{
+        compress_audio_for_transcription, estimate_compression,
+        CompressionQuality, GEMINI_FILE_SIZE_LIMIT,
+    },
     logging,
     recorder::RecordingQuality,
+    status::JsonFileObserver,
     transcription::{load_config, save_config, transcribe_audio, TranscriptionConfig},
 };
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -975,6 +980,134 @@ async fn quit_app(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(
     Ok(())
 }
 
+/// Check if a file exceeds the Gemini file size limit and get compression estimates
+#[tauri::command]
+async fn get_compression_estimate(file_path: String) -> Result<serde_json::Value, String> {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+    let file_size = metadata.len();
+
+    // If file is under the limit, no compression needed
+    if file_size < GEMINI_FILE_SIZE_LIMIT {
+        return Ok(serde_json::json!({
+            "needs_compression": false,
+            "original_size": file_size,
+            "gemini_limit": GEMINI_FILE_SIZE_LIMIT,
+        }));
+    }
+
+    // Get compression estimates
+    let path_buf = path.to_path_buf();
+    let estimate = estimate_compression(&path_buf)
+        .await
+        .map_err(|e| format!("Failed to estimate compression: {}", e))?;
+
+    Ok(serde_json::json!({
+        "needs_compression": true,
+        "original_size": estimate.original_size,
+        "duration_ms": estimate.duration_ms,
+        "gemini_limit": GEMINI_FILE_SIZE_LIMIT,
+        "standard_quality": {
+            "would_fit": estimate.standard_would_fit,
+            "estimated_size": estimate.standard_estimated_size,
+            "description": "Standard (44.1kHz stereo, 128kbps)"
+        },
+        "quick_quality": {
+            "would_fit": estimate.quick_would_fit,
+            "estimated_size": estimate.quick_estimated_size,
+            "description": "Quick (16kHz mono, 64kbps)"
+        }
+    }))
+}
+
+/// Compress an audio file for transcription
+#[tauri::command]
+async fn compress_for_transcription(
+    file_path: String,
+    quality: String,
+    session_id: Option<String>,
+) -> Result<String, String> {
+    use std::path::Path;
+
+    let path = Path::new(&file_path);
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // Parse quality level
+    let compression_quality = match quality.to_lowercase().as_str() {
+        "standard" => CompressionQuality::Standard,
+        "quick" => CompressionQuality::Quick,
+        _ => return Err(format!("Invalid quality '{}'. Options: standard, quick", quality)),
+    };
+
+    // Generate session ID if not provided
+    let session_id = session_id.unwrap_or_else(|| {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|_| std::time::Duration::from_secs(0))
+            .as_secs();
+        format!("compress_{}", timestamp)
+    });
+
+    tracing::info!(
+        "Starting audio compression: {} -> {:?} quality",
+        file_path,
+        compression_quality
+    );
+
+    // Create observer for progress reporting
+    let config = RecorderConfig::new();
+    let observer = std::sync::Arc::new(JsonFileObserver::new(config.status_dir.clone()));
+
+    let path_buf = path.to_path_buf();
+    let compressed_path = compress_audio_for_transcription(
+        &path_buf,
+        compression_quality,
+        Some(&session_id),
+        Some(observer),
+    )
+    .await
+    .map_err(|e| format!("Compression failed: {}", e))?;
+
+    Ok(compressed_path.to_string_lossy().to_string())
+}
+
+/// Replace the original recording with a compressed version
+/// Deletes the original file and returns the new recording info
+#[tauri::command]
+async fn replace_with_compressed(
+    original_path: String,
+    compressed_path: String,
+) -> Result<RecordingFile, String> {
+    use std::path::Path;
+
+    let original = Path::new(&original_path);
+    let compressed = Path::new(&compressed_path);
+
+    // Verify compressed file exists
+    if !compressed.exists() {
+        return Err(format!("Compressed file not found: {}", compressed_path));
+    }
+
+    // Delete the original file
+    if original.exists() {
+        std::fs::remove_file(original)
+            .map_err(|e| format!("Failed to delete original file: {}", e))?;
+        tracing::info!("Deleted original file: {:?}", original);
+    }
+
+    // Return the recording info for the compressed file
+    get_recording(compressed_path).await
+}
+
 /// Generate waveform data from an audio file using ffmpeg
 #[tauri::command]
 async fn generate_waveform(file_path: String, samples: Option<usize>) -> Result<Vec<f32>, String> {
@@ -1497,6 +1630,9 @@ fn main() {
         stop_audio_monitor,
         get_audio_levels,
         generate_waveform,
+        get_compression_estimate,
+        compress_for_transcription,
+        replace_with_compressed,
         quit_app,
     ]);
 

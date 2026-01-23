@@ -1,4 +1,5 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,6 +10,259 @@ use tokio::process::Command;
 // Professional quality: 48kHz stereo 16-bit = 48000 * 2 channels * 2 bytes = 192,000 bytes/sec
 const PROFESSIONAL_BYTES_PER_SECOND: u64 = 192_000;
 const MIN_FILE_SIZE_FOR_ESTIMATION: u64 = 1000;
+
+// Gemini file size limit (100MB)
+pub const GEMINI_FILE_SIZE_LIMIT: u64 = 100 * 1024 * 1024;
+
+/// Compression quality levels for reducing file size
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CompressionQuality {
+    /// Standard quality: 44.1kHz stereo, 128kbps - good balance
+    Standard,
+    /// Quick/Low quality: 16kHz mono, 64kbps - maximum compression
+    Quick,
+}
+
+impl CompressionQuality {
+    /// Get the sample rate for this quality level
+    pub fn sample_rate(&self) -> u32 {
+        match self {
+            CompressionQuality::Standard => 44100,
+            CompressionQuality::Quick => 16000,
+        }
+    }
+
+    /// Get the number of channels for this quality level
+    pub fn channels(&self) -> u8 {
+        match self {
+            CompressionQuality::Standard => 2,
+            CompressionQuality::Quick => 1,
+        }
+    }
+
+    /// Get the bitrate for this quality level (in kbps)
+    pub fn bitrate_kbps(&self) -> u32 {
+        match self {
+            CompressionQuality::Standard => 128,
+            CompressionQuality::Quick => 64,
+        }
+    }
+
+    /// Estimate the file size after compression given the original duration in milliseconds
+    pub fn estimate_compressed_size(&self, duration_ms: u64) -> u64 {
+        // Calculate size based on bitrate
+        // Size = (bitrate in bits/sec * duration in seconds) / 8 (to get bytes)
+        let duration_secs = duration_ms as f64 / 1000.0;
+        let bitrate_bps = self.bitrate_kbps() as f64 * 1000.0;
+        let size_bytes = (bitrate_bps * duration_secs) / 8.0;
+
+        // Add 10% overhead for container format
+        (size_bytes * 1.1) as u64
+    }
+
+    /// Get a human-readable description of this quality level
+    pub fn description(&self) -> &'static str {
+        match self {
+            CompressionQuality::Standard => "Standard (44.1kHz stereo, 128kbps)",
+            CompressionQuality::Quick => "Quick (16kHz mono, 64kbps)",
+        }
+    }
+}
+
+/// Information about compression options for a file
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompressionEstimate {
+    /// Original file size in bytes
+    pub original_size: u64,
+    /// Duration in milliseconds
+    pub duration_ms: u64,
+    /// Whether compression to Standard quality would bring it under the limit
+    pub standard_would_fit: bool,
+    /// Estimated size after Standard compression
+    pub standard_estimated_size: u64,
+    /// Whether compression to Quick quality would bring it under the limit
+    pub quick_would_fit: bool,
+    /// Estimated size after Quick compression
+    pub quick_estimated_size: u64,
+}
+
+/// Estimate compression results for a file
+pub async fn estimate_compression(audio_path: &PathBuf) -> Result<CompressionEstimate> {
+    let metadata = std::fs::metadata(audio_path)?;
+    let original_size = metadata.len();
+
+    let duration_ms = get_audio_duration_ms(audio_path).await?;
+
+    let standard_estimated = CompressionQuality::Standard.estimate_compressed_size(duration_ms);
+    let quick_estimated = CompressionQuality::Quick.estimate_compressed_size(duration_ms);
+
+    Ok(CompressionEstimate {
+        original_size,
+        duration_ms,
+        standard_would_fit: standard_estimated < GEMINI_FILE_SIZE_LIMIT,
+        standard_estimated_size: standard_estimated,
+        quick_would_fit: quick_estimated < GEMINI_FILE_SIZE_LIMIT,
+        quick_estimated_size: quick_estimated,
+    })
+}
+
+/// Compress an audio file for transcription
+/// Returns the path to the compressed file
+pub async fn compress_audio_for_transcription(
+    input_path: &PathBuf,
+    quality: CompressionQuality,
+    session_id: Option<&str>,
+    observer: Option<Arc<crate::status::JsonFileObserver>>,
+) -> Result<PathBuf> {
+    use std::process::Stdio;
+    use std::time::Instant;
+
+    tracing::info!("═══════════════════════════════════════════════════════════");
+    tracing::info!("🔧 AUDIO COMPRESSION FOR TRANSCRIPTION");
+    tracing::info!("═══════════════════════════════════════════════════════════");
+
+    let input_metadata = std::fs::metadata(input_path)?;
+    let input_size_mb = input_metadata.len() as f64 / (1024.0 * 1024.0);
+
+    tracing::info!("📂 Input file:  {:?}", input_path.file_name().unwrap_or_default());
+    tracing::info!("📊 Input size:  {:.2} MB", input_size_mb);
+    tracing::info!("🎚️  Target quality: {}", quality.description());
+
+    // Generate output filename (add _compressed suffix before extension)
+    let file_stem = input_path.file_stem()
+        .ok_or_else(|| anyhow::anyhow!("Invalid input file path"))?
+        .to_string_lossy();
+    let output_filename = format!("{}_compressed.m4a", file_stem);
+    let output_path = input_path.parent()
+        .ok_or_else(|| anyhow::anyhow!("Cannot determine parent directory"))?
+        .join(&output_filename);
+
+    tracing::info!("📂 Output file: {}", output_filename);
+
+    // Get audio duration for progress calculation
+    let audio_duration_ms = get_audio_duration_ms(input_path).await.unwrap_or(0);
+
+    // Build FFmpeg command
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-hide_banner")
+        .arg("-loglevel").arg("error")
+        .arg("-i").arg(input_path)
+        .arg("-c:a").arg("aac")
+        .arg("-b:a").arg(format!("{}k", quality.bitrate_kbps()))
+        .arg("-ar").arg(quality.sample_rate().to_string())
+        .arg("-ac").arg(quality.channels().to_string())
+        .arg("-movflags").arg("faststart")
+        .arg("-threads").arg("auto")
+        .arg("-y")
+        .arg(&output_path);
+
+    #[cfg(windows)]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    tracing::info!("───────────────────────────────────────────────────────────");
+    tracing::info!("⏳ Starting compression...");
+
+    let start_time = Instant::now();
+
+    // If we have progress monitoring enabled, use it
+    let output = if session_id.is_some() && observer.is_some() && audio_duration_ms > 0 {
+        let session_id = session_id.unwrap();
+        let observer = observer.as_ref().unwrap();
+
+        // Add progress flag
+        cmd.arg("-progress").arg("pipe:2");
+        cmd.stderr(Stdio::piped());
+
+        let mut child = cmd.spawn()?;
+        let stderr = child.stderr.take().unwrap();
+        let reader = BufReader::new(stderr);
+        let mut lines = reader.lines();
+
+        let mut current_speed: Option<String> = None;
+        let mut current_speed_float: f64 = 0.0;
+        let encoding_start = std::time::Instant::now();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            if line.starts_with("out_time_ms=") {
+                if let Ok(time_us) = line.split('=').nth(1).unwrap_or("0").parse::<u64>() {
+                    let time_ms = time_us / 1000;
+
+                    let progress_pct = ((time_ms as f64 / audio_duration_ms as f64) * 100.0).min(100.0) as u8;
+
+                    let remaining_audio_ms = audio_duration_ms.saturating_sub(time_ms);
+                    let estimated_remaining_secs = if current_speed_float > 0.0 {
+                        (remaining_audio_ms as f64 / 1000.0 / current_speed_float) as u64
+                    } else {
+                        let elapsed = encoding_start.elapsed().as_secs_f64();
+                        if elapsed > 0.0 && time_ms > 0 {
+                            let actual_speed = time_ms as f64 / 1000.0 / elapsed;
+                            (remaining_audio_ms as f64 / 1000.0 / actual_speed) as u64
+                        } else {
+                            remaining_audio_ms / 1000 / 5
+                        }
+                    };
+
+                    let _ = observer.write_compression_progress(
+                        session_id,
+                        progress_pct,
+                        current_speed.clone(),
+                        Some(audio_duration_ms),
+                        Some(time_ms),
+                        Some(estimated_remaining_secs),
+                    );
+
+                    tracing::debug!(
+                        "Compression progress: {}% ({}/{} ms)",
+                        progress_pct,
+                        time_ms,
+                        audio_duration_ms
+                    );
+                }
+            } else if line.starts_with("speed=") {
+                current_speed = line.split('=').nth(1).map(|s| s.to_string());
+                current_speed_float = current_speed.as_ref()
+                    .and_then(|s| s.trim_end_matches('x').parse().ok())
+                    .unwrap_or(0.0);
+            }
+        }
+
+        child.wait_with_output().await?
+    } else {
+        cmd.output().await?
+    };
+
+    let elapsed = start_time.elapsed();
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("FFmpeg compression failed: {}", stderr);
+    }
+
+    // Verify output file
+    let output_metadata = std::fs::metadata(&output_path)?;
+    let output_size_mb = output_metadata.len() as f64 / (1024.0 * 1024.0);
+    let compression_ratio = (1.0 - (output_metadata.len() as f64 / input_metadata.len() as f64)) * 100.0;
+
+    tracing::info!("═══════════════════════════════════════════════════════════");
+    tracing::info!("✓ COMPRESSION COMPLETED SUCCESSFULLY");
+    tracing::info!("═══════════════════════════════════════════════════════════");
+    tracing::info!("📊 Results:");
+    tracing::info!("    • Input size:      {:.2} MB", input_size_mb);
+    tracing::info!("    • Output size:     {:.2} MB", output_size_mb);
+    tracing::info!("    • Compression:     {:.1}%", compression_ratio);
+    tracing::info!("    • Time elapsed:    {:.2}s", elapsed.as_secs_f64());
+
+    // Verify output is under the limit
+    if output_metadata.len() >= GEMINI_FILE_SIZE_LIMIT {
+        tracing::warn!("⚠️ Compressed file is still over 100MB limit!");
+    } else {
+        tracing::info!("✓ Compressed file is under 100MB limit");
+    }
+
+    tracing::info!("═══════════════════════════════════════════════════════════");
+
+    Ok(output_path)
+}
 
 /// FFmpeg progress information parsed from progress output
 #[derive(Debug, Clone, Default)]

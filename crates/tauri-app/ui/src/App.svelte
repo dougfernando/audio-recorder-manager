@@ -222,6 +222,21 @@
         recordings.set(updatedRecordings);
     }
 
+    function handleRecordingReplaced(event) {
+        const { oldPath, newRecording } = event.detail;
+
+        // Update the selected recording to the new one
+        selectedRecording = newRecording;
+
+        // Remove the old recording from the list and add the new one
+        const updatedRecordings = $recordings
+            .filter((r) => r.path !== oldPath)
+            .concat([newRecording])
+            .sort((a, b) => b.created.localeCompare(a.created)); // Keep sorted by date (newest first)
+
+        recordings.set(updatedRecordings);
+    }
+
     function switchTab(tab, recording = null) {
         // If a recording is provided, show the detail view
         if (recording) {
@@ -477,6 +492,7 @@
                     onBack={() => switchTab("recordings")}
                     on:deleted={handleRecordingDeleted}
                     on:renamed={handleRecordingRenamed}
+                    on:replaced={handleRecordingReplaced}
                     bind:shouldOpenTranscriptViewer
                 />
             {:else if activeTab === "recovery"}

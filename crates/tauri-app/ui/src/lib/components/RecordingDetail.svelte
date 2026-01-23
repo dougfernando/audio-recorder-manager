@@ -13,6 +13,9 @@
 
     const dispatch = createEventDispatcher();
 
+    // Gemini file size limit (100MB)
+    const GEMINI_FILE_SIZE_LIMIT = 100 * 1024 * 1024;
+
     let isDeleting = false;
     let isTranscribing = false;
     let transcriptionProgress = null;
@@ -20,6 +23,13 @@
     let viewingTranscript = null;
     let progressPollingInterval = null;
     let transcriptPreview = null;
+
+    // Compression state
+    let showCompressionDialog = false;
+    let compressionEstimate = null;
+    let isCompressing = false;
+    let compressionProgress = null;
+    let selectedCompressionQuality = null;
 
     // Audio player state
     let audioElement = null;
@@ -335,6 +345,154 @@
             isTranscribing = false;
             stopProgressPolling();
         }
+    }
+
+    // Wrapper function that checks file size before transcription
+    async function handleTranscribeClick() {
+        // Check file size first
+        if (recording.size >= GEMINI_FILE_SIZE_LIMIT) {
+            // File is too large, show compression dialog
+            try {
+                compressionEstimate = await invoke("get_compression_estimate", {
+                    filePath: recording.path,
+                });
+                console.log("Compression estimate:", compressionEstimate);
+
+                if (compressionEstimate.needs_compression) {
+                    showCompressionDialog = true;
+                    return;
+                }
+            } catch (error) {
+                console.error("Failed to get compression estimate:", error);
+                alert(`Failed to check file size: ${error}`);
+                return;
+            }
+        }
+
+        // File is small enough, proceed with normal transcription
+        await transcribeRecording();
+    }
+
+    // Transcribe a compressed file
+    async function transcribeCompressedFile(compressedPath) {
+        // Check if transcript already exists and ask for confirmation
+        if (transcriptPath) {
+            const confirmed = await ask(
+                "A transcript already exists for this recording. Do you want to overwrite it?",
+                {
+                    title: "Overwrite Transcript",
+                    type: "warning",
+                },
+            );
+
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        const sessionId = `transcribe_${Date.now()}`;
+
+        try {
+            isTranscribing = true;
+            startProgressPolling(sessionId);
+
+            const result = await invoke("transcribe_recording", {
+                filePath: compressedPath,
+                sessionId: sessionId,
+            });
+
+            console.log("Transcription complete:", result);
+            transcriptPath = result;
+            await checkForTranscript();
+            await loadTranscriptPreview();
+        } catch (error) {
+            console.error("Failed to transcribe:", error);
+            alert(`Transcription failed: ${error}`);
+        } finally {
+            isTranscribing = false;
+            stopProgressPolling();
+        }
+    }
+
+    async function compressAndTranscribe(quality) {
+        showCompressionDialog = false;
+        selectedCompressionQuality = quality;
+
+        const sessionId = `compress_${Date.now()}`;
+        const originalPath = recording.path;
+
+        try {
+            isCompressing = true;
+            startCompressionProgressPolling(sessionId);
+
+            // Compress the file
+            const compressedPath = await invoke("compress_for_transcription", {
+                filePath: recording.path,
+                quality: quality,
+                sessionId: sessionId,
+            });
+
+            console.log("Compression complete:", compressedPath);
+            stopCompressionProgressPolling();
+            isCompressing = false;
+
+            // Replace original file with compressed file and update recording info
+            const updatedRecording = await invoke("replace_with_compressed", {
+                originalPath: originalPath,
+                compressedPath: compressedPath,
+            });
+
+            console.log("Replaced original with compressed:", updatedRecording);
+
+            // Update the recording object with the new compressed file info
+            recording = updatedRecording;
+
+            // Notify parent that recording was replaced (passes both old and new info for proper list update)
+            dispatch("replaced", {
+                oldPath: originalPath,
+                newRecording: updatedRecording,
+            });
+
+            // Explicitly reinitialize audio source and waveform for the new file
+            initializeAudioSrc();
+            await loadWaveform();
+
+            // Now transcribe the NEW compressed file (use recording.path which is now updated)
+            await transcribeCompressedFile(recording.path);
+        } catch (error) {
+            console.error("Failed to compress:", error);
+            alert(`Compression failed: ${error}`);
+            isCompressing = false;
+            stopCompressionProgressPolling();
+        }
+    }
+
+    function startCompressionProgressPolling(sessionId) {
+        progressPollingInterval = setInterval(async () => {
+            try {
+                const progress = await invoke("get_transcription_progress", {
+                    sessionId,
+                });
+                if (progress && progress.status === "compressing") {
+                    compressionProgress = progress;
+                }
+            } catch (error) {
+                console.error("Failed to get compression progress:", error);
+            }
+        }, 500);
+    }
+
+    function stopCompressionProgressPolling() {
+        if (progressPollingInterval) {
+            clearInterval(progressPollingInterval);
+            progressPollingInterval = null;
+        }
+        compressionProgress = null;
+    }
+
+    function cancelCompressionDialog() {
+        showCompressionDialog = false;
+        compressionEstimate = null;
     }
 
     function startProgressPolling(sessionId) {
@@ -751,7 +909,7 @@
                         </button>
                         <button
                             class="btn btn-secondary"
-                            on:click={transcribeRecording}
+                            on:click={handleTranscribeClick}
                         >
                             <svg
                                 width="16"
@@ -790,7 +948,7 @@
                     </button>
                     <button
                         class="btn btn-secondary"
-                        on:click={transcribeRecording}
+                        on:click={handleTranscribeClick}
                     >
                         <svg
                             width="16"
@@ -810,7 +968,7 @@
             {/if}
         {:else}
             <!-- No transcript - show generate button -->
-            <button class="btn btn-primary" on:click={transcribeRecording}>
+            <button class="btn btn-primary" on:click={handleTranscribeClick}>
                 <svg
                     width="16"
                     height="16"
@@ -880,6 +1038,218 @@
         onClose={closeTranscriptViewer}
         onTranscribed={handleTranscribed}
     />
+{/if}
+
+<!-- Compression Dialog -->
+{#if showCompressionDialog && compressionEstimate}
+    <div
+        class="modal-overlay"
+        on:click={cancelCompressionDialog}
+        on:keydown={(e) => e.key === "Escape" && cancelCompressionDialog()}
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+    >
+        <div
+            class="modal-content compression-dialog"
+            on:click|stopPropagation
+            role="document"
+        >
+            <div class="modal-header">
+                <h2>File Too Large for Transcription</h2>
+                <button
+                    class="close-btn"
+                    on:click={cancelCompressionDialog}
+                    aria-label="Close"
+                >
+                    <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div class="warning-banner">
+                    <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                    >
+                        <path
+                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+                        />
+                    </svg>
+                    <div>
+                        <strong>Gemini API Limit</strong>
+                        <p>
+                            This recording ({formatFileSize(
+                                compressionEstimate.original_size,
+                            )}) exceeds the 100MB file size limit for
+                            transcription.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="compression-options">
+                    <h3>Compression Options</h3>
+                    <p class="options-description">
+                        You can compress the audio file to reduce its size.
+                        {#if recording.format === "wav"}
+                            The file will be converted from WAV to M4A format.
+                        {/if}
+                        Choose a quality level below:
+                    </p>
+
+                    {#if compressionEstimate.standard_quality?.would_fit}
+                        <button
+                            class="compression-option"
+                            on:click={() => compressAndTranscribe("standard")}
+                        >
+                            <div class="option-header">
+                                <span class="option-name">Standard Quality</span
+                                >
+                                <span class="option-badge recommended"
+                                    >Recommended</span
+                                >
+                            </div>
+                            <div class="option-details">
+                                <span class="option-spec"
+                                    >44.1kHz stereo, 128kbps</span
+                                >
+                                <span class="option-size"
+                                    >Estimated: {formatFileSize(
+                                        compressionEstimate.standard_quality
+                                            .estimated_size,
+                                    )}</span
+                                >
+                            </div>
+                            <p class="option-description">
+                                Good balance between quality and file size.
+                                Suitable for most transcription needs.
+                            </p>
+                        </button>
+                    {/if}
+
+                    {#if compressionEstimate.quick_quality?.would_fit}
+                        <button
+                            class="compression-option"
+                            on:click={() => compressAndTranscribe("quick")}
+                        >
+                            <div class="option-header">
+                                <span class="option-name">Quick Quality</span>
+                                {#if !compressionEstimate.standard_quality?.would_fit}
+                                    <span class="option-badge">Only Option</span
+                                    >
+                                {/if}
+                            </div>
+                            <div class="option-details">
+                                <span class="option-spec"
+                                    >16kHz mono, 64kbps</span
+                                >
+                                <span class="option-size"
+                                    >Estimated: {formatFileSize(
+                                        compressionEstimate.quick_quality
+                                            .estimated_size,
+                                    )}</span
+                                >
+                            </div>
+                            <p class="option-description">
+                                Maximum compression for very long recordings.
+                                Audio quality reduced but still suitable for
+                                speech transcription.
+                            </p>
+                        </button>
+                    {/if}
+
+                    {#if !compressionEstimate.standard_quality?.would_fit && !compressionEstimate.quick_quality?.would_fit}
+                        <div class="no-options-warning">
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                            >
+                                <path
+                                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
+                                />
+                            </svg>
+                            <div>
+                                <strong>Recording Too Long</strong>
+                                <p>
+                                    Even with maximum compression, this
+                                    recording would exceed the 100MB limit.
+                                    Consider splitting the recording into
+                                    smaller segments for transcription.
+                                </p>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button
+                    class="btn btn-secondary"
+                    on:click={cancelCompressionDialog}>Cancel</button
+                >
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- Compression Progress -->
+{#if isCompressing}
+    <div class="modal-overlay" role="dialog" aria-modal="true" tabindex="-1">
+        <div class="modal-content compression-progress-dialog" role="document">
+            <div class="modal-header">
+                <h2>Compressing Audio</h2>
+            </div>
+
+            <div class="modal-body">
+                <div class="compression-progress-container">
+                    <div class="spinner-large"></div>
+                    <p class="progress-message">
+                        {#if compressionProgress}
+                            Compressing... {compressionProgress.compression_progress ||
+                                0}%
+                        {:else}
+                            Starting compression...
+                        {/if}
+                    </p>
+                    {#if compressionProgress?.estimated_remaining_secs}
+                        <p class="progress-eta">
+                            Estimated time remaining: {Math.floor(
+                                compressionProgress.estimated_remaining_secs /
+                                    60,
+                            )}m {compressionProgress.estimated_remaining_secs %
+                                60}s
+                        </p>
+                    {/if}
+                    {#if compressionProgress?.compression_progress}
+                        <div class="progress-bar-container">
+                            <div
+                                class="progress-bar"
+                                style="width: {compressionProgress.compression_progress}%"
+                            ></div>
+                        </div>
+                    {/if}
+                </div>
+                <p class="compression-info">
+                    Compressing to {selectedCompressionQuality === "standard"
+                        ? "Standard"
+                        : "Quick"} quality for transcription...
+                </p>
+            </div>
+        </div>
+    </div>
 {/if}
 
 <style>
@@ -1310,5 +1680,273 @@
         .transcript-actions-row .btn {
             width: 100%;
         }
+    }
+
+    /* Modal Overlay and Content */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+        background: var(--card-background);
+        border-radius: var(--corner-radius-large);
+        border: 1px solid var(--stroke-surface);
+        box-shadow: var(--shadow-lg);
+        max-width: 500px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--spacing-lg);
+        border-bottom: 1px solid var(--stroke-surface);
+    }
+
+    .modal-header h2 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+    }
+
+    .close-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-tertiary);
+        cursor: pointer;
+        padding: var(--spacing-xs);
+        border-radius: var(--corner-radius-small);
+        transition: all 0.15s ease;
+    }
+
+    .close-btn:hover {
+        background: var(--card-background-secondary);
+        color: var(--text-primary);
+    }
+
+    .modal-body {
+        padding: var(--spacing-lg);
+    }
+
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-lg);
+        border-top: 1px solid var(--stroke-surface);
+    }
+
+    /* Warning Banner */
+    .warning-banner {
+        display: flex;
+        gap: var(--spacing-md);
+        padding: var(--spacing-md);
+        background: rgba(255, 171, 0, 0.1);
+        border: 1px solid rgba(255, 171, 0, 0.3);
+        border-radius: var(--corner-radius-medium);
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .warning-banner svg {
+        flex-shrink: 0;
+        color: var(--warning, #ffab00);
+    }
+
+    .warning-banner strong {
+        display: block;
+        color: var(--text-primary);
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .warning-banner p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    /* Compression Options */
+    .compression-options h3 {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0 0 var(--spacing-xs) 0;
+    }
+
+    .options-description {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin: 0 0 var(--spacing-md) 0;
+    }
+
+    .compression-option {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: var(--spacing-md);
+        background: var(--card-background-secondary);
+        border: 1px solid var(--stroke-surface);
+        border-radius: var(--corner-radius-medium);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .compression-option:hover {
+        background: var(--card-background);
+        border-color: var(--accent-default);
+        box-shadow: 0 0 0 2px rgba(91, 157, 255, 0.2);
+    }
+
+    .compression-option:last-child {
+        margin-bottom: 0;
+    }
+
+    .option-header {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .option-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .option-badge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: var(--card-background);
+        color: var(--text-secondary);
+        border: 1px solid var(--stroke-surface);
+    }
+
+    .option-badge.recommended {
+        background: rgba(91, 157, 255, 0.15);
+        color: var(--accent-default);
+        border-color: rgba(91, 157, 255, 0.3);
+    }
+
+    .option-details {
+        display: flex;
+        gap: var(--spacing-md);
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .option-spec {
+        font-size: 12px;
+        color: var(--text-tertiary);
+    }
+
+    .option-size {
+        font-size: 12px;
+        color: var(--accent-default);
+        font-weight: 500;
+    }
+
+    .option-description {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin: 0;
+        line-height: 1.4;
+    }
+
+    /* No Options Warning */
+    .no-options-warning {
+        display: flex;
+        gap: var(--spacing-md);
+        padding: var(--spacing-md);
+        background: rgba(255, 82, 82, 0.1);
+        border: 1px solid rgba(255, 82, 82, 0.3);
+        border-radius: var(--corner-radius-medium);
+    }
+
+    .no-options-warning svg {
+        flex-shrink: 0;
+        color: var(--danger, #ff5252);
+    }
+
+    .no-options-warning strong {
+        display: block;
+        color: var(--text-primary);
+        margin-bottom: var(--spacing-xs);
+    }
+
+    .no-options-warning p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    /* Compression Progress Dialog */
+    .compression-progress-dialog {
+        text-align: center;
+    }
+
+    .compression-progress-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: var(--spacing-lg) 0;
+    }
+
+    .spinner-large {
+        width: 48px;
+        height: 48px;
+        border: 4px solid var(--stroke-surface);
+        border-top-color: var(--accent-default);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-bottom: var(--spacing-md);
+    }
+
+    .compression-progress-container .progress-message {
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .progress-eta {
+        font-size: 13px;
+        color: var(--text-tertiary);
+        margin: 0 0 var(--spacing-md) 0;
+    }
+
+    .progress-bar-container {
+        width: 100%;
+        height: 6px;
+        background: var(--stroke-surface);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .progress-bar {
+        height: 100%;
+        background: var(--accent-default);
+        border-radius: 3px;
+        transition: width 0.3s ease;
+    }
+
+    .compression-info {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin: var(--spacing-md) 0 0 0;
     }
 </style>
