@@ -16,6 +16,11 @@
   let saveMessage = '';
   let errorMessage = '';
 
+  // Dynamic models
+  let availableModels = [];
+  let isLoadingModels = false;
+  let modelsError = '';
+
   const defaultPrompt = `Please process the attached audio file and provide the following two sections in markdown format:
 
 **1. Raw Transcription:**
@@ -62,6 +67,11 @@ Your entire response should be a single markdown document.`;
       storageDir = 'storage';
     } finally {
       isLoading = false;
+      // Load available models after config is loaded
+      if (apiKey) {
+        previousApiKey = apiKey;
+        loadModels();
+      }
     }
   }
 
@@ -114,6 +124,41 @@ Your entire response should be a single markdown document.`;
 
   function resetPrompt() {
     prompt = defaultPrompt;
+  }
+
+  async function loadModels() {
+    if (!apiKey) {
+      availableModels = [];
+      modelsError = '';
+      return;
+    }
+
+    isLoadingModels = true;
+    modelsError = '';
+
+    try {
+      const models = await invoke('list_gemini_models', { apiKey });
+      availableModels = models;
+
+      // If current model is not in the list, keep it as an option
+      const modelIds = models.map(m => m.id);
+      if (model && !modelIds.includes(model)) {
+        availableModels = [{ id: model, display_name: model + ' (current)', description: '' }, ...models];
+      }
+    } catch (error) {
+      console.error('Failed to load models:', error);
+      modelsError = `Failed to load models: ${error}`;
+      availableModels = [];
+    } finally {
+      isLoadingModels = false;
+    }
+  }
+
+  // Load models when API key changes
+  let previousApiKey = '';
+  $: if (apiKey !== previousApiKey && !isLoading) {
+    previousApiKey = apiKey;
+    loadModels();
   }
 </script>
 
@@ -182,22 +227,52 @@ Your entire response should be a single markdown document.`;
           </small>
         </div>
 
-        <div class="form-.group">
-          <label class="form-label" for="model">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-              <line x1="8" y1="21" x2="16" y2="21"/>
-              <line x1="12" y1="17" x2="12" y2="21"/>
-            </svg>
-            Model
-          </label>
+        <div class="form-group">
+          <div class="model-label-row">
+            <label class="form-label" for="model">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              Model
+            </label>
+            {#if apiKey}
+              <button type="button" class="btn btn-secondary btn-sm" on:click={loadModels} disabled={isLoadingModels}>
+                {#if isLoadingModels}
+                  <div class="btn-spinner-small"></div>
+                {:else}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2"/>
+                  </svg>
+                {/if}
+                Refresh Models
+              </button>
+            {/if}
+          </div>
           <select id="model" class="form-select" bind:value={model}>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-            <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
+            {#if availableModels.length > 0}
+              {#each availableModels as m}
+                <option value={m.id}>{m.display_name}</option>
+              {/each}
+            {:else}
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+            {/if}
           </select>
-          <small class="form-hint">Flash models are faster and cheaper for transcription</small>
+          {#if isLoadingModels}
+            <small class="form-hint loading-hint">
+              <div class="spinner-tiny"></div>
+              Loading available models...
+            </small>
+          {:else if modelsError}
+            <small class="form-hint error-hint">{modelsError}</small>
+          {:else if availableModels.length > 0}
+            <small class="form-hint">{availableModels.length} models available. Flash models are faster and cheaper for transcription.</small>
+          {:else}
+            <small class="form-hint">Enter your API key to load available models dynamically.</small>
+          {/if}
         </div>
 
         <div class="form-group">
@@ -413,6 +488,43 @@ Your entire response should be a single markdown document.`;
     border-color: var(--accent-default);
     box-shadow: 0 0 0 1px var(--accent-default);
     outline: none;
+  }
+
+  .model-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .btn-spinner-small {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  .spinner-tiny {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(0, 103, 192, 0.2);
+    border-top-color: var(--accent-default);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  .loading-hint {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+  }
+
+  .error-hint {
+    color: var(--danger) !important;
   }
 
   .prompt-label-row {
