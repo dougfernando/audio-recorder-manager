@@ -24,6 +24,11 @@
     let progressPollingInterval = null;
     let transcriptPreview = null;
 
+    // Custom prompt state
+    let useCustomPrompt = false;
+    let customPromptText = '';
+    let defaultPromptFromConfig = '';
+
     // Compression state
     let showCompressionDialog = false;
     let compressionEstimate = null;
@@ -329,10 +334,15 @@
             isTranscribing = true;
             startProgressPolling(sessionId);
 
-            const result = await invoke("transcribe_recording", {
+            const invokeArgs = {
                 filePath: recording.path,
                 sessionId: sessionId,
-            });
+            };
+            if (useCustomPrompt && customPromptText) {
+                invokeArgs.customPrompt = customPromptText;
+            }
+
+            const result = await invoke("transcribe_recording", invokeArgs);
 
             console.log("Transcription complete:", result);
             transcriptPath = result;
@@ -396,10 +406,15 @@
             isTranscribing = true;
             startProgressPolling(sessionId);
 
-            const result = await invoke("transcribe_recording", {
+            const invokeArgs = {
                 filePath: compressedPath,
                 sessionId: sessionId,
-            });
+            };
+            if (useCustomPrompt && customPromptText) {
+                invokeArgs.customPrompt = customPromptText;
+            }
+
+            const result = await invoke("transcribe_recording", invokeArgs);
 
             console.log("Transcription complete:", result);
             transcriptPath = result;
@@ -545,6 +560,25 @@
         // Reload transcript after re-transcription
         await checkForTranscript();
         await loadTranscriptPreview();
+    }
+
+    async function toggleCustomPrompt() {
+        useCustomPrompt = !useCustomPrompt;
+        if (useCustomPrompt && !customPromptText) {
+            // Load the default prompt from preferences
+            try {
+                const config = await invoke("load_transcription_config");
+                defaultPromptFromConfig = config.prompt || '';
+                customPromptText = defaultPromptFromConfig;
+            } catch (error) {
+                console.error("Failed to load transcription config:", error);
+                customPromptText = '';
+            }
+        }
+    }
+
+    function resetCustomPrompt() {
+        customPromptText = defaultPromptFromConfig;
     }
 
     async function openInEditor() {
@@ -782,6 +816,30 @@
             </svg>
             Transcript
         </h3>
+
+        <!-- Custom Prompt Toggle -->
+        <div class="custom-prompt-section">
+            <label class="custom-prompt-toggle">
+                <input type="checkbox" checked={useCustomPrompt} on:change={toggleCustomPrompt} />
+                <span class="toggle-label">Customize transcription prompt</span>
+            </label>
+            {#if useCustomPrompt}
+                <div class="custom-prompt-editor">
+                    <div class="custom-prompt-header">
+                        <small class="custom-prompt-hint">Adjust the prompt for this transcription only. This will not change your default prompt in Settings.</small>
+                        <button class="btn btn-secondary btn-xs" on:click={resetCustomPrompt}>
+                            Reset
+                        </button>
+                    </div>
+                    <textarea
+                        class="custom-prompt-textarea"
+                        bind:value={customPromptText}
+                        rows="8"
+                        placeholder="Enter your custom transcription prompt..."
+                    ></textarea>
+                </div>
+            {/if}
+        </div>
 
         {#if isTranscribing}
             <!-- Transcription in progress -->
@@ -1480,6 +1538,93 @@
 
     .transcript-section {
         margin-bottom: var(--spacing-xxl);
+    }
+
+    /* Custom Prompt Section */
+    .custom-prompt-section {
+        margin-bottom: var(--spacing-md);
+    }
+
+    .custom-prompt-toggle {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .custom-prompt-toggle input[type="checkbox"] {
+        cursor: pointer;
+    }
+
+    .toggle-label {
+        user-select: none;
+    }
+
+    .custom-prompt-editor {
+        background: var(--card-background);
+        border: 1px solid var(--stroke-surface);
+        border-radius: var(--corner-radius-medium);
+        padding: var(--spacing-md);
+        animation: slideDown 0.2s ease-out;
+    }
+
+    .custom-prompt-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: var(--spacing-sm);
+        gap: var(--spacing-sm);
+    }
+
+    .custom-prompt-hint {
+        font-size: 12px;
+        color: var(--text-tertiary);
+        flex: 1;
+    }
+
+    .btn-xs {
+        padding: 2px var(--spacing-sm);
+        font-size: 12px;
+        min-height: 24px;
+    }
+
+    .custom-prompt-textarea {
+        width: 100%;
+        padding: var(--spacing-sm);
+        border: 1px solid var(--stroke-surface);
+        border-radius: var(--corner-radius-small);
+        font-size: 12px;
+        font-family: 'Consolas', 'Monaco', monospace;
+        background-color: var(--card-background-secondary);
+        color: var(--text-primary);
+        transition: all 0.08s ease;
+        resize: vertical;
+        line-height: 1.5;
+        box-sizing: border-box;
+    }
+
+    .custom-prompt-textarea:hover {
+        border-color: var(--stroke-surface-flyout);
+    }
+
+    .custom-prompt-textarea:focus {
+        border-color: var(--accent-default);
+        box-shadow: 0 0 0 1px var(--accent-default);
+        outline: none;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     .transcribing-state {

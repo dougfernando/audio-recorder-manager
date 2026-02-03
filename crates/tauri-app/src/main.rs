@@ -652,6 +652,74 @@ async fn rename_recording(old_path: String, new_filename: String) -> Result<Reco
     get_recording(new_path.to_string_lossy().to_string()).await
 }
 
+/// List available Gemini models from the API
+#[tauri::command]
+async fn list_gemini_models(api_key: String) -> Result<Vec<serde_json::Value>, String> {
+    if api_key.is_empty() {
+        return Err("API key is required to list models".to_string());
+    }
+
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models?key={}",
+        api_key
+    );
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch models: {}", e))?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("API request failed: {}", error_text));
+    }
+
+    let body: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let models = body["models"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|m| {
+            let supported = m["supportedGenerationMethods"]
+                .as_array()
+                .map(|methods| {
+                    methods.iter().any(|method| method.as_str() == Some("generateContent"))
+                })
+                .unwrap_or(false);
+            let name = m["name"].as_str().unwrap_or("");
+            // Only include gemini models that support content generation
+            supported && name.contains("gemini")
+        })
+        .map(|m| {
+            let name = m["name"].as_str().unwrap_or("").replace("models/", "");
+            let display_name = m["displayName"].as_str().unwrap_or(&name).to_string();
+            let description = m["description"].as_str().unwrap_or("").to_string();
+            let input_token_limit = m["inputTokenLimit"].as_u64().unwrap_or(0);
+            let output_token_limit = m["outputTokenLimit"].as_u64().unwrap_or(0);
+            serde_json::json!({
+                "id": name,
+                "display_name": display_name,
+                "description": description,
+                "input_token_limit": input_token_limit,
+                "output_token_limit": output_token_limit,
+            })
+        })
+        .collect();
+
+    Ok(models)
+}
+
 /// Load transcription configuration
 #[tauri::command]
 async fn load_transcription_config() -> Result<TranscriptionConfig, String> {
@@ -669,6 +737,7 @@ async fn save_transcription_config(config: TranscriptionConfig) -> Result<(), St
 async fn transcribe_recording(
     file_path: String,
     session_id: Option<String>,
+    custom_prompt: Option<String>,
 ) -> Result<serde_json::Value, String> {
     use std::path::Path;
 
@@ -713,7 +782,7 @@ async fn transcribe_recording(
     let transcriptions_dir = recorder_config.transcriptions_dir.clone();
     let api_key = config.api_key.clone();
     let model = config.model.clone();
-    let prompt = config.prompt.clone();
+    let prompt = custom_prompt.unwrap_or_else(|| config.prompt.clone());
     let optimize = config.optimize_audio;
     let session_id_clone = session_id.clone();
 
@@ -1615,6 +1684,7 @@ fn main() {
         open_folder,
         delete_recording,
         rename_recording,
+        list_gemini_models,
         load_transcription_config,
         save_transcription_config,
         transcribe_recording,
