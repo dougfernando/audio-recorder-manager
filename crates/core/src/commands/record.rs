@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::Instrument;
 
+use crate::chunk_processor::{AudioChunk, ChunkProcessor, DEFAULT_CHUNK_DURATION_SECS};
 use crate::config::RecorderConfig;
 use crate::domain::{AudioFormat, RecordingDuration, RecordingSession};
 use crate::error::Result;
@@ -179,6 +180,20 @@ async fn record_worker(
             processing_speed: None,
         })?;
 
+        // ── Chunked recording setup ──
+        // For recordings longer than chunk_duration, we process chunks in the background
+        // while recording continues. This dramatically reduces final processing time.
+        let chunk_duration_secs = DEFAULT_CHUNK_DURATION_SECS;
+        let mut chunk_processor = ChunkProcessor::new(session.quality.clone(), session.format);
+        let mut chunk_index: u32 = 0;
+        let mut last_chunk_time = std::time::Instant::now();
+
+        tracing::info!(
+            "Chunk processing enabled: {}s intervals (recording duration: {}s)",
+            chunk_duration_secs,
+            effective_duration
+        );
+
         // Update status every second
         let update_interval = config.status_update_interval;
         loop {
@@ -235,6 +250,88 @@ async fn record_worker(
                 tracing::info!("Stop signal received for session {}", session.id);
                 let _ = std::fs::remove_file(stop_signal);
                 break;
+            }
+
+            // ── Chunk rotation check ──
+            // Every chunk_duration_secs, rotate WAV files and submit completed chunk
+            // for background processing (merge + encode).
+            let chunk_elapsed = last_chunk_time.elapsed().as_secs();
+            if chunk_elapsed >= chunk_duration_secs {
+                tracing::info!(
+                    "Chunk rotation triggered at {}s elapsed (chunk {})",
+                    elapsed,
+                    chunk_index
+                );
+
+                // Generate new file paths for the next chunk
+                let new_loopback = config.recordings_dir.join(format!(
+                    "{}_loopback_c{}.wav",
+                    session.id.as_str(),
+                    chunk_index + 1
+                ));
+                let new_mic = config.recordings_dir.join(format!(
+                    "{}_mic_c{}.wav",
+                    session.id.as_str(),
+                    chunk_index + 1
+                ));
+
+                // Rotate loopback recorder - returns completed chunk info
+                let loopback_result = loopback_recorder.rotate(new_loopback)?;
+
+                // Rotate microphone recorder if available
+                let mic_result = if let Some(ref mic) = mic_recorder {
+                    match mic.rotate(new_mic) {
+                        Ok(result) => Some(result),
+                        Err(e) => {
+                            tracing::warn!("Microphone rotation failed: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                // Determine output path for this chunk
+                let chunk_ext = session.format.extension();
+                let chunk_output = config.recordings_dir.join(format!(
+                    "{}_chunk_{}.{}",
+                    session.id.as_str(),
+                    chunk_index,
+                    chunk_ext
+                ));
+
+                // Build the mic path for this chunk (use the completed mic path or a dummy)
+                let mic_chunk_path = mic_result
+                    .as_ref()
+                    .map(|r| r.completed_path.clone())
+                    .unwrap_or_else(|| loopback_result.completed_path.clone());
+
+                let mic_chunk_has_audio = mic_result
+                    .as_ref()
+                    .map(|r| r.has_audio)
+                    .unwrap_or(false);
+
+                // Submit chunk for background processing
+                chunk_processor.submit_chunk(AudioChunk {
+                    chunk_index,
+                    loopback_path: loopback_result.completed_path,
+                    mic_path: mic_chunk_path,
+                    output_path: chunk_output,
+                    loopback_has_audio: loopback_result.has_audio,
+                    mic_has_audio: mic_chunk_has_audio,
+                });
+
+                chunk_index += 1;
+                last_chunk_time = std::time::Instant::now();
+
+                output.prefixed(
+                    "Chunking",
+                    &format!(
+                        "Chunk {} submitted for background processing ({} total)",
+                        chunk_index - 1,
+                        chunk_processor.total_chunks()
+                    ),
+                );
             }
 
             // Calculate progress
@@ -312,13 +409,20 @@ async fn record_worker(
         output.success("Recording completed successfully!");
 
         // Wait for temporary files to be fully written and readable before processing
-        tracing::info!("⏳ Waiting for temporary files to be ready...");
+        tracing::info!("Waiting for temporary files to be ready...");
         let _ = wait_for_file_ready(&loopback_temp, 2000).await;
         let _ = wait_for_file_ready(&mic_temp, 2000).await;
-        tracing::info!("✓ Temporary files are ready for processing");
+        tracing::info!("Temporary files are ready for processing");
 
-        // Determine total steps based on format
-        let total_steps = if matches!(session.format, AudioFormat::M4a) {
+        // Determine total steps based on format and chunking
+        let has_chunks = chunk_index > 0;
+        let total_steps = if has_chunks {
+            if matches!(session.format, AudioFormat::M4a) {
+                5  // Analyze -> Process last chunk -> Wait chunks -> Concatenate -> Finalize
+            } else {
+                4  // Analyze -> Process last chunk -> Wait chunks -> Concatenate
+            }
+        } else if matches!(session.format, AudioFormat::M4a) {
             4  // M4A: Analyze -> Merge -> Encode -> Finalize
         } else {
             3  // WAV: Analyze -> Merge -> Finalize
@@ -338,7 +442,7 @@ async fn record_worker(
             "No audio detected"
         };
 
-        tracing::info!("📝 Stage 1/{}: Analyzing Audio - {}", total_steps, analysis_message);
+        tracing::info!("Stage 1/{}: Analyzing Audio - {}", total_steps, analysis_message);
         let _ = observer.write_processing_status_v2(
             session.id.as_str(),
             analysis_message,
@@ -349,10 +453,125 @@ async fn record_worker(
             None, // Duration will be determined from actual audio file during processing
         );
 
-        tracing::info!("🚀 Post-processing started");
+        tracing::info!("Post-processing started");
 
-        // Merge audio channels (and encode to M4A if requested) in a span for better tracing
-        {
+        if has_chunks {
+            // ── Chunked post-processing path ──
+            // Only the last segment needs full processing; previous chunks were processed in background.
+
+            tracing::info!(
+                "Chunked mode: {} chunks already processing in background, processing last segment...",
+                chunk_index
+            );
+
+            // Process the last segment (the remaining audio after the last rotation)
+            let last_chunk_ext = session.format.extension();
+            let last_chunk_output = config.recordings_dir.join(format!(
+                "{}_chunk_{}.{}",
+                session.id.as_str(),
+                chunk_index,
+                last_chunk_ext
+            ));
+
+            let mic_has_audio_last = mic_recorder.as_ref()
+                .map(|m| m.has_audio_detected())
+                .unwrap_or(false);
+
+            // Stage 2: Processing last segment
+            tracing::info!("Stage 2/{}: Processing last segment (chunk {})", total_steps, chunk_index);
+            let _ = observer.write_processing_status_v2(
+                session.id.as_str(),
+                &format!("Processing last segment (chunk {})...", chunk_index),
+                Some(2),
+                Some(total_steps),
+                Some("merging"),
+                None,
+                None,
+            );
+
+            // Use the current temp files (loopback_temp, mic_temp) which contain the last segment
+            merge_audio_streams_smart(
+                &loopback_temp,
+                &mic_temp,
+                &last_chunk_output,
+                loopback_has_audio,
+                mic_has_audio_last,
+                &session.quality,
+                session.format,
+                None, // No per-chunk progress UI
+                None,
+                0,
+            )
+            .await?;
+
+            // Cleanup last segment temp files
+            let _ = std::fs::remove_file(&loopback_temp);
+            let _ = std::fs::remove_file(&mic_temp);
+
+            chunk_processor.add_completed_chunk(chunk_index, last_chunk_output);
+
+            // Stage 3: Wait for background chunks
+            tracing::info!("Stage 3/{}: Waiting for background chunks to complete...", total_steps);
+            let _ = observer.write_processing_status_v2(
+                session.id.as_str(),
+                "Waiting for background processing to complete...",
+                Some(3),
+                Some(total_steps),
+                Some("waiting"),
+                None,
+                None,
+            );
+
+            chunk_processor.wait_all().await?;
+
+            output.prefixed(
+                "Processing",
+                &format!("All {} chunks processed, concatenating...", chunk_index + 1),
+            );
+
+            // Stage 4: Concatenate all chunks
+            let final_output = if matches!(session.format, AudioFormat::M4a) {
+                filepath.with_extension("m4a")
+            } else {
+                filepath.clone()
+            };
+
+            tracing::info!("Stage 4/{}: Concatenating {} chunks", total_steps, chunk_index + 1);
+            let _ = observer.write_processing_status_v2(
+                session.id.as_str(),
+                &format!("Concatenating {} chunks...", chunk_index + 1),
+                Some(4),
+                Some(total_steps),
+                Some("concatenating"),
+                None,
+                None,
+            );
+
+            chunk_processor.concatenate_chunks(&final_output).await?;
+
+            tracing::info!("Chunked processing completed: {:?}", final_output);
+            output.success("Audio processing completed!");
+
+            // Emit finalizing stage
+            let final_step = total_steps;
+            tracing::info!("Stage {}/{}: Finalizing", final_step, total_steps);
+            let _ = observer.write_processing_status_v2(
+                session.id.as_str(),
+                "Saving recording...",
+                Some(final_step),
+                Some(total_steps),
+                Some("finalizing"),
+                None,
+                None,
+            );
+
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let _ = observer.mark_ffmpeg_complete(session.id.as_str());
+
+        } else {
+            // ── Original single-pass processing path ──
+            // Used for short recordings (< chunk_duration) - no chunking overhead.
+
             let loopback_has_audio_flag = loopback_recorder.has_audio_detected();
             let mic_has_audio_flag = mic_recorder.as_ref().map(|m| m.has_audio_detected()).unwrap_or(false);
 
@@ -375,7 +594,6 @@ async fn record_worker(
                     .map(|m| m.has_audio_detected())
                     .unwrap_or(false);
 
-                // Stage 2 will be emitted inside merge_audio_streams_smart for better granularity
                 // Merge audio streams using FFmpeg (with direct M4A encoding if requested)
                 merge_audio_streams_smart(
                     &loopback_temp,
@@ -401,12 +619,12 @@ async fn record_worker(
                 mic_has_audio = mic_has_audio_flag
             ))
             .await?;
-        }
 
-        // Cleanup temporary files
-        let _ = std::fs::remove_file(&loopback_temp);
-        let _ = std::fs::remove_file(&mic_temp);
-        tracing::info!("Temporary files cleaned up");
+            // Cleanup temporary files
+            let _ = std::fs::remove_file(&loopback_temp);
+            let _ = std::fs::remove_file(&mic_temp);
+            tracing::info!("Temporary files cleaned up");
+        }
     }
 
     #[cfg(not(windows))]

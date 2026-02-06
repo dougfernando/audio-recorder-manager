@@ -1,5 +1,6 @@
 pub mod audio_monitor;
 pub mod audio_utils;
+pub mod chunk_processor;
 pub mod commands;
 pub mod config;
 pub mod domain;

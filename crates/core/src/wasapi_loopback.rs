@@ -28,17 +28,28 @@ pub mod windows_loopback {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::mpsc;
     use std::time::Duration;
     use windows::Win32::Media::Audio::*;
     use windows::Win32::System::Com::*;
 
     const REFTIMES_PER_SEC: i64 = 10_000_000;
 
+    /// Result of a WAV file rotation, sent back from the recording thread.
+    pub struct RotationResult {
+        /// Path of the completed (finalized) WAV file
+        pub completed_path: PathBuf,
+        /// Whether audio was detected in the completed chunk
+        pub has_audio: bool,
+    }
+
     pub struct WasapiLoopbackRecorder {
         is_recording: Arc<AtomicBool>,
         frames_captured: Arc<AtomicU64>,
         has_audio: Arc<AtomicBool>,
         sample_rate: u32,
+        rotate_tx: mpsc::Sender<PathBuf>,
+        rotated_rx: mpsc::Receiver<RotationResult>,
     }
 
     impl WasapiLoopbackRecorder {
@@ -50,6 +61,10 @@ pub mod windows_loopback {
             let is_recording_clone = Arc::clone(&is_recording);
             let frames_captured_clone = Arc::clone(&frames_captured);
             let has_audio_clone = Arc::clone(&has_audio);
+
+            // Channels for WAV file rotation
+            let (rotate_tx, rotate_rx) = mpsc::channel::<PathBuf>();
+            let (rotated_tx, rotated_rx) = mpsc::channel::<RotationResult>();
 
             // Get sample rate before spawning thread
             let sample_rate = unsafe {
@@ -80,6 +95,8 @@ pub mod windows_loopback {
                     is_recording_clone,
                     frames_captured_clone,
                     has_audio_clone,
+                    rotate_rx,
+                    rotated_tx,
                 );
             });
 
@@ -88,6 +105,8 @@ pub mod windows_loopback {
                 frames_captured,
                 has_audio,
                 sample_rate,
+                rotate_tx,
+                rotated_rx,
             })
         }
 
@@ -96,6 +115,8 @@ pub mod windows_loopback {
             is_recording: Arc<AtomicBool>,
             frames_captured: Arc<AtomicU64>,
             has_audio: Arc<AtomicBool>,
+            rotate_rx: mpsc::Receiver<PathBuf>,
+            rotated_tx: mpsc::Sender<RotationResult>,
         ) -> Result<()> {
             unsafe {
                 // Initialize COM for this thread
@@ -167,6 +188,7 @@ pub mod windows_loopback {
 
                 let writer = WavWriter::create(&filepath, spec)?;
                 let mut writer = Some(writer);
+                let mut current_filepath = filepath;
 
                 // Start audio client
                 audio_client.Start()?;
@@ -182,6 +204,34 @@ pub mod windows_loopback {
                 while is_recording.load(Ordering::Relaxed) {
                     // Wait a bit for buffer to fill
                     std::thread::sleep(Duration::from_millis(10));
+
+                    // Check for rotation request (non-blocking)
+                    if let Ok(new_path) = rotate_rx.try_recv() {
+                        tracing::info!(
+                            "Loopback rotation: finalizing {:?}, starting {:?}",
+                            current_filepath.file_name().unwrap_or_default(),
+                            new_path.file_name().unwrap_or_default()
+                        );
+
+                        // Finalize current writer
+                        if let Some(w) = writer.take() {
+                            w.finalize()?;
+                        }
+
+                        // Send back rotation result with audio detection state
+                        let chunk_has_audio = has_audio.load(Ordering::Relaxed);
+                        let _ = rotated_tx.send(RotationResult {
+                            completed_path: current_filepath.clone(),
+                            has_audio: chunk_has_audio,
+                        });
+
+                        // Reset audio detection for the new chunk
+                        has_audio.store(false, Ordering::Relaxed);
+
+                        // Create new writer
+                        writer = Some(WavWriter::create(&new_path, spec)?);
+                        current_filepath = new_path;
+                    }
 
                     let packet_length = capture_client.GetNextPacketSize()?;
 
@@ -325,6 +375,19 @@ pub mod windows_loopback {
 
         pub fn get_sample_rate(&self) -> u32 {
             self.sample_rate
+        }
+
+        /// Request the recording thread to rotate to a new WAV file.
+        /// Returns the completed chunk's path and audio detection flag.
+        /// The recording continues seamlessly into the new file with no gap.
+        pub fn rotate(&self, new_filepath: PathBuf) -> Result<RotationResult> {
+            self.rotate_tx
+                .send(new_filepath)
+                .map_err(|e| anyhow::anyhow!("Failed to send rotation request: {}", e))?;
+
+            self.rotated_rx
+                .recv_timeout(Duration::from_secs(5))
+                .map_err(|e| anyhow::anyhow!("Loopback rotation timeout: {}", e))
         }
 
         pub fn stop(&self) -> Result<()> {
